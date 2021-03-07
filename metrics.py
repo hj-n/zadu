@@ -101,6 +101,10 @@ class GlobalMeasure:
             self.adjacency_matrix_z = self.adjacency_matrix_z.astype(self.dtype)
             self.adjacency_matrix_x = self.adjacency_matrix_x.astype(self.dtype)
 
+        self.squared_differences = np.square(
+            self.adjacency_matrix_x - self.adjacency_matrix_z, dtype=self.dtype
+        )
+
 
     def rmse(self):
         """

@@ -20,23 +20,24 @@ METRIC_LOCAL_LIST = [
 
 class MDPMetricProvider:
     def __init__(self, raw_data, emb_data, metric_list, k=5):
-        self.raw = raw_data
-        self.emb = emb_data
+        self.raw = np.array(raw_data)
+        self.emb = np.array(emb_data)
         self.mlist = metric_list
         self.k = k
         self.result = {}
 
     
-    def run():
+    def run(self):
         ## Check global / local metric inclusion
         global_metric_set = set(METRIC_GLOBAL_LIST)
+        
         local_metric_set = set(METRIC_LOCAL_LIST)
         global_metric_checklist = []
         local_metric_checklist = []
         for metric in self.mlist:
-            if metrics in global_metric_set:
+            if metric in global_metric_set:
                 global_metric_checklist.append(metric)
-            elif metrics in local_metric_set:
+            elif metric in local_metric_set:
                 local_metric_checklist.append(metric)
             else:
                 raise Exception("We currently do not support " + metric + ".")
@@ -68,8 +69,6 @@ class MDPMetricProvider:
                 self.result[metric] = score
 
         return self.result
-
-        
 
         
 
