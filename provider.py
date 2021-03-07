@@ -30,7 +30,6 @@ class MDPMetricProvider:
     def run(self):
         ## Check global / local metric inclusion
         global_metric_set = set(METRIC_GLOBAL_LIST)
-        
         local_metric_set = set(METRIC_LOCAL_LIST)
         global_metric_checklist = []
         local_metric_checklist = []
