@@ -78,6 +78,10 @@ from scipy.stats import spearmanr
 from sklearn import metrics
 import numba
 
+"""
+x : Raw data
+z : Embedded (Projected) data
+"""
 
 class GlobalMeasure:
     def __init__(self, x, z, dtype=np.float32):
