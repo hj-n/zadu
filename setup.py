@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
  
 setup(
     name                = 'metrics4mdp',
-    version             = '0.1.1',
+    version             = '0.1.2',
     description         = 'Quantitative metrics of Multidimensional Projections (MDP) in Python',
     author              = 'Hyeon Jeon',
     author_email        = 'hj@hcil.snu.ac.kr',
