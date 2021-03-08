@@ -17,6 +17,6 @@ from metric4mdp import MDPMetricProvider
 
 mlist = [""DTM", "DTM_KL1", "Continuity", "Trustworthiness"]
 metricprovider = MDPMetricProvider(raw_data, emb_data, mlist, k=7)
-
+metricprovider.run()
 
 ```
