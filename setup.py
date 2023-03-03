@@ -8,7 +8,7 @@ setup(
     author_email        = 'hj@hcil.snu.ac.kr',
     url                 = 'https://github.com/hj-n/metrics4mdp',
     download_url        = 'https://github.com/hj-n/metrics4mdp',
-    install_requires    =  ['numpy', 'scipy', 'sklearn', 'numba'],
+    install_requires    =  ['numpy', 'scipy', 'scikit-learn', 'numba'],
     packages            = find_packages(exclude = []),
     keywords            = ['MDP', 'Multidimensional Projections', "Dimensionality Reduction", "metric"],
     python_requires     = '>=3',
