@@ -1,4 +1,4 @@
-from metrics import *
+from metrics4mdp.metrics import *
 
 METRIC_GLOBAL_LIST = [
     "RMSE",

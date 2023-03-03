@@ -13,9 +13,9 @@ pip3 install metrics4mdp
 
 #### Example
 ```python
-from metric4mdp import MDPMetricProvider
+from metrics4mdp.provider import MDPMetricProvider
 
-mlist = [""DTM", "DTM_KL1", "Continuity", "Trustworthiness"]
+mlist = ["DTM", "DTM_KL1", "Continuity", "Trustworthiness"]
 metricprovider = MDPMetricProvider(raw_data, emb_data, mlist, k=7)
 metricprovider.run()
 
