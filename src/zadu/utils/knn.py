@@ -1,10 +1,13 @@
 import pairwise_dist as pdist
 import numpy as np
+import faiss
+from sklearn.neighbors import KDTree
 
 def knn_with_ranking(points, k, distance_matrix=None):
   """
   Compute the k-nearest neighbors of the points along with the 
-  rankings of other points based on the distance to each point
+  rankings of other points based on the distance to each point.
+  If the distance matrix is not provided, it is computed in O(n^2) time.
   INPUT:
 		ndarray: points: list of points
 		int: k: number of nearest neighbors to compute
@@ -28,3 +31,27 @@ def knn_with_ranking(points, k, distance_matrix=None):
   
   return knn_indices, ranking
     
+
+def knn(points, k, distance_function="euclidean"):
+  """
+  Compute the k-nearest neighbors of the points
+  If the distance function is euclidean, the computation relies on faiss-cpu.
+  Otherwise, the computation is done based on scikit-learn KD Tree algorithm
+  You can use any distance function supported by scikit-learn KD Tree or specify a callable function
+  INPUT:
+		ndarray: points: list of points
+		int: k: number of nearest neighbors to compute
+		str or callable: distance_function: distance function to use
+  OUTPUT:
+		ndarray: knn_indices: k-nearest neighbors of each point 
+	"""
+  
+  if distance_function == "euclidean":
+    index = faiss.IndexFlatL2(points.shape[1])
+    index.add(points)
+    knn_indices = index.search(points, k+1)[1][:, 1:]
+  else:
+    tree = KDTree(points, metric=distance_function)
+    knn_indices = tree.query(points, k=k+1, return_distance=False)[:, 1:]
+	
+  return knn_indices
