@@ -31,27 +31,31 @@ from measures.neighborhood_hit import neighborhood_hit
 from provider import MDPMetricProvider
 from measures.distance_consistency import distance_consistency
 from measures.internal_validation_measure import internal_validation_measure
+from measures.kl_divergence import kl_divergence
 
 
-print(trustworthiness_continuity(digits, digits_pca, 20))
-print(MDPMetricProvider(digits, digits_pca, ["Trustworthiness", "Continuity"], 20).run())
+# print(trustworthiness_continuity(digits, digits_pca, 20))
+# print(MDPMetricProvider(digits, digits_pca, ["Trustworthiness", "Continuity"], 20).run())
 
-print(class_aware_trustworthiness_continuity(digits, digits_pca, digits_label, 20))
+# print(class_aware_trustworthiness_continuity(digits, digits_pca, digits_label, 20))
 
-print(mean_relative_rank_error(digits, digits_pca, 20))
-print(MDPMetricProvider(digits, digits_pca, ["MRRE_ZX", "MRRE_XZ"], 20).run())
+# print(mean_relative_rank_error(digits, digits_pca, 20))
+# print(MDPMetricProvider(digits, digits_pca, ["MRRE_ZX", "MRRE_XZ"], 20).run())
 
-print(local_continuity_meta_criteria(digits, digits_pca, 20))
-print(local_continuity_meta_criteria(digits, digits_tsne, 20))
-print(local_continuity_meta_criteria(digits, digits_pca, 50))
-print(local_continuity_meta_criteria(digits, digits_tsne, 50))
+# print(local_continuity_meta_criteria(digits, digits_pca, 20))
+# print(local_continuity_meta_criteria(digits, digits_tsne, 20))
+# print(local_continuity_meta_criteria(digits, digits_pca, 50))
+# print(local_continuity_meta_criteria(digits, digits_tsne, 50))
 
-print(neighborhood_hit( digits_pca, digits_label, 20))
-print(neighborhood_hit(digits_tsne, digits_label, 20))
+# print(neighborhood_hit( digits_pca, digits_label, 20))
+# print(neighborhood_hit(digits_tsne, digits_label, 20))
 
 
-print(distance_consistency(digits_pca, digits_label))
-print(distance_consistency(digits_tsne, digits_label))
+# print(distance_consistency(digits_pca, digits_label))
+# print(distance_consistency(digits_tsne, digits_label))
 
-print(internal_validation_measure(digits_pca, digits_label, "silhouette"))
-print(internal_validation_measure(digits_tsne, digits_label, "silhouette"))
+# print(internal_validation_measure(digits_pca, digits_label, "silhouette"))
+# print(internal_validation_measure(digits_tsne, digits_label, "silhouette"))
+
+print(kl_divergence(digits, digits_pca, 0.1))
+print(MDPMetricProvider(digits, digits_pca, ["DTM_KL01"]).run())
