@@ -1,11 +1,10 @@
 from .utils import knn
 import numpy as np
 
-def neighborhood_hit(orig, emb, label, k, knn_emb_info=None):
+def neighborhood_hit(emb, label, k, knn_emb_info=None):
   """
 	Compute neighborhood hit of the embedding
 	INPUT:
-		ndarray: orig: original data
 		ndarray: emb: embedded data
 		ndarray: label: label of the original data
 		int: k: number of nearest neighbors to consider
@@ -18,7 +17,7 @@ def neighborhood_hit(orig, emb, label, k, knn_emb_info=None):
   else:
     emb_knn_indices = knn_emb_info
   
-  points_num = orig.shape[0]
+  points_num = emb.shape[0]
   nh = 0
   for i in range(points_num):
     emb_knn_index = emb_knn_indices[i]

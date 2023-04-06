@@ -7,6 +7,7 @@ def class_aware_trustworthiness_continuity(orig, emb, label, k, knn_ranking_info
 	INPUT:
 		ndarray: orig: original data
 		ndarray: emb: embedded data
+		ndarray: label: label of the original data
 		int: k: number of nearest neighbors to consider
 		tuple: knn_ranking_info: precomputed k-nearest neighbors and rankings of the original and embedded data (Optional)
 	OUTPUT:
