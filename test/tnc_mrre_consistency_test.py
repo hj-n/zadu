@@ -33,6 +33,7 @@ from measures.distance_consistency import distance_consistency
 from measures.internal_validation_measure import internal_validation_measure
 from measures.kl_divergence import kl_divergence
 from measures.distance_to_measure import distance_to_measure
+from measures.pearson_r import pearson_r
 
 
 # print(trustworthiness_continuity(digits, digits_pca, 20))
@@ -59,7 +60,10 @@ from measures.distance_to_measure import distance_to_measure
 # print(internal_validation_measure(digits_tsne, digits_label, "silhouette"))
 
 print(kl_divergence(digits, digits_pca, 0.1))
-print(MDPMetricProvider(digits, digits_pca, ["DTM_KL01"]).run())
+print(kl_divergence(digits, digits_tsne, 0.1))
 
-print(MDPMetricProvider(digits, digits_pca, ["DTM"]).run())
 print(distance_to_measure(digits, digits_pca, 0.1))
+print(distance_to_measure(digits, digits_tsne, 0.1))
+
+print(pearson_r(digits, digits_pca))
+print(pearson_r(digits, digits_tsne))
