@@ -30,6 +30,7 @@ from measures.local_continuity_meta_criteria import local_continuity_meta_criter
 from measures.neighborhood_hit import neighborhood_hit
 from provider import MDPMetricProvider
 from measures.distance_consistency import distance_consistency
+from measures.internal_validation_measure import internal_validation_measure
 
 
 print(trustworthiness_continuity(digits, digits_pca, 20))
@@ -51,3 +52,6 @@ print(neighborhood_hit(digits_tsne, digits_label, 20))
 
 print(distance_consistency(digits_pca, digits_label))
 print(distance_consistency(digits_tsne, digits_label))
+
+print(internal_validation_measure(digits_pca, digits_label, "silhouette"))
+print(internal_validation_measure(digits_tsne, digits_label, "silhouette"))
