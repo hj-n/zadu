@@ -1,5 +1,5 @@
 import numpy as np 
-from utils import knn
+from .utils import knn
 
 def trustworthiness_continuity(orig, emb, k, knn_ranking_info=None):
 	"""
@@ -9,6 +9,8 @@ def trustworthiness_continuity(orig, emb, k, knn_ranking_info=None):
 		ndarray: emb: embedded data
 		int: k: number of nearest neighbors to consider
 		tuple: knn_ranking_info: precomputed k-nearest neighbors and rankings of the original and embedded data (Optional)
+	OUTPUT:
+		dict: trustworthiness and continuity
 	"""
 	if knn_ranking_info is None:
 		orig_knn_indices, orig_ranking = knn.knn_with_ranking(orig, k)

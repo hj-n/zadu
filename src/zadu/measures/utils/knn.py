@@ -1,4 +1,4 @@
-import pairwise_dist as pdist
+from .pairwise_dist import pairwise_distance_matrix
 import numpy as np
 import faiss
 from sklearn.neighbors import KDTree
@@ -18,7 +18,7 @@ def knn_with_ranking(points, k, distance_matrix=None):
   """
   
   if distance_matrix is None:
-    distance_matrix = pdist.pairwise_distance_matrix(points, "euclidean")
+    distance_matrix = pairwise_distance_matrix(points, "euclidean")
 
   knn_indices = np.empty((points.shape[0], k), dtype=np.int32)
   ranking = np.empty((points.shape[0], points.shape[0]), dtype=np.int32)
