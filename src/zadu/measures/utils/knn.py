@@ -45,7 +45,10 @@ def knn(points, k, distance_function="euclidean"):
   OUTPUT:
 		ndarray: knn_indices: k-nearest neighbors of each point 
 	"""
-  
+	
+	## make c-contiguous
+  points = np.ascontiguousarray(points, dtype=np.float32)
+
   if distance_function == "euclidean":
     index = faiss.IndexFlatL2(points.shape[1])
     index.add(points)
