@@ -34,6 +34,7 @@ from measures.internal_validation_measure import internal_validation_measure
 from measures.kl_divergence import kl_divergence
 from measures.distance_to_measure import distance_to_measure
 from measures.pearson_r import pearson_r
+from measures.spearman_rho import spearman_rho
 
 
 # print(trustworthiness_continuity(digits, digits_pca, 20))
@@ -67,3 +68,6 @@ print(distance_to_measure(digits, digits_tsne, 0.1))
 
 print(pearson_r(digits, digits_pca))
 print(pearson_r(digits, digits_tsne))
+
+print(spearman_rho(digits, digits_pca))
+print(spearman_rho(digits, digits_tsne))
