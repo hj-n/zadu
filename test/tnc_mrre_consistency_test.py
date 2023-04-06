@@ -32,6 +32,7 @@ from provider import MDPMetricProvider
 from measures.distance_consistency import distance_consistency
 from measures.internal_validation_measure import internal_validation_measure
 from measures.kl_divergence import kl_divergence
+from measures.distance_to_measure import distance_to_measure
 
 
 # print(trustworthiness_continuity(digits, digits_pca, 20))
@@ -59,3 +60,6 @@ from measures.kl_divergence import kl_divergence
 
 print(kl_divergence(digits, digits_pca, 0.1))
 print(MDPMetricProvider(digits, digits_pca, ["DTM_KL01"]).run())
+
+print(MDPMetricProvider(digits, digits_pca, ["DTM"]).run())
+print(distance_to_measure(digits, digits_pca, 0.1))
