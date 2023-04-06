@@ -27,6 +27,7 @@ from measures.trustworthiness_continuity import trustworthiness_continuity
 from measures.class_aware_trustworthiness_continuity import class_aware_trustworthiness_continuity
 from measures.mean_relative_rank_error import mean_relative_rank_error
 from measures.local_continuity_meta_criteria import local_continuity_meta_criteria
+from measures.neighborhood_hit import neighborhood_hit
 from provider import MDPMetricProvider
 
 
@@ -42,5 +43,8 @@ print(local_continuity_meta_criteria(digits, digits_pca, 20))
 print(local_continuity_meta_criteria(digits, digits_tsne, 20))
 print(local_continuity_meta_criteria(digits, digits_pca, 50))
 print(local_continuity_meta_criteria(digits, digits_tsne, 50))
+
+print(neighborhood_hit(digits, digits_pca, digits_label, 20))
+print(neighborhood_hit(digits, digits_tsne, digits_label, 20))
 
 
