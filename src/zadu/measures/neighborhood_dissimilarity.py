@@ -36,10 +36,10 @@ def neighborhood_dissimilarity(orig, emb, k, knn_info=None):
     orig_knn_graph = ((orig_knn_graph + orig_knn_graph.T) > 0).astype(float)
     emb_knn_graph  = ((emb_knn_graph + emb_knn_graph.T) > 0).astype(float)
 
-    orig_SNN = orig_knn_graph @ orig_knn_graph.T
-    emb_SNN  = emb_knn_graph @ emb_knn_graph.T
+    orig_SNN_graph = orig_knn_graph @ orig_knn_graph.T
+    emb_SNN_graph  = emb_knn_graph @ emb_knn_graph.T
 
-    D = (orig_SNN - emb_SNN) / k
+    D = (orig_SNN_graph - emb_SNN_graph) / k
     np.fill_diagonal(D, 0)
 
     D_plus = D[D > 0]
