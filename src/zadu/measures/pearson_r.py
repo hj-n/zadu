@@ -1,7 +1,7 @@
 from scipy.stats import pearsonr
 from .utils import pairwise_dist as pdist
 
-def pearson_r(orig, emb, distance_matrices=None):
+def run(orig, emb, distance_matrices=None):
   """
 	Compute Pearson's correlation coefficient of the embedding
 	INPUT:

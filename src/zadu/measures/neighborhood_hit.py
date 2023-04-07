@@ -1,7 +1,7 @@
 from .utils import knn
 import numpy as np
 
-def neighborhood_hit(emb, label, k, knn_emb_info=None):
+def run(emb, label, k, knn_emb_info=None):
   """
 	Compute neighborhood hit of the embedding
 	INPUT:

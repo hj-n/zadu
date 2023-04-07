@@ -1,7 +1,7 @@
 from scipy.stats import spearmanr
 from .utils import pairwise_dist as pdist
 
-def spearman_rho(orig, emb, distance_matrices=None):
+def run(orig, emb, distance_matrices=None):
   """
   Compute Spearman's rank correlation coefficient of the embedding
   INPUT:

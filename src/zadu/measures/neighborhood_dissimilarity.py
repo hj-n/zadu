@@ -4,7 +4,7 @@ from .utils import knn
 
 
 
-def neighborhood_dissimilarity(orig, emb, k, snn_info=None, knn_info=None):
+def run(orig, emb, k, snn_info=None, knn_info=None):
 	"""
 	Compute neighbor dissimilarity (ND) of the embedding
 	INPUT:

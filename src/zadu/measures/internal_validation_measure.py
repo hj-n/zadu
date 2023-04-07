@@ -1,6 +1,6 @@
 from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 
-def internal_validation_measure(emb, label, measure="silhouette"):
+def run(emb, label, measure="silhouette"):
   """
   Compute internal validation measure of the embedding
   INPUT:

@@ -1,7 +1,7 @@
 from .utils import pairwise_dist as pdist
 import numpy as np
 
-def distance_to_measure(orig, emb, sigma, distance_matrices=None):
+def run(orig, emb, sigma, distance_matrices=None):
 	"""
 	Compute the distance to measure of the embedding
 	INPUT:

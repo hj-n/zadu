@@ -2,7 +2,7 @@ import numpy as np
 from .utils import knn
 
 
-def mean_relative_rank_error(orig, emb, k, knn_ranking_info=None):
+def run(orig, emb, k, knn_ranking_info=None):
 	"""
 	Compute Mean Relative Rank Error (MRRE) of the embedding
 	INPUT:
