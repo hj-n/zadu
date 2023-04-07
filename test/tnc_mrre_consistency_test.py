@@ -35,6 +35,7 @@ from measures.kl_divergence import kl_divergence
 from measures.distance_to_measure import distance_to_measure
 from measures.pearson_r import pearson_r
 from measures.spearman_rho import spearman_rho
+from measures.clustering_and_external_validation_measure import clustering_and_external_validation_measure
 
 
 # print(trustworthiness_continuity(digits, digits_pca, 20))
@@ -71,3 +72,6 @@ print(pearson_r(digits, digits_tsne))
 
 print(spearman_rho(digits, digits_pca))
 print(spearman_rho(digits, digits_tsne))
+
+print(clustering_and_external_validation_measure(digits_pca, digits_label, "arand", "kmeans", {"n_clusters": 20}))
+print(clustering_and_external_validation_measure(digits_pca, digits_label, "arand", "kmeans", {"n_clusters": 10}))
