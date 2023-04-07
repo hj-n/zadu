@@ -80,4 +80,4 @@ orig_knn_indices = knn.knn(digits, 20)
 emb_knn_indices  = knn.knn(digits_pca, 20)
 
 print(neighborhood_dissimilarity(digits, digits_pca, 20))
-print(neighborhood_dissimilarity(digits, digits_pca, 20, (orig_knn_indices, emb_knn_indices)))
+print(neighborhood_dissimilarity(digits, digits_pca, 20, knn_info=(orig_knn_indices, emb_knn_indices)))

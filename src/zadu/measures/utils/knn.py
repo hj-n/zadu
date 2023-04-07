@@ -58,3 +58,34 @@ def knn(points, k, distance_function="euclidean"):
     knn_indices = tree.query(points, k=k+1, return_distance=False)[:, 1:]
 	
   return knn_indices
+
+
+def snn(points, k, distance_function="euclidean", weighted=False, knn_indices=None):
+  """
+	Compute the shared nearest neighbors (SNN) graph of the points
+	INPUT:
+		ndarray: points: list of points
+		int: k: number of nearest neighbors to consider
+		str or callable: distance_function: distance function to use
+		tuple: knn_info: precomputed k-nearest neighbors and rankings of the points (Optional)
+	OUTPUT:
+		ndarray: snn_graph: shared nearest neighbors (SNN) graph of the points
+	"""
+  if knn_indices is None:
+    knn_indices = knn(points, k, distance_function)
+
+  knn_graph = np.zeros((knn_indices.shape[0], knn_indices.shape[0]))
+  for i in range(knn_indices.shape[1]):
+    knn_graph[np.arange(knn_indices.shape[0]), knn_indices[:, i]] = k-i
+  
+  if weighted:			
+    knn_graph = knn_graph + knn_graph.T
+  else:
+    knn_graph = ((knn_graph + knn_graph.T) > 0).astype(float)
+  snn_graph = knn_graph @ knn_graph
+  return snn_graph
+
+    
+  
+
+    
