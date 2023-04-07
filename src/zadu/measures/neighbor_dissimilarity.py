@@ -16,35 +16,33 @@ def neighbor_dissimilarity(orig, emb, k, knn_info=None):
     """
 
     if knn_info is None:
-      G1 = kneighbors_graph(orig, k, n_jobs=-1).toarray()
-      G2 = kneighbors_graph(emb, k, n_jobs=-1).toarray()
+      orig_knn_graph = kneighbors_graph(orig, k, n_jobs=-1).toarray()
+      emb_knn_graph = kneighbors_graph(emb, k, n_jobs=-1).toarray()
     else:
-      A1, A2 = knn_info
+      orig_knn_indices, emb_knn_indices = knn_info
+      point_num = orig_knn_indices.shape[0]
 
-      G1 = np.zeros((A1.shape[0], A1.shape[0]))
-      G2 = np.zeros((A2.shape[0], A2.shape[0]))
+      orig_knn_graph = np.zeros((point_num, point_num))
+      emb_knn_graph = np.zeros((point_num, point_num))
 
-      np.add.at(G1, (np.arange(A1.shape[0]), A1 - 1), 1)
-      np.add.at(G2, (np.arange(A2.shape[0]), A2 - 1), 1)
+      np.add.at(orig_knn_graph, (np.arange(point_num), orig_knn_indices - 1), 1)
+      np.add.at(emb_knn_graph, (np.arange(point_num), emb_knn_indices - 1), 1)
       
 
 
-    G1 = ((G1 + G1.T) > 0).astype(float)
-    G2 = ((G2 + G2.T) > 0).astype(float)
+    orig_knn_graph = ((orig_knn_graph + orig_knn_graph.T) > 0).astype(float)
+    emb_knn_graph = ((emb_knn_graph + emb_knn_graph.T) > 0).astype(float)
 
-    S1 = G1 @ G1.T
-    S2 = G2 @ G2.T
+    orig_similarity = np.matmul(orig_knn_graph, orig_knn_graph.T)
+    emb_similarity = np.matmul(emb_knn_graph, emb_knn_graph.T)
 
-    D = (S1 - S2) / k
+    D = (orig_similarity - emb_similarity) / k
     np.fill_diagonal(D, 0)
 
-    D_plus = D[D > 0]
-    D_minus = D[D < 0]
+    nd_plus = np.sqrt(np.sum(D[D > 0]**2))
+    nd_minus = np.sqrt(np.sum(D[D < 0]**2))
 
-    dissim_plus = np.sqrt(np.sum(D_plus**2))
-    dissim_minus = np.sqrt(np.sum(D_minus**2))
-
-    nd = max(dissim_plus, dissim_minus)
+    nd = max(nd_plus, nd_minus)
 
     return {
         "neighbor_dissimilarity": nd
