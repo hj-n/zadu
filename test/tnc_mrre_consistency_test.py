@@ -36,7 +36,8 @@ from measures.distance_to_measure import distance_to_measure
 from measures.pearson_r import pearson_r
 from measures.spearman_rho import spearman_rho
 from measures.clustering_and_external_validation_measure import clustering_and_external_validation_measure
-from measures.neighbor_dissimilarity import neighbor_dissimilarity
+from measures.neighborhood_dissimilarity import neighborhood_dissimilarity
+from measures.utils import knn
 # print(trustworthiness_continuity(digits, digits_pca, 20))
 # print(MDPMetricProvider(digits, digits_pca, ["Trustworthiness", "Continuity"], 20).run())
 
@@ -60,8 +61,8 @@ from measures.neighbor_dissimilarity import neighbor_dissimilarity
 # print(internal_validation_measure(digits_pca, digits_label, "silhouette"))
 # print(internal_validation_measure(digits_tsne, digits_label, "silhouette"))
 
-print(kl_divergence(digits, digits_pca, 0.1))
-print(kl_divergence(digits, digits_tsne, 0.1))
+# print(kl_divergence(digits, digits_pca, 0.1))
+# print(kl_divergence(digits, digits_tsne, 0.1))
 
 # print(distance_to_measure(digits, digits_pca, 0.1))
 # print(distance_to_measure(digits, digits_tsne, 0.1))
@@ -75,5 +76,8 @@ print(kl_divergence(digits, digits_tsne, 0.1))
 # print(clustering_and_external_validation_measure(digits_pca, digits_label, "arand", "kmeans", {"n_clusters": 20}))
 # print(clustering_and_external_validation_measure(digits_pca, digits_label, "arand", "kmeans", {"n_clusters": 10}))
 
-print(neighbor_dissimilarity(digits, digits_pca, 20))
-print(neighbor_dissimilarity(digits, digits_tsne, 20))
+orig_knn_indices = knn.knn(digits, 20)
+emb_knn_indices  = knn.knn(digits_pca, 20)
+
+print(neighborhood_dissimilarity(digits, digits_pca, 20))
+print(neighborhood_dissimilarity(digits, digits_pca, 20, (orig_knn_indices, emb_knn_indices)))
