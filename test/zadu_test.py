@@ -44,5 +44,9 @@ spec_list = [
 	}
 ]
 
-zadu_obj = zadu.ZADU(spec_list)
-print(zadu_obj.run(digits, digits_pca, digits_label))
+zadu_obj = zadu.ZADU(spec_list, return_local=True)
+scores, local_list = zadu_obj.run(digits, digits_pca, digits_label)
+
+print(scores)
+print("===")
+print(local_list)

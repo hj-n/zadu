@@ -123,6 +123,10 @@ class ZADU:
 				score, local = globals()[measure_name].run(**exec_params)
 				score_results.append(score)
 				local_results.append(local)
+			elif self.return_local and "return_local" not in exec_params:
+				score = globals()[measure_name].run(**exec_params)
+				score_results.append(score)
+				local_results.append(None)
 			else:
 				score = globals()[measure_name].run(**exec_params)
 				score_results.append(score)
