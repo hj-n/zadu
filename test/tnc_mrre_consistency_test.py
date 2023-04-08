@@ -25,7 +25,7 @@ iris_tsne = tsne.fit_transform(iris)
 
 from provider import MDPMetricProvider
 from measures import trustworthiness_continuity, mean_relative_rank_error, class_aware_trustworthiness_continuity
-from measures import local_continuity_meta_criteria
+from measures import local_continuity_meta_criteria, neighborhood_hit, distance_consistency
 # from measures.class_aware_trustworthiness_continuity import class_aware_trustworthiness_continuity
 # from measures.mean_relative_rank_error import mean_relative_rank_error
 # from measures.local_continuity_meta_criteria import local_continuity_meta_criteria
@@ -47,13 +47,13 @@ from measures import local_continuity_meta_criteria
 # print(mean_relative_rank_error.run(digits, digits_pca, 20))
 # print(MDPMetricProvider(digits, digits_pca, ["MRRE_ZX", "MRRE_XZ"], 20).run())
 
-print(local_continuity_meta_criteria.run(digits, digits_pca, 20))
-print(local_continuity_meta_criteria.run(digits, digits_tsne, 20))
-print(local_continuity_meta_criteria.run(digits, digits_pca, 50))
-print(local_continuity_meta_criteria.run(digits, digits_tsne, 50))
+# print(local_continuity_meta_criteria.run(digits, digits_pca, 20))
+# print(local_continuity_meta_criteria.run(digits, digits_tsne, 20))
+# print(local_continuity_meta_criteria.run(digits, digits_pca, 50))
+# print(local_continuity_meta_criteria.run(digits, digits_tsne, 50))
 
-# print(neighborhood_hit( digits_pca, digits_label, 20))
-# print(neighborhood_hit(digits_tsne, digits_label, 20))
+print(neighborhood_hit.run( digits_pca, digits_label, 20))
+print(neighborhood_hit.run(digits_tsne, digits_label, 20))
 
 
 # print(distance_consistency(digits_pca, digits_label))

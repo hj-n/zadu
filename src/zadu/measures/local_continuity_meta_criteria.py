@@ -40,6 +40,8 @@ def run(orig, emb, k=20, knn_info=None, return_local=False):
     return {
       "lcmc": average_distortion
 		}
+
+	
       
   
   

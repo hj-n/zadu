@@ -24,12 +24,13 @@ class ZADU:
 
 	DEFAULT_K = 20
 	
-	def __init__(self, spec_list, verbose=False):
-		self.spec_list = spec_list
-		self.verbose = verbose
+	def __init__(self, spec_list, return_local=False, verbose=False):
+		self.spec_list    = spec_list
+		self.return_local = return_local
+		self.verbose      = verbose
 
-		self.orig = None
-		self.emb  = None
+		self.orig  = None
+		self.emb   = None
 		self.label = None
 
 		## FLAGS for scheduling
@@ -77,7 +78,8 @@ class ZADU:
 			self.emb_knn_indices  = knn.knn(emb,  self.knn_flag_k, distance_matrix=self.emb_distance_matrix)
 		
 		## compute the measures
-		results = []
+		score_results = []
+		local_results = []
 		for spec in self.spec_list:
 			measure_name = spec["measure"]
 			given_params = spec["params"] if "params" in spec else {}
@@ -113,12 +115,23 @@ class ZADU:
 						self.orig_knn_indices[:, :k_val], 
 						self.emb_knn_indices[:, :k_val]
 					)
+				elif "return_local" == param:
+					exec_params["return_local"] = self.return_local
 			
 			## execute the function
-			result = globals()[measure_name].run(**exec_params)
-			results.append(result)
+			if self.return_local and "return_local" in exec_params:
+				score, local = globals()[measure_name].run(**exec_params)
+				score_results.append(score)
+				local_results.append(local)
+			else:
+				score = globals()[measure_name].run(**exec_params)
+				score_results.append(score)
+
+		if self.return_local:
+			return score_results, local_results
+		else:
+			return score_results
 		
-		return results
 
 
 
