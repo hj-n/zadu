@@ -1,7 +1,7 @@
 import numpy as np
 from .utils import knn
 
-def run(orig, emb, label, k, knn_ranking_info=None):
+def run(orig, emb, label, k=20, knn_ranking_info=None):
 	"""
 	Compute class-aware trustworthiness and continuity of the embedding
 	INPUT:

@@ -2,7 +2,7 @@ import numpy as np
 from .utils import knn
 
 
-def run(orig, emb, k, knn_info=None):
+def run(orig, emb, k=20, knn_info=None):
   """
   Compute the local continuity meta-criteria of the embedding
   INPUT:

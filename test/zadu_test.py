@@ -24,10 +24,19 @@ spec_list = [
   {
     "measure": "tnc",
     "params": {
-			"k": 25,
-      "k2": 25
+			"k": 25
 		}
+	},
+  {
+    "measure": "tnc",
+		"params": {
+			"k": 30
+		}       
+	},
+  {
+    "measure": "dtm"
 	}
 ]
 
-zadu.ZADU(spec_list)
+zadu_obj = zadu.ZADU(spec_list)
+zadu_obj.run(digits, digits_pca)

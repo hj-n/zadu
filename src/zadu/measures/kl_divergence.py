@@ -1,7 +1,7 @@
 from .utils import pairwise_dist as pdist
 import numpy as np
 
-def run(orig, emb, sigma, distance_matrices=None):
+def run(orig, emb, sigma=0.1, distance_matrices=None):
   """
   Compute Kullback-Leibler divergence of the embedding
   INPUT:
