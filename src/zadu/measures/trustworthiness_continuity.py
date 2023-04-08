@@ -19,9 +19,9 @@ def run(orig, emb, k=20, knn_ranking_info=None, return_local=False):
 		orig_knn_indices, orig_ranking, emb_knn_indices, emb_ranking = knn_ranking_info
 
 	## trustworthiness
-	trust = tnc_computation(orig_knn_indices, orig_ranking, emb_knn_indices, k)
+	trust = tnc_computation(orig_knn_indices, orig_ranking, emb_knn_indices, k, return_local)
 	## continuity
-	cont  = tnc_computation(emb_knn_indices,  emb_ranking, orig_knn_indices, k)
+	cont  = tnc_computation(emb_knn_indices,  emb_ranking, orig_knn_indices, k, return_local)
 	return {
 		"trustworthiness": trust,
 		"continuity": cont
@@ -36,11 +36,9 @@ def tnc_computation(base_knn_indices, base_ranking, target_knn_indices, k, retur
 
 	for i in range(points_num):
 		missings = np.setdiff1d(target_knn_indices[i], base_knn_indices[i])
-
 		local_distortion = 0.0 
 		for missing in missings:
 			local_distortion += base_ranking[i, missing] - k
-
 		local_distortion_list.append(local_distortion)
 	local_distortion_list = np.array(local_distortion_list)
 	local_distortion_list = 1 - local_distortion_list * (2 / (k * (2 * points_num - 3 * k - 1)))

@@ -18,13 +18,14 @@ pca = PCA(n_components=2)
 digits_pca = pca.fit_transform(digits)
 iris_pca = pca.fit_transform(iris)
 
-# tsne = TSNE(n_components=2)
+tsne = TSNE(n_components=2)
 
-# digits_tsne = tsne.fit_transform(digits)
-# iris_tsne = tsne.fit_transform(iris)
+digits_tsne = tsne.fit_transform(digits)
+iris_tsne = tsne.fit_transform(iris)
 
 from provider import MDPMetricProvider
 from measures import trustworthiness_continuity, mean_relative_rank_error, class_aware_trustworthiness_continuity
+from measures import local_continuity_meta_criteria
 # from measures.class_aware_trustworthiness_continuity import class_aware_trustworthiness_continuity
 # from measures.mean_relative_rank_error import mean_relative_rank_error
 # from measures.local_continuity_meta_criteria import local_continuity_meta_criteria
@@ -38,18 +39,18 @@ from measures import trustworthiness_continuity, mean_relative_rank_error, class
 # from measures.clustering_and_external_validation_measure import clustering_and_external_validation_measure
 # from measures.neighborhood_dissimilarity import neighborhood_dissimilarity
 # from measures.utils import knn
-print(trustworthiness_continuity.run(digits, digits_pca, 20))
-print(MDPMetricProvider(digits, digits_pca, ["Trustworthiness", "Continuity"], 20).run())
+# print(trustworthiness_continuity.run(digits, digits_pca, 20))
+# print(MDPMetricProvider(digits, digits_pca, ["Trustworthiness", "Continuity"], 20).run())
 
-print(class_aware_trustworthiness_continuity.run(digits, digits_pca, digits_label, 20))
+# print(class_aware_trustworthiness_continuity.run(digits, digits_pca, digits_label, 20))
 
-print(mean_relative_rank_error.run(digits, digits_pca, 20))
-print(MDPMetricProvider(digits, digits_pca, ["MRRE_ZX", "MRRE_XZ"], 20).run())
+# print(mean_relative_rank_error.run(digits, digits_pca, 20))
+# print(MDPMetricProvider(digits, digits_pca, ["MRRE_ZX", "MRRE_XZ"], 20).run())
 
-# print(local_continuity_meta_criteria(digits, digits_pca, 20))
-# print(local_continuity_meta_criteria(digits, digits_tsne, 20))
-# print(local_continuity_meta_criteria(digits, digits_pca, 50))
-# print(local_continuity_meta_criteria(digits, digits_tsne, 50))
+print(local_continuity_meta_criteria.run(digits, digits_pca, 20))
+print(local_continuity_meta_criteria.run(digits, digits_tsne, 20))
+print(local_continuity_meta_criteria.run(digits, digits_pca, 50))
+print(local_continuity_meta_criteria.run(digits, digits_tsne, 50))
 
 # print(neighborhood_hit( digits_pca, digits_label, 20))
 # print(neighborhood_hit(digits_tsne, digits_label, 20))
