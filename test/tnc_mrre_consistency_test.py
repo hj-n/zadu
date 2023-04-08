@@ -24,7 +24,7 @@ iris_pca = pca.fit_transform(iris)
 # iris_tsne = tsne.fit_transform(iris)
 
 from provider import MDPMetricProvider
-from measures import trustworthiness_continuity, mean_relative_rank_error
+from measures import trustworthiness_continuity, mean_relative_rank_error, class_aware_trustworthiness_continuity
 # from measures.class_aware_trustworthiness_continuity import class_aware_trustworthiness_continuity
 # from measures.mean_relative_rank_error import mean_relative_rank_error
 # from measures.local_continuity_meta_criteria import local_continuity_meta_criteria
@@ -41,7 +41,7 @@ from measures import trustworthiness_continuity, mean_relative_rank_error
 print(trustworthiness_continuity.run(digits, digits_pca, 20))
 print(MDPMetricProvider(digits, digits_pca, ["Trustworthiness", "Continuity"], 20).run())
 
-# print(class_aware_trustworthiness_continuity(digits, digits_pca, digits_label, 20))
+print(class_aware_trustworthiness_continuity.run(digits, digits_pca, digits_label, 20))
 
 print(mean_relative_rank_error.run(digits, digits_pca, 20))
 print(MDPMetricProvider(digits, digits_pca, ["MRRE_ZX", "MRRE_XZ"], 20).run())
