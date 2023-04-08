@@ -32,7 +32,12 @@ def checkviz(
 
 
 
-def reliability_map(emb, false_distortion_list, missing_distortion_list, k=7, ax=None):
+def reliability_map(
+		emb, false_distortion_list, missing_distortion_list, k=7, ax=None,
+		point_c="black", point_s=1, point_alpha=0.5, point_marker="o",
+		linewidth=2.5, line_alpha=0.8
+
+	):
 	## construct a knn graph
 	if ax is None:
 		fig, ax = plt.subplots(figsize=(10, 10))
@@ -40,14 +45,11 @@ def reliability_map(emb, false_distortion_list, missing_distortion_list, k=7, ax
 	knn_graph = kneighbors_graph(emb, k, mode="distance", include_self=False)
 
 	## visualizae points and knn graph
-	ax.scatter(emb[:, 0], emb[:, 1], c="black", zorder=2, s=1, alpha=0.5, marker="o")
+	ax.scatter(emb[:, 0], emb[:, 1], c=point_c, zorder=2, s=point_s, alpha=point_alpha, marker=point_marker)
 	for i in range(emb.shape[0]):
 		for j in knn_graph[i].indices:
 			color = checkviz_cmap((false_distortion_list[i] + false_distortion_list[j]) / 2, (missing_distortion_list[i] + missing_distortion_list[j]) / 2)
 			ax.plot(
 				[emb[i, 0], emb[j, 0]], [emb[i, 1], emb[j, 1]], 
-				c=color, zorder=1, linewidth=2.5, alpha=0.8
+				c=color, zorder=1, linewidth=linewidth, alpha=line_alpha
 			)
-	
-
-	
