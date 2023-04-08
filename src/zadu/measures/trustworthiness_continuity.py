@@ -18,14 +18,23 @@ def run(orig, emb, k=20, knn_ranking_info=None, return_local=False):
 	else:
 		orig_knn_indices, orig_ranking, emb_knn_indices, emb_ranking = knn_ranking_info
 
-	## trustworthiness
-	trust = tnc_computation(orig_knn_indices, orig_ranking, emb_knn_indices, k, return_local)
-	## continuity
-	cont  = tnc_computation(emb_knn_indices,  emb_ranking, orig_knn_indices, k, return_local)
-	return {
-		"trustworthiness": trust,
-		"continuity": cont
-	}
+	if return_local:
+		trust, local_trust = tnc_computation(orig_knn_indices, orig_ranking, emb_knn_indices, k, return_local)
+		cont , local_cont  = tnc_computation(emb_knn_indices,  emb_ranking, orig_knn_indices, k, return_local)
+		return ({
+			"trustworthiness": trust,
+			"continuity": cont
+		}, {
+			"local_trustworthiness": local_trust,
+			"local_continuity": local_cont
+		})
+	else:
+		trust = tnc_computation(orig_knn_indices, orig_ranking, emb_knn_indices, k, return_local)
+		cont  = tnc_computation(emb_knn_indices,  emb_ranking, orig_knn_indices, k, return_local)
+		return {
+			"trustworthiness": trust,
+			"continuity": cont
+		}
 
 def tnc_computation(base_knn_indices, base_ranking, target_knn_indices, k, return_local=False):
 	"""

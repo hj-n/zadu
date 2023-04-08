@@ -19,16 +19,25 @@ def run(orig, emb, label, k=20, knn_ranking_info=None, return_local=False):
 		emb_knn_indices,  emb_ranking  = knn.knn_with_ranking(emb, k)
 	else:
 		orig_knn_indices, orig_ranking, emb_knn_indices, emb_ranking = knn_ranking_info
-	
-	## class-aware trustworthiness
-	ca_trust = ca_tnc_computation(orig_knn_indices, orig_ranking, emb_knn_indices, label, k, "false", return_local)
-	## class-aware continuity
-	ca_cont  = ca_tnc_computation(emb_knn_indices,  emb_ranking, orig_knn_indices, label, k, "missing", return_local)
 
-	return {
-		"ca_trustworthiness": ca_trust,
-		"ca_continuity": ca_cont
-	}
+	if return_local:
+		ca_trust, local_ca_trust = ca_tnc_computation(orig_knn_indices, orig_ranking, emb_knn_indices, label, k, "false", return_local)
+		ca_cont , local_ca_cont  = ca_tnc_computation(emb_knn_indices,  emb_ranking, orig_knn_indices, label, k, "missing", return_local)
+		return ({
+			"ca_trustworthiness": ca_trust,
+			"ca_continuity": ca_cont
+		}, {
+			"local_ca_trustworthiness": local_ca_trust,
+			"local_ca_continuity": local_ca_cont
+		})
+	else:
+		ca_trust = ca_tnc_computation(orig_knn_indices, orig_ranking, emb_knn_indices, label, k, "false", return_local)
+		ca_cont  = ca_tnc_computation(emb_knn_indices,  emb_ranking, orig_knn_indices, label, k, "missing", return_local)
+
+		return {
+			"ca_trustworthiness": ca_trust,
+			"ca_continuity": ca_cont
+		}
 
 def ca_tnc_computation(base_knn_indices, base_ranking, target_knn_indices, label, k, type, return_local=False):
 	"""

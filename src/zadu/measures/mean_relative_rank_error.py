@@ -19,15 +19,24 @@ def run(orig, emb, k=20, knn_ranking_info=None, return_local=False):
 	else:
 		orig_knn_indices, orig_ranking, emb_knn_indices, emb_ranking = knn_ranking_info
 
-	## MRRE_false
-	mrre_false = mrre_computation(orig_ranking, emb_ranking, emb_knn_indices, k, return_local)
-	## MRRE_missing
-	mrre_missing = mrre_computation(emb_ranking, orig_ranking, orig_knn_indices, k, return_local)
+	if return_local:
+		mrre_false, local_mrre_false = mrre_computation(orig_ranking, emb_ranking, emb_knn_indices, k, return_local)
+		mrre_missing, local_mrre_missing = mrre_computation(emb_ranking, orig_ranking, orig_knn_indices, k, return_local)
+		return ({
+			"mrre_false": mrre_false,
+			"mrre_missing": mrre_missing
+		}, {
+			"local_mrre_false": local_mrre_false,
+			"local_mrre_missing": local_mrre_missing
+		})
+	else:
+		mrre_false = mrre_computation(orig_ranking, emb_ranking, emb_knn_indices, k, return_local)
+		mrre_missing = mrre_computation(emb_ranking, orig_ranking, orig_knn_indices, k, return_local)
 
-	return {
-		"mrre_false": mrre_false,
-		"mrre_missing": mrre_missing,
-	}
+		return {
+			"mrre_false": mrre_false,
+			"mrre_missing": mrre_missing,
+		}
 
 def mrre_computation(base_ranking,target_ranking, target_knn_indices, k, return_local=False):
 	"""
@@ -47,10 +56,7 @@ def mrre_computation(base_ranking,target_ranking, target_knn_indices, k, return_
 	average_distortion = np.mean(local_distortion_list)
 
 	if return_local:
-		return {
-			"average_distortion": average_distortion,
-			"local_distortion_list": local_distortion_list
-		}
+		return average_distortion, local_distortion_list
 	else:
 		return average_distortion
 	
