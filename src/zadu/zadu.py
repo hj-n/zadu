@@ -7,11 +7,19 @@ class ZADU:
 	ABBREVIATIONS = {
 		"tnc": "trustworthiness_continuity",
 		"mrre": "mean_relative_rank_error",
+		"lcmc": "local_continuity_meta_criteria",
+		"nh": "neighborhood_hit",
+		"ca_tnc": "class_aware_trustworthiness_continuity",
 		"nd": "neighborhood_dissimilarity",
 		"dtm": "distance_to_measure",
 		"lcmc": "local_continuity_meta_criteria",
 		"kl_div": "kl_divergence",
 		"dtm": "distance_to_measure",
+		"dsc": "distance_consistency",
+		"pr": "pearson_r",
+		"srho":	"spearman_rho",
+		"ivm": "internal_validation_measure",
+		"c_evm": "clustering_and_external_validation_measure"
 	}
 
 	DEFAULT_K = 20
@@ -50,7 +58,7 @@ class ZADU:
 			orig: original data
 			emb:  embedded data
 		OUTPUT:
-			dict: results
+			list: list of results
 		"""
 
 		self.orig = orig
@@ -110,7 +118,7 @@ class ZADU:
 			result = globals()[measure_name].run(**exec_params)
 			results.append(result)
 		
-		print(results)
+		return results
 
 
 

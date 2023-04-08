@@ -28,15 +28,21 @@ spec_list = [
 		}
 	},
   {
-    "measure": "tnc",
+    "measure": "ca_tnc",
 		"params": {
 			"k": 30
 		}       
 	},
   {
     "measure": "dtm"
+	},
+  {
+    "measure": "neighborhood_dissimilarity",
+    "params": {
+			"k": 50
+		}
 	}
 ]
 
 zadu_obj = zadu.ZADU(spec_list)
-zadu_obj.run(digits, digits_pca)
+print(zadu_obj.run(digits, digits_pca, digits_label))
