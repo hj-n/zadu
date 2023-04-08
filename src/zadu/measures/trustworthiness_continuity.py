@@ -1,7 +1,7 @@
 import numpy as np 
 from .utils import knn
 
-def run(orig, emb, k=20, knn_ranking_info=None):
+def run(orig, emb, k=20, knn_ranking_info=None, return_local=False):
 	"""
 	Compute the trustworthiness and continuity of the embedding
 	INPUT:
@@ -27,21 +27,30 @@ def run(orig, emb, k=20, knn_ranking_info=None):
 		"continuity": cont
 	}
 
-def tnc_computation(base_knn_indices, base_ranking, target_knn_indices, k):
+def tnc_computation(base_knn_indices, base_ranking, target_knn_indices, k, return_local=False):
 	"""
 	Core computation of trustworthiness and continuity
 	"""
-	value = 0.0
+	local_distortion_list = []
 	points_num = base_knn_indices.shape[0]
 
 	for i in range(points_num):
-		# get nearest neighbors that in the target indices but not in the base indices
 		missings = np.setdiff1d(target_knn_indices[i], base_knn_indices[i])
 
+		local_distortion = 0.0 
 		for missing in missings:
-			value += base_ranking[i, missing] - k
+			local_distortion += base_ranking[i, missing] - k
 
-	return 1 - 2 / (points_num * k * (2 * points_num - 3 * k - 1)) * value
+		local_distortion_list.append(local_distortion)
+	local_distortion_list = np.array(local_distortion_list)
+	local_distortion_list = 1 - local_distortion_list * (2 / (k * (2 * points_num - 3 * k - 1)))
+
+	average_distortion = np.mean(local_distortion_list)
+
+	if return_local:
+		return average_distortion, local_distortion_list
+	else:
+		return average_distortion
 	
 
 	
