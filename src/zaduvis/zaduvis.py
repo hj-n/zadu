@@ -28,7 +28,7 @@ def checkviz(
 	ax.set_xticks([])
 	ax.set_yticks([])
 
-	plt.show()
+	
 
 
 
@@ -53,3 +53,7 @@ def reliability_map(
 				[emb[i, 0], emb[j, 0]], [emb[i, 1], emb[j, 1]], 
 				c=color, zorder=1, linewidth=linewidth, alpha=line_alpha
 			)
+
+
+	ax.set_xticks([])
+	ax.set_yticks([])
