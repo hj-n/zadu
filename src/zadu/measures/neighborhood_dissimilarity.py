@@ -18,17 +18,16 @@ def run(orig, emb, k=20, snn_info=None, knn_info=None):
 	
 	if snn_info is None:
 		if knn_info is None:
-			orig_SNN_graph = knn.snn(orig, k, weighted=False)
-			emb_SNN_graph = knn.snn(emb, k, weighted=False)
+			orig_SNN_graph = knn.snn(orig, k, directed=False)
+			emb_SNN_graph = knn.snn(emb, k, directed=False)
 		else:
-			orig_SNN_graph = knn.snn(orig, k, knn_indices=knn_info[0], weighted=False)
-			emb_SNN_graph = knn.snn(emb, k, knn_indices=knn_info[1], weighted=False)
+			orig_SNN_graph = knn.snn(orig, k, knn_indices=knn_info[0], directed=False)
+			emb_SNN_graph = knn.snn(emb, k, knn_indices=knn_info[1], directed=False)
 	
 	else:
 		orig_SNN_graph, emb_SNN_graph = snn_info
 
 	D = (orig_SNN_graph - emb_SNN_graph) / k
-	np.fill_diagonal(D, 0)
 
 	D_plus = D[D > 0]
 	D_minus = D[D < 0]

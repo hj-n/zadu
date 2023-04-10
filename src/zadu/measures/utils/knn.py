@@ -59,14 +59,14 @@ def knn(points, k, distance_function="euclidean"):
 	
   return knn_indices
 
-
-def snn(points, k, distance_function="euclidean", weighted=False, knn_indices=None):
+def snn(points, k, distance_function="euclidean", directed=True, knn_indices=None):
   """
 	Compute the shared nearest neighbors (SNN) graph of the points
 	INPUT:
 		ndarray: points: list of points
 		int: k: number of nearest neighbors to consider
 		str or callable: distance_function: distance function to use
+    bool: directed: whether the k-nearest neighbors graph using is directed or not
 		tuple: knn_info: precomputed k-nearest neighbors and rankings of the points (Optional)
 	OUTPUT:
 		ndarray: snn_graph: shared nearest neighbors (SNN) graph of the points
@@ -75,17 +75,15 @@ def snn(points, k, distance_function="euclidean", weighted=False, knn_indices=No
     knn_indices = knn(points, k, distance_function)
 
   knn_graph = np.zeros((knn_indices.shape[0], knn_indices.shape[0]))
-  for i in range(knn_indices.shape[1]):
+  for i in range(k):
     knn_graph[np.arange(knn_indices.shape[0]), knn_indices[:, i]] = k-i
-  
-  if weighted:			
-    knn_graph = knn_graph + knn_graph.T
+
+  if directed:
+    snn_graph = knn_graph @ knn_graph.T
   else:
     knn_graph = ((knn_graph + knn_graph.T) > 0).astype(float)
-  snn_graph = knn_graph @ knn_graph
+    snn_graph = knn_graph @ knn_graph
+
+  np.fill_diagonal(snn_graph, 0)
+
   return snn_graph
-
-    
-  
-
-    
