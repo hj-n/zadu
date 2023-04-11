@@ -38,5 +38,5 @@ def run(orig, emb, k=20, snn_info=None, knn_info=None):
 	nd = max(dissim_plus, dissim_minus)
 
 	return {
-			"neighborhood_dissimilarity": nd
+			"neighbor_dissimilarity": nd
 	}

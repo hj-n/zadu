@@ -37,7 +37,7 @@ from measures import local_continuity_meta_criteria, neighborhood_hit, distance_
 # from measures.pearson_r import pearson_r
 # from measures.spearman_rho import spearman_rho
 # from measures.clustering_and_external_validation_measure import clustering_and_external_validation_measure
-# from measures.neighborhood_dissimilarity import neighborhood_dissimilarity
+# from measures.neighbor_dissimilarity import neighbor_dissimilarity
 # from measures.utils import knn
 # print(trustworthiness_continuity.run(digits, digits_pca, 20))
 # print(MDPMetricProvider(digits, digits_pca, ["Trustworthiness", "Continuity"], 20).run())
@@ -80,5 +80,5 @@ print(neighborhood_hit.run(digits_tsne, digits_label, 20))
 # orig_knn_indices = knn.knn(digits, 20)
 # emb_knn_indices  = knn.knn(digits_pca, 20)
 
-# print(neighborhood_dissimilarity(digits, digits_pca, 20))
-# print(neighborhood_dissimilarity(digits, digits_pca, 20, knn_info=(orig_knn_indices, emb_knn_indices)))
+# print(neighbor_dissimilarity(digits, digits_pca, 20))
+# print(neighbor_dissimilarity(digits, digits_pca, 20, knn_info=(orig_knn_indices, emb_knn_indices)))

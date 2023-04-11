@@ -37,7 +37,7 @@ spec_list = [
     "measure": "dtm"
 	},
   {
-    "measure": "neighborhood_dissimilarity",
+    "measure": "neighbor_dissimilarity",
     "params": {
 			"k": 50
 		}
