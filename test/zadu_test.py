@@ -20,6 +20,7 @@ iris_pca = pca.fit_transform(iris)
 
 from zadu import zadu
 
+
 # spec_list = [
 #   {
 #     "measure": "tnc",
@@ -52,6 +53,7 @@ specs = {
 }
 
 zadu_obj = zadu.ZADU(specs, return_local=True)
+
 scores, local_list = zadu_obj.run(digits, digits_pca, digits_label)
 
 print(scores)
