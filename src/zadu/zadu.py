@@ -24,8 +24,8 @@ class ZADU:
 
 	DEFAULT_K = 20
 	
-	def __init__(self, specs, return_local=False, verbose=False):
-		self.specs        = specs
+	def __init__(self, spec_list, return_local=False, verbose=False):
+		self.spec_list    = spec_list
 		self.return_local = return_local
 		self.verbose      = verbose
 
@@ -80,8 +80,9 @@ class ZADU:
 		## compute the measures
 		score_results = []
 		local_results = []
-		for measure_name in self.specs.keys():
-			given_params = self.specs[measure_name]
+		for spec in self.spec_list:
+			measure_name = spec["measure"]
+			given_params = spec["params"] if "params" in spec else {}
 			real_params  = self.__get_real_params(measure_name)
 
 			## construct the execution parameters to be injected in the function
@@ -143,21 +144,17 @@ class ZADU:
 		Perform sanity check on the measures specification list.
 		"""
 		## check whehter there exists invalid measure name
-		new_specs = {}
-		for measure_name in self.specs.keys():
-			if measure_name not in self.ABBREVIATIONS.values():
-				if measure_name in self.ABBREVIATIONS:
-					new_specs[self.ABBREVIATIONS[measure_name]] = self.specs[measure_name]
+		for spec in self.spec_list:
+			if spec["measure"] not in self.ABBREVIATIONS.values():
+				if spec["measure"] in self.ABBREVIATIONS:
+					spec["measure"] = self.ABBREVIATIONS[spec["measure"]]
 				else:
-					raise Exception("Invalid measure name: {}".format(measure_name))
-			else:
-				new_specs[measure_name] = self.specs[measure_name]
-		
-		self.specs = new_specs
+					raise Exception("Invalid measure name: {}".format(spec["measure"]))
 
 		## check whether the parameters are valid
-		for measure_name in self.specs.keys():
-			given_params = self.specs[measure_name] 
+		for spec in self.spec_list:
+			measure_name = spec["measure"]
+			given_params = spec["params"] if "params" in spec else {}
 			real_params  = self.__get_real_params(measure_name)
 
 			## check whether the given parameters are valid
@@ -171,8 +168,9 @@ class ZADU:
 		"""
 		Interpret the measures spec and specify the preprequisites (knn, distance matrices)
 		"""
-		for measure_name in self.specs.keys():
-			given_params = self.specs[measure_name] 
+		for spec in self.spec_list:
+			measure_name = spec["measure"]
+			given_params = spec["params"] if "params" in spec else {}
 			real_params  = self.__get_real_params(measure_name)
 
 			if "knn_ranking_info" in real_params:

@@ -21,38 +21,38 @@ iris_pca = pca.fit_transform(iris)
 from zadu import zadu
 
 
-# spec_list = [
-#   {
-#     "measure": "tnc",
-#     "params": {
-# 			"k": 25
-# 		}
-# 	},
-#   {
-#     "measure": "ca_tnc",
-# 		"params": {
-# 			"k": 30
-# 		}       
-# 	},
-#   {
-#     "measure": "dtm"
-# 	},
-#   {
-#     "measure": "neighborhood_dissimilarity",
-#     "params": {
-# 			"k": 50
-# 		}
-# 	}
-# ]
+spec_list = [
+  {
+    "measure": "tnc",
+    "params": {
+			"k": 25
+		}
+	},
+  {
+    "measure": "ca_tnc",
+		"params": {
+			"k": 30
+		}       
+	},
+  {
+    "measure": "dtm"
+	},
+  {
+    "measure": "neighbor_dissimilarity",
+    "params": {
+			"k": 50
+		}
+	}
+]
 
-specs = {
-  "tnc": { "k": 25 },
-  "ca_tnc": { "k": 30 },
-  "dtm": {},
-  "neighborhood_dissimilarity": { "k": 50 }
-}
+# specs = {
+#   "tnc": { "k": 25 },
+#   "ca_tnc": { "k": 30 },
+#   "dtm": {},
+#   "neighborhood_dissimilarity": { "k": 50 }
+# }
 
-zadu_obj = zadu.ZADU(specs, return_local=True)
+zadu_obj = zadu.ZADU(spec_list, return_local=True)
 
 scores, local_list = zadu_obj.run(digits, digits_pca, digits_label)
 
