@@ -3,7 +3,6 @@
 ## Competitors:
 # - ZADU
 # - ZADU without computation scheduling
-# - Previous python implementations/bindings
 
 
 # Check the total runtime of measures
