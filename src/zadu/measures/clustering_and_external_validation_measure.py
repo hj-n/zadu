@@ -2,7 +2,7 @@ from sklearn.cluster import KMeans, DBSCAN
 from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score, normalized_mutual_info_score, v_measure_score
 
 
-def run(emb, label, measure="arand",  clustering="kmeans", clustering_args=None):
+def measure(emb, label, measure="arand",  clustering="kmeans", clustering_args=None):
 	"""
 	Evaluate DR embedding using clustering and external validation measure
 	INPUT:

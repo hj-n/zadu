@@ -121,15 +121,15 @@ class ZADU:
 			
 			## execute the function
 			if self.return_local and "return_local" in exec_params:
-				score, local = globals()[measure_name].run(**exec_params)
+				score, local = globals()[measure_name].measure(**exec_params)
 				score_results.append(score)
 				local_results.append(local)
 			elif self.return_local and "return_local" not in exec_params:
-				score = globals()[measure_name].run(**exec_params)
+				score = globals()[measure_name].measure(**exec_params)
 				score_results.append(score)
 				local_results.append(None)
 			else:
-				score = globals()[measure_name].run(**exec_params)
+				score = globals()[measure_name].measure(**exec_params)
 				score_results.append(score)
 
 		if self.return_local:
@@ -196,5 +196,5 @@ class ZADU:
 		"""
 		Get the real parameters of a measure.
 		"""
-		measure_func = globals()[measure_name].run
+		measure_func = globals()[measure_name].measure
 		return measure_func.__code__.co_varnames[:measure_func.__code__.co_argcount]

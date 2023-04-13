@@ -2,7 +2,7 @@ from snc.snc import SNC
 
 
 
-def run(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k="sqrt", clustering_strategy="dbscan", return_local=False):
+def measure(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k="sqrt", clustering_strategy="dbscan", return_local=False):
 	"""
 	Compute the Steadiness and Cohesiveness of the embedding
 	"""

@@ -1,7 +1,7 @@
 from .utils import pairwise_dist as pdist
 import numpy as np
 
-def run(orig, emb, distance_matrices=None):
+def measure(orig, emb, distance_matrices=None):
     """
 	Compute stress of the embedding
 	INPUT:

@@ -1,6 +1,6 @@
 import numpy as np
 
-def run(emb, label):
+def measure(emb, label):
   """
 	Compute distance consistency of the embedding
 	INPUT:
