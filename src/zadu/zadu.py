@@ -19,7 +19,8 @@ class ZADU:
 		"pr": "pearson_r",
 		"srho":	"spearman_rho",
 		"ivm": "internal_validation_measure",
-		"c_evm": "clustering_and_external_validation_measure"
+		"c_evm": "clustering_and_external_validation_measure",
+		"snc": "steadiness_cohesiveness"
 	}
 
 	DEFAULT_K = 20
