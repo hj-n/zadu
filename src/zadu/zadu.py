@@ -25,12 +25,12 @@ class ZADU:
 
 	DEFAULT_K = 20
 	
-	def __init__(self, spec_list, return_local=False, verbose=False):
+	def __init__(self, spec_list, orig, return_local=False, verbose=False):
 		self.spec_list    = spec_list
 		self.return_local = return_local
 		self.verbose      = verbose
 
-		self.orig  = None
+		self.orig  = orig
 		self.emb   = None
 		self.label = None
 
@@ -51,31 +51,33 @@ class ZADU:
 
 		self.__sanity_check_measures_spec()
 		self.__interpret_measures_spec()
+
+		if self.distance_matrices_flag:
+			self.orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
+		if self.knn_ranking_flag:
+			self.orig_knn_indices, self.orig_knn_ranking = knn.knn_with_ranking(orig, self.knn_ranking_flag_k, distance_matrix=self.orig_distance_matrix)
+		elif self.knn_flag and self.knn_flag_k > self.knn_ranking_flag_k:
+			self.orig_knn_indices = knn.knn(orig, self.knn_flag_k, distance_matrix=self.orig_distance_matrix)
 	
 
-	def run(self, orig, emb, label=None):
+	def measure(self, emb, label=None):
 		"""
 		Run the functions specified in spec_list
 		INPUT:
-			orig: original data
 			emb:  embedded data
 		OUTPUT:
 			list: list of results
 		"""
 
-		self.orig = orig
 		self.emb  = emb
 		self.label = label
 
 		## compute the distance matrices
 		if self.distance_matrices_flag:
-			self.orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
 			self.emb_distance_matrix  = pdist.pairwise_distance_matrix(emb)
 		if self.knn_ranking_flag:
-			self.orig_knn_indices, self.orig_knn_ranking = knn.knn_with_ranking(orig, self.knn_ranking_flag_k, distance_matrix=self.orig_distance_matrix)
 			self.emb_knn_indices,  self.emb_knn_ranking  = knn.knn_with_ranking(emb,  self.knn_ranking_flag_k, distance_matrix=self.emb_distance_matrix)
 		elif self.knn_flag and self.knn_flag_k > self.knn_ranking_flag_k:
-			self.orig_knn_indices = knn.knn(orig, self.knn_flag_k, distance_matrix=self.orig_distance_matrix)
 			self.emb_knn_indices  = knn.knn(emb,  self.knn_flag_k, distance_matrix=self.emb_distance_matrix)
 		
 		## compute the measures
@@ -93,9 +95,9 @@ class ZADU:
 
 			for param in real_params:
 				if "orig" == param:
-					exec_params["orig"] = orig
+					exec_params["orig"] = self.orig
 				elif "emb" == param:
-					exec_params["emb"] = emb
+					exec_params["emb"] = self.emb
 				elif "label" == param:
 					if label is None:
 						raise Exception("Label is required for measure {}".format(measure_name))

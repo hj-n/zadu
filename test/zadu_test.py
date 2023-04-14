@@ -18,6 +18,8 @@ pca = PCA(n_components=2)
 digits_pca = pca.fit_transform(digits)
 iris_pca = pca.fit_transform(iris)
 
+digits_tsne = TSNE(n_components=2).fit_transform(digits)
+
 from zadu import zadu
 
 
@@ -56,10 +58,9 @@ spec_list = [
 #   "neighborhood_dissimilarity": { "k": 50 }
 # }
 
-zadu_obj = zadu.ZADU(spec_list, return_local=True)
+zadu_obj = zadu.ZADU(spec_list, digits, return_local=True)
 
-scores, local_list = zadu_obj.run(digits, digits_pca, digits_label)
-
+scores, local_list = zadu_obj.measure(digits_pca, digits_label)
 print(scores)
-print("===")
-print(local_list)
+scores, local_list = zadu_obj.measure(digits_tsne, digits_label)
+print(scores)

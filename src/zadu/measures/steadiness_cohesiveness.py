@@ -15,10 +15,10 @@ def measure(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k="sqrt", c
 	cohesiveness = snc_obj.cohesiveness()
 
 	if return_local:
-		return None, { ## TODO
+		return { ## TODO
 			"steadiness": steadiness,
 			"cohesiveness": cohesiveness
-		}
+		}, None
 	else:
 		return {
 			"steadiness": steadiness,
