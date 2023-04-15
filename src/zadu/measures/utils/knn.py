@@ -30,7 +30,7 @@ def knn_with_ranking(points, k, distance_matrix=None):
     ranking[i] = np.argsort(sorted_indices)
   
   return knn_indices, ranking
-    
+  
 
 def knn(points, k, distance_function="euclidean"):
   """

@@ -47,7 +47,7 @@ spec_list = [
 	},
   {
     "measure": "snc",
-    "params": { }
+    "params": { "k": 60, "iteration": 300}
 	}
 ]
 
