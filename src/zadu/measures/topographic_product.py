@@ -14,8 +14,6 @@ def measure(orig, emb, k):
 	OUTPUT:
 		topographic product result
 	"""
-    orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
-    emb_distance_matrix  = pdist.pairwise_distance_matrix(emb)
 
     # k nearest neighbors in original space and embedded space each
     orig_knn_indices = knn.knn(orig, k)
