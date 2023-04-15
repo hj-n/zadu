@@ -57,7 +57,7 @@ class ZADU:
 		if self.knn_ranking_flag:
 			self.orig_knn_indices, self.orig_knn_ranking = knn.knn_with_ranking(orig, self.knn_ranking_flag_k, distance_matrix=self.orig_distance_matrix)
 		elif self.knn_flag and self.knn_flag_k > self.knn_ranking_flag_k:
-			self.orig_knn_indices = knn.knn(orig, self.knn_flag_k, distance_matrix=self.orig_distance_matrix)
+			self.orig_knn_indices = knn.knn(orig, self.knn_flag_k, distance_function="euclidean")
 	
 
 	def measure(self, emb, label=None):
@@ -78,7 +78,7 @@ class ZADU:
 		if self.knn_ranking_flag:
 			self.emb_knn_indices,  self.emb_knn_ranking  = knn.knn_with_ranking(emb,  self.knn_ranking_flag_k, distance_matrix=self.emb_distance_matrix)
 		elif self.knn_flag and self.knn_flag_k > self.knn_ranking_flag_k:
-			self.emb_knn_indices  = knn.knn(emb,  self.knn_flag_k, distance_matrix=self.emb_distance_matrix)
+			self.emb_knn_indices  = knn.knn(emb,  self.knn_flag_k, distance_function="euclidean")
 		
 		## compute the measures
 		score_results = []

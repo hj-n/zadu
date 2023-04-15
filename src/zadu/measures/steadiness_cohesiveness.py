@@ -26,7 +26,16 @@ def measure(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clust
 	}
 
 
-	snc_obj = SNC(orig, emb, iteration, walk_num_ratio, "inject_snn", { "alpha": alpha, }, None, clustering_strategy, snn_knn_matrix)
+	snc_obj = SNC(
+		orig, emb, 
+		iteration=iteration, 
+		walk_num_ratio=walk_num_ratio, 
+		dist_strategy="inject_snn", 
+		dist_parameter={ "alpha": alpha }, 
+		dist_function=None, 
+		cluster_strategy=clustering_strategy, 
+		snn_knn_matrix=snn_knn_matrix
+	)
 
 	snc_obj.fit(record_vis_info=return_local)
 
@@ -35,16 +44,16 @@ def measure(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clust
 
 	_, _, _, points_info = snc_obj.vis_info()
 
-	stead_local = [point_info["false_val"] for point_info in points_info]
-	cohev_local = [point_info["missing_val"] for point_info in points_info]
+	stead_local = [1 - point_info["false_val"] for point_info in points_info]
+	cohev_local = [1 - point_info["missing_val"] for point_info in points_info]
 
 	if return_local:
 		return { ## TODO
 			"steadiness": steadiness,
 			"cohesiveness": cohesiveness
 		}, {
-			"steadiness": stead_local,
-			"cohesiveness": cohev_local
+			"local_steadiness": stead_local,
+			"local_cohesiveness": cohev_local
 		}
 	else:
 		return {
