@@ -19,7 +19,7 @@ ZADU currently supports a total of 17 distortion measures, including:
 - 4 cluster-level measures
 - 6 global measures
 
-For a complete list of supported measures, refer to [the documentation](tree/master/src/zadu/measures).
+For a complete list of supported measures, refer to [measures](/src/zadu/measures).
 
 ## How To Use ZADU
 
@@ -107,7 +107,7 @@ The above code snippet demonstrates how to visualize local pointwise distortions
 
 ## Documentation
 
-For more information about the available distortion measures, their use cases, and examples, please refer to our [paper]().
+For more information about the available distortion measures, their use cases, and examples, please refer to our [paper](zadu.pdf).
 
 ##Citation
 
