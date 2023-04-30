@@ -24,30 +24,38 @@ from zadu import zadu
 
 
 spec_list = [
+  # {
+  #   "id": "tnc",
+  #   "params": {
+	# 		"k": 25
+	# 	}
+	# },
+  # {
+  #   "id": "ca_tnc",
+	# 	"params": {
+	# 		"k": 30
+	# 	}       
+	# },
+  # {
+  #   "id": "dtm"
+	# },
+  # {
+  #   "id": "neighbor_dissimilarity",
+  #   "params": {
+	# 		"k": 50
+	# 	}
+	# },
+  # {
+  #   "id": "snc",
+  #   "params": { "k": 60, "iteration": 300}
+	# },
   {
-    "measure": "tnc",
-    "params": {
-			"k": 25
-		}
+    "id": "topo",
+    "params": {}
 	},
   {
-    "measure": "ca_tnc",
-		"params": {
-			"k": 30
-		}       
-	},
-  {
-    "measure": "dtm"
-	},
-  {
-    "measure": "neighbor_dissimilarity",
-    "params": {
-			"k": 50
-		}
-	},
-  {
-    "measure": "snc",
-    "params": { "k": 60, "iteration": 300}
+    "id": "proc",
+    "params": {}
 	}
 ]
 

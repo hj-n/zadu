@@ -3,7 +3,7 @@ from numpy.linalg import svd
 from .utils import pairwise_dist as pdist
 from .utils import knn
 
-def procrustes(orig, emb, k=20, knn_info=None):
+def measure(orig, emb, k=20, knn_info=None):
 	"""
 	Compute procrustes statistics
 	INPUT:
