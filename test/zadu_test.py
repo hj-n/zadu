@@ -57,6 +57,9 @@ spec_list = [
     "id": "proc",
     "params": {}
 	}
+	# {
+  #     "id": "stress"
+	# }
 ]
 
 # specs = {
