@@ -30,9 +30,9 @@ def measure(orig, emb, k=20, distance_matrices=None, knn_info=None):
 		orig_knn_indices, emb_knn_indices = knn_info
 	
 	for j in range(N):
-		for k in range(N-1):
+		for ki in range(N-1):
 			q1_product, q2_product = 1, 1
-			for l in range(k):
+			for l in range(ki):
 				distance_origin_to_emb_knn      = orig_distance_matrix[j][emb_knn_indices[j][l]]
 				distance_origin_to_origin_knn   = orig_distance_matrix[j][orig_knn_indices[j][l]]
 				q1 = distance_origin_to_emb_knn / distance_origin_to_origin_knn
@@ -43,8 +43,11 @@ def measure(orig, emb, k=20, distance_matrices=None, knn_info=None):
 				q2 = distance_emb_to_emb_knn   / distance_emb_to_origin_knn
 				q2_product *= q2
 
-			p3 = pow(q1_product * q2_product, 1 / (2 * k))
+			p3 = pow(q1_product * q2_product, 1 / (2 * (ki+1)))
 			sum_of_log_p3 += np.log(p3)
 
-	return sum_of_log_p3 / (N * (N - 1))
+	topographic_product = sum_of_log_p3 / (N * (N - 1))
+	return {
+		"topographic_product": topographic_product
+	}
             

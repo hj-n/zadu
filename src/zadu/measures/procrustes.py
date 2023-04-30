@@ -39,4 +39,8 @@ def measure(orig, emb, k=20, knn_info=None):
 		g_normalized = g / np.linalg.norm(H @ origin_neighbors, ord='fro') ** 2
 		g_list.append(g_normalized)
 
-	return np.mean(g_list)
+	procrustes = np.mean(g_list)
+	
+	return {
+		"procrustes": procrustes
+	}
