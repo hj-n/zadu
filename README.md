@@ -1,6 +1,6 @@
-# ZADU: A Python Toolkit for Evaluating the Reliability of Dimensionality Reduction Embeddings
+# ZADU: A Python  Library for Evaluating the Reliability of Dimensionality Reduction Embeddings
 
-ZADU is a Python library that provides a comprehensive suite of distortion measures for evaluating and analyzing dimensionality reduction (DR) embeddings. The library supports a diverse set of local, cluster-level, and global distortion measures, allowing users to assess DR techniques from various structural perspectives. By offering an optimized scheduling scheme and pointwise local distortions, ZADU enables efficient and in-depth analysis of DR embeddings.
+ZADU is a Python library that provides distortion measures for evaluating and analyzing dimensionality reduction (DR) embeddings. The library supports a diverse set of local, cluster-level, and global distortion measures, allowing users to assess DR techniques from various structural perspectives. By offering an optimized scheduling scheme and pointwise local distortions, ZADU enables efficient and in-depth analysis of DR embeddings.
 
 
 ## Installation
@@ -13,13 +13,30 @@ pip install zadu
 
 ## Supported Distortion Measures
 
-ZADU currently supports a total of 17 distortion measures, including:
+ZADU currently supports a total of 17 distortion measures in literature. The list of the measures is as follows:
 
-- 7 local measures
-- 4 cluster-level measures
-- 6 global measures
+- Seven local measures
+  - Trustworthiness & Continuity
+  - Mean Relative Rank Errors
+  - Local Continuity Meta-Criteria
+  - Neighborhood Hit
+  - Neighbor Dissimilarity
+  - Class-Aware Trustworthiness & Continuity
+  - Procrustes Measure
+- Four cluster-level measures
+  - Steadiness & Cohesiveness
+  - Distance Consistency
+  - Internal CLustering Validation Measures
+  - Clustering + External Clustering Validation Measures
+- Six global measures
+  - Stress
+  - Kullbeck-Leibler Divergence
+  - Distance-to-Measure
+  - Topographic Product
+  - Pearson's correlation coefficint $r$
+  - Spearman's rank correlation coefficient $\rho$
 
-For a complete list of supported measures, refer to [measures](/src/zadu/measures).
+For a complete input and output of the measures, refer to [our source code](/src/zadu/measures).
 
 ## How To Use ZADU
 
@@ -107,7 +124,7 @@ The above code snippet demonstrates how to visualize local pointwise distortions
 
 ## Documentation
 
-For more information about the available distortion measures, their use cases, and examples, please refer to our [paper](zadu.pdf).
+For more information about the available distortion measures, their use cases, and examples, please refer to our paper (TBD).
 
 ##Citation
 
