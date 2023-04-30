@@ -31,7 +31,7 @@ def measure(orig, emb, k=20, knn_info=None):
 		ones = np.ones((k,k))
 		H = I - (1/k) * ones
 
-		U, _, V_T = svd(origin_neighbors.T @ H @ embedd_neighbors)
+		U, _, V_T = svd(origin_neighbors.T @ H @ embedd_neighbors, full_matrices=False)
 		A = U @ V_T
 		A_T = A.T
 

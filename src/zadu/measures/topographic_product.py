@@ -16,7 +16,6 @@ def measure(orig, emb, k=20, distance_matrices=None, knn_info=None):
 	sum_of_log_p3 = 0
 	
 	if distance_matrices is None:
-		
 		orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
 		emb_distance_matrix  = pdist.pairwise_distance_matrix(emb)
 	else:
@@ -30,7 +29,7 @@ def measure(orig, emb, k=20, distance_matrices=None, knn_info=None):
 		orig_knn_indices, emb_knn_indices = knn_info
 	
 	for j in range(N):
-		for ki in range(N-1):
+		for ki in range(k):
 			q1_product, q2_product = 1, 1
 			for l in range(ki):
 				distance_origin_to_emb_knn      = orig_distance_matrix[j][emb_knn_indices[j][l]]
@@ -46,7 +45,7 @@ def measure(orig, emb, k=20, distance_matrices=None, knn_info=None):
 			p3 = pow(q1_product * q2_product, 1 / (2 * (ki+1)))
 			sum_of_log_p3 += np.log(p3)
 
-	topographic_product = sum_of_log_p3 / (N * (N - 1))
+	topographic_product = sum_of_log_p3 / (N * k)
 	return {
 		"topographic_product": topographic_product
 	}
