@@ -23,6 +23,7 @@ class ZADU:
 		"snc": "steadiness_cohesiveness",
 		"topo": "topographic_product",
 		"proc": "procrustes",
+		"stress": "stress"
 	}
 
 	DEFAULT_K = 20

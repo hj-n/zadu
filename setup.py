@@ -3,9 +3,11 @@ import setuptools
 with open("README.md", "r", encoding="utf-8") as fh:
 	long_description = fh.read()
 
+print(setuptools.find_packages(where="src"))
+
 setuptools.setup(
 	name="zadu",
-	version="0.0.1",
+	version="0.0.7",
 	author="Hyeon Jeon",
 	author_email="hj@hcil.snu.ac.kr",
 	description="A Python Toolkit for Evaluating the Reliability of Dimensionality Reduction Embeddings",
@@ -22,9 +24,10 @@ setuptools.setup(
 		"scikit-learn",
 		"scipy",
 		"snc",
-		"matplotlib"
+		"matplotlib",
+		"faiss-cpu"
 	],
 	package_dir={"": "src"},
-	packages=setuptools.find_packages(where="src"),
+	packages=["zadu", "zaduvis", "zadu.measures", "zadu.measures.utils"],
 	python_requires=">=3.9.0",
 )

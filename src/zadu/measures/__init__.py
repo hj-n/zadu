@@ -3,7 +3,7 @@ __all__ = [
 		'distance_to_measure', 'local_continuity_meta_criteria', 'internal_validation_measure', 
 		'pearson_r', 'distance_consistency', 'kl_divergence', 'neighborhood_hit', 
 		'trustworthiness_continuity', 'clustering_and_external_validation_measure', 'mean_relative_rank_error', "steadiness_cohesiveness",
-		'topographic_product', 'procrustes',
+		'topographic_product', 'procrustes', 'stress'
 ]
 
 ## add to __all__ if the function is added

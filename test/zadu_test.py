@@ -20,7 +20,6 @@ iris_pca = pca.fit_transform(iris)
 
 digits_tsne = TSNE(n_components=2).fit_transform(digits)
 
-from zadu import zadu
 
 
 spec_list = [
