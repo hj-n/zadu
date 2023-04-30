@@ -84,7 +84,7 @@ class ZADU:
 		score_results = []
 		local_results = []
 		for spec in self.spec_list:
-			measure_name = spec["measure"]
+			measure_name = spec["id"]
 			given_params = spec["params"] if "params" in spec else {}
 			real_params  = self.__get_real_params(measure_name)
 
@@ -148,15 +148,15 @@ class ZADU:
 		"""
 		## check whehter there exists invalid measure name
 		for spec in self.spec_list:
-			if spec["measure"] not in self.ABBREVIATIONS.values():
-				if spec["measure"] in self.ABBREVIATIONS:
-					spec["measure"] = self.ABBREVIATIONS[spec["measure"]]
+			if spec["id"] not in self.ABBREVIATIONS.values():
+				if spec["id"] in self.ABBREVIATIONS:
+					spec["id"] = self.ABBREVIATIONS[spec["id"]]
 				else:
-					raise Exception("Invalid measure name: {}".format(spec["measure"]))
+					raise Exception("Invalid measure name: {}".format(spec["id"]))
 
 		## check whether the parameters are valid
 		for spec in self.spec_list:
-			measure_name = spec["measure"]
+			measure_name = spec["id"]
 			given_params = spec["params"] if "params" in spec else {}
 			real_params  = self.__get_real_params(measure_name)
 
@@ -172,7 +172,7 @@ class ZADU:
 		Interpret the measures spec and specify the preprequisites (knn, distance matrices)
 		"""
 		for spec in self.spec_list:
-			measure_name = spec["measure"]
+			measure_name = spec["id"]
 			given_params = spec["params"] if "params" in spec else {}
 			real_params  = self.__get_real_params(measure_name)
 
