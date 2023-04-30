@@ -42,10 +42,11 @@ def measure(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clust
 	steadiness = snc_obj.steadiness()
 	cohesiveness = snc_obj.cohesiveness()
 
-	_, _, _, points_info = snc_obj.vis_info()
+	if return_local:
+		_, _, _, points_info = snc_obj.vis_info()
 
-	stead_local = [1 - point_info["false_val"] for point_info in points_info]
-	cohev_local = [1 - point_info["missing_val"] for point_info in points_info]
+		stead_local = [1 - point_info["false_val"] for point_info in points_info]
+		cohev_local = [1 - point_info["missing_val"] for point_info in points_info]
 
 	if return_local:
 		return { ## TODO
