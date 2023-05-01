@@ -15,6 +15,7 @@ def measure(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clust
 		float: alpha: parameter for the SNC algorithm
 		int: k: number of nearest neighbors to consider
 		str: clustering_strategy: clustering strategy to use (dbscan or kmeans)
+		tuple: knn_info: precomputed k-nearest neighbors of the original and embedded data (Optional)
 	OUTPUT:
 		dict: steadiness and cohesiveness score
 	"""
