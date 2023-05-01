@@ -139,7 +139,7 @@ nh  = neighborhood_hit.run(ld, label, k=20)
 
 ### Scheduling the Execution
 
-ZADU optimizes the execution of multiple distortion measures through an effective scheduling scheme. It minimizes the computational overhead associated with preprocessing stages such as pairwise distance calculation, pointwise distance ranking determination, and k-nearest neighbor identification.
+ZADU automatically optimizes the execution of multiple distortion measures. It minimizes the computational overhead associated with preprocessing stages such as pairwise distance calculation, pointwise distance ranking determination, and k-nearest neighbor identification.
 
 ### Computing Pointwise Local Distortions
 
@@ -164,7 +164,7 @@ print("MRRE local distortions:", local_[1])
 
 ### Visualizing Local Distortions
 
-With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. For example, CheckViz and the Reliability Map can be implemented using a Python visualization library with zaduvis.
+With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. We provide ZADUVis, a python library that enables the rendering of two disotortion visualizations: CheckViz (Lespinats and Aupetit, 2011) and the Reliability Map (Jeon et al. 2022).
 
 ```python
 from zadu import zadu
@@ -191,7 +191,7 @@ zaduvis.reliability_map(ld, l_s, l_c, ax=ax[1])
 ```
 
 
-The above code snippet demonstrates how to visualize local pointwise distortions using CheckViz and Reliability Map plots. `zaduvis.checkviz` generates a CheckViz plot, which shows local Steadiness (x-axis) vs. local Cohesiveness (y-axis) for each point in the embedding. `zaduvis.reliability_map` creates a Reliability Map plot, which colors each point in the embedding according to its local Steadiness and local Cohesiveness values.
+The above code snippet demonstrates how to visualize local pointwise distortions using CheckViz and Reliability Map plots.
 
 ## Documentation
 
