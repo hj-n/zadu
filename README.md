@@ -52,13 +52,13 @@ print("S&C:", scores[1])
 
 `hd` represents high-dimensional data, `ld` represents low-dimensional data
 
-## zadu.ZADU Class
+## ZADU Class
 
-The zadu.ZADU class provides the main interface for the Zadu library, allowing users to evaluate and analyze dimensionality reduction (DR) embeddings effectively and reliably.
+The ZADU class provides the main interface for the Zadu library, allowing users to evaluate and analyze dimensionality reduction (DR) embeddings effectively and reliably.
 
 ### Class Constructor
 
-The Zadu.ZADU class constructor has the following signature:
+The ZADU class constructor has the following signature:
 
 ```python
 class ZADU(spec: List[Dict[str, Union[str, dict]]], hd: np.ndarray, return_local: bool = False)
@@ -75,6 +75,43 @@ Each dictionary must contain the following keys:
 
   * `"params"`: A dictionary containing hyperparameters specific to the chosen distortion measure.
 
+<details>
+<summary style="cursor: pointer; font-weight: bold; color: #0066cc;">List of ID/Parameters for Each Function</summary>
+
+### Local Measures
+
+| Measure | ID | Parameters |
+|---------|----|------------|
+| Trustworthiness & Continuity | tnc | `k=20` |
+| Mean Relative Rank Errors | mrre | `k=20` |
+| Local Continuity Meta-Criteria | lcmc | `k=20` |
+| Neighborhood hit | nh | `k=20` |
+| Neighbor Dissimilarity | nd | `k=20` |
+| Class-Aware Trustworthiness & Continuity | ca_tnc | `k=20` |
+| Procrustes Measure | proc | `k=20` |
+
+### Cluster-level
+
+| Measure | ID | Parameters |
+|---------|----|------------|
+| Steadiness & Cohesiveness | snc | `iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clustering_strategy="dbscan"` |
+| Distance Consistency | dsc | |
+| Internal Validation Measures | ivm | `measure="silhouette"` |
+| Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` |
+
+### Global
+
+| Measure | ID | Parameters |
+|---------|----|------------|
+| Stress | stress | |
+| Kullback-Leibler Divergence | kl_div | `sigma=0.1` |
+| Distance-to-Measure | dtm | `sigma=0.1` |
+| Topographic Product | topo | `k=20` |
+| Pearson’s correlation coefficient | pr | |
+| Spearman’s rank correlation coefficient | srho | |
+
+
+</details>
 
 ##### `hd`
 &nbsp;&nbsp;&nbsp;&nbsp;
@@ -129,17 +166,14 @@ print("MRRE local distortions:", local_[1])
 
 With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. For example, CheckViz and the Reliability Map can be implemented using a Python visualization library with zaduvis.
 
-<img alt="image" src="https://user-images.githubusercontent.com/38465539/235427171-94dcc220-7cbb-4ee6-94b3-20cc96ffbfa8.png">
-
 ```python
 from zadu import zadu
 from zaduvis import zaduvis
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
-from sklearn.datasets import fetch_openml
 
 ## load datasets and generate an embedding
-hd = fetch_openml("mnist_784", version=1, cache=True).target.astype(int)[::7]
+hd = load_mnist()
 ld = TSNE.fit_transform(hd)
 
 ## Computing local pointwise distortions
