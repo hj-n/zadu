@@ -1,6 +1,6 @@
 # ZADU: A Python Library for Evaluating the Reliability of Dimensionality Reduction Embeddings
 
-ZADU is a Python library that provides distortion measures for evaluating and analyzing dimensionality reduction (DR) embeddings. The library supports a diverse set of local, cluster-level, and global distortion measures, allowing users to assess DR techniques from various structural perspectives. By offering an optimized scheduling scheme and pointwise local distortions, ZADU enables efficient and in-depth analysis of DR embeddings.
+ZADU is a Python library that provides distortion measures for evaluating and analyzing dimensionality reduction (DR) embeddings. The library supports a diverse set of local, cluster-level, and global distortion measures, allowing users to assess DR techniques from various structural perspectives. By offering an optimized execution and pointwise local distortions, ZADU enables efficient and in-depth analysis of DR embeddings.
 
 
 ## Installation
@@ -29,7 +29,7 @@ You can either use the main class that wraps the measures, or directly access an
 ### Using the Main Class
 
 Use the main class of ZADU to compute distortion measures.
-This approach benefits from the scheduling scheme, providing faster performance.
+This approach benefits from the optimization, providing faster performance when executing multiple measures.
 
 
 ```python
@@ -137,7 +137,7 @@ nh  = neighborhood_hit.run(ld, label, k=20)
 
 ## Advanced Features
 
-### Scheduling the Execution
+### Optimizing the Execution
 
 ZADU automatically optimizes the execution of multiple distortion measures. It minimizes the computational overhead associated with preprocessing stages such as pairwise distance calculation, pointwise distance ranking determination, and k-nearest neighbor identification.
 
