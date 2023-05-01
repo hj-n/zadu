@@ -8,7 +8,6 @@ def measure(orig, emb, k=20, knn_ranking_info=None, return_local=False):
 		ndarray: orig: original data
 		ndarray: emb: embedded data
 		int: k: number of nearest neighbors to consider
-		tuple: knn_ranking_info: precomputed k-nearest neighbors and rankings of the original and embedded data (Optional)
 	OUTPUT:
 		dict: trustworthiness and continuity
 	"""

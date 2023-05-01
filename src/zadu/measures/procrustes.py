@@ -11,7 +11,7 @@ def measure(orig, emb, k=20, knn_info=None):
 		ndarray: emb: embedded data
 	      int: k: number of nearest neighbors to consider
 	OUTPUT:
-		normalized procrustes statistics for 
+		Procrustes score
 	"""
 	# k nearest neighbors in original space and embedded space each
 	if knn_info is None:

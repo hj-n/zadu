@@ -7,6 +7,16 @@ from .utils import knn
 def measure(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clustering_strategy="dbscan", knn_info=None, return_local=False):
 	"""
 	Compute the Steadiness and Cohesiveness of the embedding
+	INPUT:
+		ndarray: orig: original data
+		ndarray: emb: embedded data
+		int: iteration: number of iterations for the SNC algorithm
+		float: walk_num_ratio: ratio of the number of random walks to the number of points
+		float: alpha: parameter for the SNC algorithm
+		int: k: number of nearest neighbors to consider
+		str: clustering_strategy: clustering strategy to use (dbscan or kmeans)
+	OUTPUT:
+		dict: steadiness and cohesiveness score
 	"""
 
 	if knn_info is None:
