@@ -130,9 +130,9 @@ You can also directly access and invoke the functions defining each distortion m
 ```python
 from zadu.measures import *
 
-mrre = mean_relative_rank_error.run(hd, ld, k=20)
-pr  = pearson_r.run(hd, ld)
-nh  = neighborhood_hit.run(ld, label, k=20)
+mrre = mean_relative_rank_error.measure(hd, ld, k=20)
+pr  = pearson_r.measure(hd, ld)
+nh  = neighborhood_hit.measure(ld, label, k=20)
 ```
 
 ## Advanced Features
