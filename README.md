@@ -171,9 +171,11 @@ from zadu import zadu
 from zaduvis import zaduvis
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+from sklearn.datasets import fetch_openml
+
 
 ## load datasets and generate an embedding
-hd = load_mnist()
+hd = fetch_openml('mnist_784', version=1, cache=True).target.astype(int)[::7]
 ld = TSNE.fit_transform(hd)
 
 ## Computing local pointwise distortions
