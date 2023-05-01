@@ -14,7 +14,6 @@ class ZADU:
 		"dtm": "distance_to_measure",
 		"lcmc": "local_continuity_meta_criteria",
 		"kl_div": "kl_divergence",
-		"dtm": "distance_to_measure",
 		"dsc": "distance_consistency",
 		"pr": "pearson_r",
 		"srho":	"spearman_rho",
