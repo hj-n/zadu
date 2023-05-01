@@ -1,6 +1,6 @@
 # ZADU: A Python Library for Evaluating the Reliability of Dimensionality Reduction Embeddings
 
-ZADU is a Python library that provides distortion measures for evaluating and analyzing dimensionality reduction (DR) embeddings. The library supports a diverse set of local, cluster-level, and global distortion measures, allowing users to assess DR techniques from various structural perspectives. By offering an optimized scheduling scheme and pointwise local distortions, ZADU enables efficient and in-depth analysis of DR embeddings.
+ZADU is a Python library that provides distortion measures for evaluating and analyzing dimensionality reduction (DR) embeddings. The library supports a diverse set of local, cluster-level, and global distortion measures, allowing users to assess DR techniques from various structural perspectives. By offering an optimized execution and pointwise local distortions, ZADU enables efficient and in-depth analysis of DR embeddings.
 
 
 ## Installation
@@ -29,7 +29,7 @@ You can either use the main class that wraps the measures, or directly access an
 ### Using the Main Class
 
 Use the main class of ZADU to compute distortion measures.
-This approach benefits from the scheduling scheme, providing faster performance.
+This approach benefits from the optimization, providing faster performance when executing multiple measures.
 
 
 ```python
@@ -137,7 +137,7 @@ nh  = neighborhood_hit.measure(ld, label, k=20)
 
 ## Advanced Features
 
-### Scheduling the Execution
+### Optimizing the Execution
 
 ZADU automatically optimizes the execution of multiple distortion measures. It minimizes the computational overhead associated with preprocessing stages such as pairwise distance calculation, pointwise distance ranking determination, and k-nearest neighbor identification.
 
@@ -164,7 +164,8 @@ print("MRRE local distortions:", local_[1])
 
 ### Visualizing Local Distortions
 
-With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. We provide ZADUVis, a python library that enables the rendering of two disotortion visualizations: CheckViz (Lespinats and Aupetit, 2011) and the Reliability Map (Jeon et al. 2022).
+With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. We provide ZADUVis, a python library that enables the rendering of two disotortion visualizations: [CheckViz](https://onlinelibrary.wiley.com/doi/full/10.1111/j.1467-8659.2010.01835.x) and the [Reliability Map](https://arxiv.org/abs/2201.06379).
+
 
 ![img](https://user-images.githubusercontent.com/38465539/235427171-94dcc220-7cbb-4ee6-94b3-20cc96ffbfa8.png)
 
@@ -201,8 +202,8 @@ The above code snippet demonstrates how to visualize local pointwise distortions
 
 For more information about the available distortion measures, their use cases, and examples, please refer to our paper [TBD].
 
-##Citation
+## Citation
 
-##License
+## License
 
-##Contributing
+## Contributing
