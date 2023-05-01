@@ -164,7 +164,8 @@ print("MRRE local distortions:", local_[1])
 
 ### Visualizing Local Distortions
 
-With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. We provide ZADUVis, a python library that enables the rendering of two disotortion visualizations: CheckViz (Lespinats and Aupetit, 2011) and the Reliability Map (Jeon et al. 2022).
+With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. We provide ZADUVis, a python library that enables the rendering of two disotortion visualizations: [CheckViz](https://onlinelibrary.wiley.com/doi/full/10.1111/j.1467-8659.2010.01835.x) and the [Reliability Map](https://arxiv.org/abs/2201.06379).
+
 
 ```python
 from zadu import zadu
@@ -199,8 +200,8 @@ The above code snippet demonstrates how to visualize local pointwise distortions
 
 For more information about the available distortion measures, their use cases, and examples, please refer to our paper [TBD].
 
-##Citation
+## Citation
 
-##License
+## License
 
-##Contributing
+## Contributing
