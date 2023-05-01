@@ -129,14 +129,17 @@ print("MRRE local distortions:", local_[1])
 
 With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. For example, CheckViz and the Reliability Map can be implemented using a Python visualization library with zaduvis.
 
+<img alt="image" src="https://user-images.githubusercontent.com/38465539/235427171-94dcc220-7cbb-4ee6-94b3-20cc96ffbfa8.png">
+
 ```python
 from zadu import zadu
 from zaduvis import zaduvis
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+from sklearn.datasets import fetch_openml
 
 ## load datasets and generate an embedding
-hd = load_mnist()
+hd = fetch_openml("mnist_784", version=1, cache=True).target.astype(int)[::7]
 ld = TSNE.fit_transform(hd)
 
 ## Computing local pointwise distortions
