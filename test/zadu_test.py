@@ -3,7 +3,7 @@ import sys
 sys.path.append('../src')
 sys.path.append("../legacy")
 
-import provider as prov
+from zadu import zadu
 
 from sklearn.datasets import load_iris, load_digits
 
@@ -18,7 +18,7 @@ pca = PCA(n_components=2)
 digits_pca = pca.fit_transform(digits)
 iris_pca = pca.fit_transform(iris)
 
-digits_tsne = TSNE(n_components=2).fit_transform(digits)
+# digits_tsne = TSNE(n_components=2).fit_transform(digits)
 
 
 
@@ -72,5 +72,5 @@ zadu_obj = zadu.ZADU(spec_list, digits, return_local=True)
 
 scores, local_list = zadu_obj.measure(digits_pca, digits_label)
 print(scores)
-scores, local_list = zadu_obj.measure(digits_tsne, digits_label)
-print(scores)
+# scores, local_list = zadu_obj.measure(digits_tsne, digits_label)
+# print(scores)
