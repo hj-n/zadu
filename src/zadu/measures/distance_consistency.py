@@ -7,7 +7,7 @@ def measure(emb, label):
 		ndarray: emb: embedded data
 		ndarray: label: label of the original data
 	OUTPUT:
-		dict: distance consistency (dc)
+		dict: distance consistency (dsc)
   """
   
 	## compute centroids
