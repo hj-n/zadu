@@ -1,6 +1,12 @@
-# ZADU: A Python Library for Evaluating the Reliability of Dimensionality Reduction Embeddings
+<p align="center">
+  <h2 align="center">ZADU</h2>
+	<h4 align="center"><i>A</i>-to-<i>Z</i> python library for eval<i>U</i>ating <i>D</i>imensionality reduction</h4>
+</p>
 
-ZADU is a Python library that provides distortion measures for evaluating and analyzing dimensionality reduction (DR) embeddings. The library supports a diverse set of local, cluster-level, and global distortion measures, allowing users to assess DR techniques from various structural perspectives. By offering an optimized execution and pointwise local distortions, ZADU enables efficient and in-depth analysis of DR embeddings.
+---
+
+ZADU is a Python library that provides distortion measures for evaluating and analyzing dimensionality reduction (DR) embeddings. The library supports a diverse set of local, cluster-level, and global distortion measures, allowing users to assess DR techniques from various structural perspectives. By offering an optimized execution and pointwise local distortions, ZADU enables efficient and in-depth analysis of DR embeddings. 
+
 
 
 ## Installation
@@ -204,6 +210,20 @@ For more information about the available distortion measures, their use cases, a
 
 ## Citation
 
-## License
+> Hyeon Jeon, Aeri Cho, Jinhwa Jang, Soohyun Lee, Jake Hyun, Hyung-Kwon Ko, Jaemin Jo, and Jinwook Seo. Zadu: A python library for evaluating the reliability of dimensionality reduction embeddings. In 2023 IEEE Visualization and Visual Analytics (VIS), 2023. to appear.
 
-## Contributing
+```bib
+@inproceedings{jeon23vis,
+  author={Jeon, Hyeon and Cho, Aeri and Jang, Jinhwa and Lee, Soohyun and Hyun, Jake and Ko, Hyung-Kwon and Jo, Jaemin and Seo, Jinwook},
+  booktitle={2023 IEEE Visualization and Visual Analytics (VIS)}, 
+  title={ZADU: A Python Library for Evaluating the Reliability of Dimensionality Reduction Embeddings}, 
+  year={2023},
+  volume={},
+  number={},
+  pages={},
+  doi={},
+  note={to appear}
+}
+```
+
+## License
