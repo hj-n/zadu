@@ -206,7 +206,7 @@ The above code snippet demonstrates how to visualize local pointwise distortions
 
 ## Documentation
 
-For more information about the available distortion measures, their use cases, and examples, please refer to our paper [TBD].
+For more information about the available distortion measures, their use cases, and examples, please refer to our paper (IEEE VIS 2023 Short).
 
 ## Citation
 
