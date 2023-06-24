@@ -1,6 +1,6 @@
 <p align="center">
   <h2 align="center">ZADU</h2>
-	<h4 align="center"><i>A</i>-to-<i>Z</i> python library for eval<i>U</i>ating <i>D</i>imensionality reduction</h4>
+	<p align="center"><b>A</b>-to-<b>Z</b> python library for eval<b>U</b>ating <b>D</b>imensionality reduction</p>
 </p>
 
 ---
