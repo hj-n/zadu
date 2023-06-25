@@ -226,4 +226,3 @@ For more information about the available distortion measures, their use cases, a
 }
 ```
 
-## License
