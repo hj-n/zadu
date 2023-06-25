@@ -81,43 +81,41 @@ Each dictionary must contain the following keys:
 
   * `"params"`: A dictionary containing hyperparameters specific to the chosen distortion measure.
 
-<details>
-<summary style="cursor: pointer; font-weight: bold; color: #0066cc;">List of ID/Parameters for Each Function</summary>
+###### List of ID/Parameters for Each Function
 
-### Local Measures
+> ##### Local Measures
+> 
+> | Measure | ID | Parameters | Range | Optimum |
+> |---------|----|------------|-------|---------|
+> | Trustworthiness & Continuity | tnc | `k=20` | [0.5, 1] | 1 |
+> | Mean Relative Rank Errors | mrre | `k=20` | [0, 1] | 1 | 
+> | Local Continuity Meta-Criteria | lcmc | `k=20` | [0, 1] | 1 |
+> | Neighborhood hit | nh | `k=20` | [0, 1] | 1 |
+> | Neighbor Dissimilarity | nd | `k=20` | R+ | 0 |
+> | Class-Aware Trustworthiness & Continuity | ca_tnc | `k=20` | [0.5, 1] | 1|
+> | Procrustes Measure | proc | `k=20` | R+ | 0 |
+> 
+> ##### Cluster-level Measures
+> 
+> | Measure | ID | Parameters | Range | Optimum |
+> |---------|----|------------|-------|---------|
+> | Steadiness & Cohesiveness | snc | `iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clustering_strategy="dbscan"` | [0, 1] | 1 |
+> | Distance Consistency | dsc | | [0.5, 1] | 0.5 | 
+> | Internal Validation Measures | ivm | `measure="silhouette"` | Depends on IVM | Depends on IVM |
+> | Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` | Depends on EVM | Depends on EVM |
+> 
+> ### Global Measures
+> 
+> | Measure | ID | Parameters | Range | Optimum |
+> |---------|----|------------|-------|---------|
+> | Stress | stress | | R+ | 0 |
+> | Kullback-Leibler Divergence | kl_div | `sigma=0.1` | R+ | 0 |
+> | Distance-to-Measure | dtm | `sigma=0.1` | R+ | 0 |
+> | Topographic Product | topo | `k=20` | R | 0 |
+> | Pearson’s correlation coefficient | pr | | [-1, 1] | 1
+> | Spearman’s rank correlation coefficient | srho | | [-1, 1] | 1
 
-| Measure | ID | Parameters | Range | Optimum |
-|---------|----|------------|-------|---------|
-| Trustworthiness & Continuity | tnc | `k=20` | [0.5, 1] | 1 |
-| Mean Relative Rank Errors | mrre | `k=20` | [0, 1] | 1 | 
-| Local Continuity Meta-Criteria | lcmc | `k=20` | [0, 1] | 1 |
-| Neighborhood hit | nh | `k=20` | [0, 1] | 1 |
-| Neighbor Dissimilarity | nd | `k=20` | R+ | 0 |
-| Class-Aware Trustworthiness & Continuity | ca_tnc | `k=20` | [0.5, 1] | 1|
-| Procrustes Measure | proc | `k=20` | R+ | 0 |
 
-### Cluster-level
-
-| Measure | ID | Parameters | Range | Optimum |
-|---------|----|------------|-------|---------|
-| Steadiness & Cohesiveness | snc | `iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clustering_strategy="dbscan"` | [0, 1] | 1 |
-| Distance Consistency | dsc | | [0.5, 1] | 0.5 | 
-| Internal Validation Measures | ivm | `measure="silhouette"` | Depends on IVM | Depends on IVM |
-| Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` | Depends on EVM | Depends on EVM |
-
-### Global
-
-| Measure | ID | Parameters | Range | Optimum |
-|---------|----|------------|-------|---------|
-| Stress | stress | | R+ | 0 |
-| Kullback-Leibler Divergence | kl_div | `sigma=0.1` | R+ | 0 |
-| Distance-to-Measure | dtm | `sigma=0.1` | R+ | 0 |
-| Topographic Product | topo | `k=20` | R | 0 |
-| Pearson’s correlation coefficient | pr | | [-1, 1] | 1
-| Spearman’s rank correlation coefficient | srho | | [-1, 1] | 1
-
-
-</details>
 
 ##### `hd`
 &nbsp;&nbsp;&nbsp;&nbsp;
