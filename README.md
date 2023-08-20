@@ -211,9 +211,9 @@ zaduvis.reliability_map(ld, local_steadiness, local_cohesiveness, k=10, ax=ax[3]
 
 
 ```
-
-
 The above code snippet demonstrates how to visualize local pointwise distortions using CheckViz and Reliability Map plots.
+
+![mnist_1:7](https://github.com/hj-n/zadu/assets/37105201/7c6dc8d7-59c5-48fd-92a5-186e1e44597a)
 
 ## Documentation
 
