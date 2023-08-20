@@ -47,7 +47,7 @@ spec = [{
     "params": { "k": 20 },
 }, {
     "id"    : "snc",
-    "params": { "k": 30, "clustering": "hdbscan" }
+    "params": { "k": 30, "clustering_strategy": "dbscan" }
 }]
 
 scores = zadu.ZADU(spec, hd).measure(ld)
@@ -181,21 +181,34 @@ from sklearn.manifold import TSNE
 from sklearn.datasets import fetch_openml
 
 
-## load datasets and generate an embedding
-hd = fetch_openml('mnist_784', version=1, cache=True).target.astype(int)[::7]
-ld = TSNE.fit_transform(hd)
+hd = fetch_openml('mnist_784', version=1, cache=True).data.to_numpy()[::7]
+ld = TSNE().fit_transform(hd)
 
 ## Computing local pointwise distortions
-specs = [{"id": "snc", "params": {"k": 50}}]
+spec = [{
+    "id": "tnc",
+    "params": {"k": 25}
+},{
+    "id": "snc",
+    "params": {"k": 50}
+}]
 zadu_obj = zadu.ZADU(spec, hd, return_local=True)
-global_, local_ = zadu_obj.measure(ld)
-l_s = local_[0]["local_steadiness"]
-l_c = local_[0]["local_cohesiveness"]
+scores, local_list = zadu_obj.measure(ld)
 
-## Visualizing local distortions
-fig, ax = plt.subplots(1, 2, figsize=(20, 10))
-zaduvis.checkviz(ld, l_s, l_c, ax=ax[0])
-zaduvis.reliability_map(ld, l_s, l_c, ax=ax[1])
+tnc_local = local_list[0]
+snc_local = local_list[1]
+
+local_trustworthiness = tnc_local["local_trustworthiness"]
+local_continuity = tnc_local["local_continuity"]
+local_steadiness = snc_local["local_steadiness"]
+local_cohesiveness = snc_local["local_cohesiveness"]
+
+fig, ax = plt.subplots(1, 4, figsize=(50, 12.5))
+zaduvis.checkviz(ld, local_trustworthiness, local_continuity, ax=ax[0])
+zaduvis.reliability_map(ld, local_trustworthiness, local_continuity, k=10, ax=ax[1])
+zaduvis.checkviz(ld, local_steadiness, local_cohesiveness, ax=ax[2])
+zaduvis.reliability_map(ld, local_steadiness, local_cohesiveness, k=10, ax=ax[3])
+
 
 ```
 
