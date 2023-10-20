@@ -19,13 +19,13 @@ pip install zadu
 
 ## Supported Distortion Measures
 
-ZADU currently supports a total of 17 distortion measures, including:
+ZADU currently supports a total of 18 distortion measures, including:
 
 - 7 local measures
-- 4 cluster-level measures
+- 5 cluster-level measures
 - 6 global measures
 
-For a complete list of supported measures, refer to [measures](/src/zadu/measures).
+For a complete list of supported measures, refer to [measures](/src/zadu/measures). The library initially provided 17 measures when it was first introduced by our academic paper, and we added one more measure (label trustworthiness & continuity) to the library.
 
 ## How To Use ZADU
 
@@ -71,9 +71,9 @@ class ZADU(spec: List[Dict[str, Union[str, dict]]], hd: np.ndarray, return_local
 
 ```
 
-#### Parameters:
+### Parameters:
 
-##### `spec` 
+#### `spec` 
 &nbsp;&nbsp;&nbsp;&nbsp;
 A list of dictionaries that define the distortion measures to execute and their hyperparameters.
 Each dictionary must contain the following keys:
@@ -81,7 +81,10 @@ Each dictionary must contain the following keys:
 
   * `"params"`: A dictionary containing hyperparameters specific to the chosen distortion measure.
 
-###### List of ID/Parameters for Each Function
+#### List of ID/Parameters for Each Function
+
+
+***Warning***: While using `dsc`, `ivm`, `c_evm`, `nh`, and `ca_tnc`, please be aware that these measures assume that class labels are *well-separated* in the original high-dimensional space. If the class labels are not well-separated, the measures may produce unreliable results. Use the measure only if you are confident that the class labels are well-separated. Please refer to the related [academic paper](https://www.hyeonjeon.com/assets/pdf/jeon23tvcg.pdf) for more detail. 
 
 > ##### Local Measures
 > 
@@ -104,8 +107,11 @@ Each dictionary must contain the following keys:
 > | Internal Validation Measures | ivm | `measure="silhouette"` | Depends on IVM | Depends on IVM |
 > | Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` | Depends on EVM | Depends on EVM |
 > | Label Trustworthiness & Continuity | l_tnc | 'cvm="dsc" | [0, 1] | 1 |
-> 
-> ### Global Measures
+
+
+
+
+> ##### Global Measures
 > 
 > | Measure | ID | Parameters | Range | Optimum |
 > |---------|----|------------|-------|---------|
