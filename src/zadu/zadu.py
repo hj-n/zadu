@@ -10,6 +10,7 @@ class ZADU:
 		"lcmc": "local_continuity_meta_criteria",
 		"nh": "neighborhood_hit",
 		"ca_tnc": "class_aware_trustworthiness_continuity",
+		"l_tnc": "label_trustworthiness_and_continuity",
 		"nd": "neighbor_dissimilarity",
 		"dtm": "distance_to_measure",
 		"kl_div": "kl_divergence",

@@ -49,12 +49,12 @@ spec_list = [
   #   "params": { "k": 60, "iteration": 300}
 	# },
   {
-    "id": "topo",
-    "params": {}
+    "id": "l_tnc",
+    "params": { "cvm": "ch_btw"}
 	},
-  {
-    "id": "proc",
-    "params": {}
+	{
+    "id": "l_tnc",
+    "params": { "cvm": "dsc"}		
 	}
 	# {
   #     "id": "stress"
