@@ -23,3 +23,5 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+*.png
+*.pdf
