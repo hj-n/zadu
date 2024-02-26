@@ -41,11 +41,11 @@ def measure(orig, emb, iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clust
 		orig, emb, 
 		iteration=iteration, 
 		walk_num_ratio=walk_num_ratio, 
-		dist_strategy="inject_snn", 
+		dist_strategy="snn", 
 		dist_parameter={ "alpha": alpha }, 
 		dist_function=None, 
 		cluster_strategy=clustering_strategy, 
-		snn_knn_matrix=snn_knn_matrix
+		# snn_knn_matrix=snn_knn_matrix
 	)
 
 	snc_obj.fit(record_vis_info=return_local)

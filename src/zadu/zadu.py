@@ -183,13 +183,13 @@ class ZADU:
 				if "k" in given_params:
 					self.knn_ranking_flag_k = max(self.knn_ranking_flag_k, given_params["k"])
 				else:
-					self.knn_ranking_flag = max(self.knn_ranking_flag_k, self.DEFAULT_K)
+					self.knn_ranking_flag_k = max(self.knn_ranking_flag_k, self.DEFAULT_K)
 			if "knn_info" in real_params:
 				self.knn_flag = True
 				if "k" in given_params:
 					self.knn_flag_k = max(self.knn_flag_k, given_params["k"])
 				else:
-					self.knn_flag = max(self.knn_flag_k, self.DEFAULT_K)
+					self.knn_flag_k = max(self.knn_flag_k, self.DEFAULT_K)
 			if "distance_matrices" in real_params:
 				self.distance_matrices_flag = True
 
