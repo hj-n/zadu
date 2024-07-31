@@ -7,7 +7,7 @@ print(setuptools.find_packages(where="src"))
 
 setuptools.setup(
 	name="zadu",
-	version="0.1.0",
+	version="0.2.0",
 	author="Hyeon Jeon",
 	author_email="hj@hcil.snu.ac.kr",
 	description="A Python Toolkit for Evaluating the Reliability of Dimensionality Reduction Embeddings",
