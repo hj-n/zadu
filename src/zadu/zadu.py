@@ -62,7 +62,7 @@ class ZADU:
 			else:
 				self.orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
 		if self.knn_ranking_flag:
-			self.orig_knn_indices, self.orig_knn_ranking = knn.knn_with_ranking(orig, self.knn_ranking_flag, distance_matrix=self.orig_distance_matrix)
+			self.orig_knn_indices, self.orig_knn_ranking = knn.knn_with_ranking(orig, self.knn_ranking_flag_k, distance_matrix=self.orig_distance_matrix)
 		elif self.knn_flag and self.knn_flag_k > self.knn_ranking_flag_k:
 			self.orig_knn_indices = knn.knn(orig, self.knn_flag_k, distance_function="euclidean")
 	
@@ -83,7 +83,7 @@ class ZADU:
 		if self.distance_matrices_flag:
 			self.emb_distance_matrix  = pdist.pairwise_distance_matrix(emb)
 		if self.knn_ranking_flag:
-			self.emb_knn_indices,  self.emb_knn_ranking  = knn.knn_with_ranking(emb,  self.knn_ranking_flag, distance_matrix=self.emb_distance_matrix)
+			self.emb_knn_indices,  self.emb_knn_ranking  = knn.knn_with_ranking(emb,  self.knn_ranking_flag_k, distance_matrix=self.emb_distance_matrix)
 		elif self.knn_flag and self.knn_flag_k > self.knn_ranking_flag_k:
 			self.emb_knn_indices  = knn.knn(emb,  self.knn_flag_k, distance_function="euclidean")
 		
