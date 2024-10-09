@@ -19,13 +19,13 @@ pip install zadu
 
 ## Supported Distortion Measures
 
-ZADU currently supports a total of 18 distortion measures, including:
+ZADU currently supports a total of 20 distortion measures, including:
 
 - 7 local measures
 - 5 cluster-level measures
-- 6 global measures
+- 8 global measures
 
-For a complete list of supported measures, refer to [measures](/src/zadu/measures). The library initially provided 17 measures when it was first introduced by our academic paper, and we added one more measure (label trustworthiness & continuity) to the library.
+For a complete list of supported measures, refer to [measures](/src/zadu/measures). The library initially provided 17 measures when it was first introduced by our academic paper. We added three more measures (label trustworthiness & continuity, non-metric stress, and scale-normalized stress) to the library. 
 
 ## How To Use ZADU
 
@@ -116,11 +116,13 @@ Each dictionary must contain the following keys:
 > | Measure | ID | Parameters | Range | Optimum |
 > |---------|----|------------|-------|---------|
 > | Stress | stress | | R+ | 0 |
+> | Non-metric stress | | R+ | 0 |
+> | Scale-normalized stress | | R+ | 0 |
 > | Kullback-Leibler Divergence | kl_div | `sigma=0.1` | R+ | 0 |
 > | Distance-to-Measure | dtm | `sigma=0.1` | R+ | 0 |
 > | Topographic Product | topo | `k=20` | R | 0 |
 > | Pearson’s correlation coefficient | pr | | [-1, 1] | 1
-> | Spearman’s rank correlation coefficient | srho | | [-1, 1] | 1
+> | Spearman’s rank correlation coefficient | srho | | [-1, 1] | 1 | 
 
 
 
