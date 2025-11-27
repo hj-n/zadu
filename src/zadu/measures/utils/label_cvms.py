@@ -24,7 +24,7 @@ def dsc_normalize(data: npt.NDArray, labels: npt.NDArray) -> float:
     pred_labels = np.argmin(dists, axis=1)
     consistent_ratio = np.mean(pred_labels == labels)
 
-    return (consistent_ratio - 0.5) * 2
+    return consistent_ratio
 
 
 def shift(X: npt.NDArray, label: npt.NDArray) -> float:

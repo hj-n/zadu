@@ -106,9 +106,10 @@ Each dictionary must contain the following keys:
 > | Distance Consistency | dsc | | [0.5, 1] | 0.5 | 
 > | Internal Validation Measures | ivm | `measure="silhouette"` | Depends on IVM | Depends on IVM |
 > | Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` | Depends on EVM | Depends on EVM |
-> | Label Trustworthiness & Continuity | l_tnc | `cvm="dsc"` | [0, 1] | 1 |
+> | Label Trustworthiness & Continuity[^1] | l_tnc | `cvm="dsc"` | [0, 1] | 1 |
 
-
+[^1]: The current implementation does not apply the rescaling step from the [original paper](https://www.hyeonjeon.com/assets/pdf/jeon23tvcg.pdf) on the cvm score when cvm='dsc'.
+The original transformation was intended to map the DSC score into the \[0,1\] range, but it is not needed here.
 
 
 > ##### Global Measures
