@@ -4,40 +4,42 @@ from enum import StrEnum
 from typing import Any, TypedDict
 
 
-class MeasureId(StrEnum):
-    TRUSTWORTHINESS_CONTINUITY = "trustworthiness_continuity"
-    MEAN_RELATIVE_RANK_ERROR = "mean_relative_rank_error"
-    LOCAL_CONTINUITY_META_CRITERIA = "local_continuity_meta_criteria"
-    NEIGHBORHOOD_HIT = "neighborhood_hit"
-    CLASS_AWARE_TRUSTWORTHINESS_CONTINUITY = "class_aware_trustworthiness_continuity"
-    LABEL_TRUSTWORTHINESS_AND_CONTINUITY = "label_trustworthiness_and_continuity"
-    NEIGHBOR_DISSIMILARITY = "neighbor_dissimilarity"
-    DISTANCE_TO_MEASURE = "distance_to_measure"
-    KL_DIVERGENCE = "kl_divergence"
-    DISTANCE_CONSISTENCY = "distance_consistency"
-    PEARSON_R = "pearson_r"
-    SPEARMAN_RHO = "spearman_rho"
-    INTERNAL_VALIDATION_MEASURE = "internal_validation_measure"
-    CLUSTERING_AND_EXTERNAL_VALIDATION_MEASURE = (
-        "clustering_and_external_validation_measure"
-    )
-    STEADINESS_COHESIVENESS = "steadiness_cohesiveness"
-    TOPOGRAPHIC_PRODUCT = "topographic_product"
-    PROCRUSTES = "procrustes"
+class MEASURE(StrEnum):
+    TNC = "trustworthiness_continuity"
+    MRRE = "mean_relative_rank_error"
+    LCMC = "local_continuity_meta_criteria"
+    NH = "neighborhood_hit"
+    CA_TNC = "class_aware_trustworthiness_continuity"
+    L_TNC = "label_trustworthiness_and_continuity"
+    ND = "neighbor_dissimilarity"
+    DTM = "distance_to_measure"
+    KL_DIV = "kl_divergence"
+    DSC = "distance_consistency"
+    PR = "pearson_r"
+    SRHO = "spearman_rho"
+    IVM = "internal_validation_measure"
+    C_EVM = "clustering_and_external_validation_measure"
+    SNC = "steadiness_cohesiveness"
+    TOPO = "topographic_product"
+    PROC = "procrustes"
     STRESS = "stress"
-    SCALE_NORMALIZED_STRESS = "scale_normalized_stress"
-    NON_METRIC_STRESS = "non_metric_stress"
+    SN_STRESS = "scale_normalized_stress"
+    NM_STRESS = "non_metric_stress"
+
+
+# Backward compatibility for previous typed API name.
+MeasureId = MEASURE
 
 
 class Spec(TypedDict, total=False):
-    id: str | MeasureId
+    id: str | MEASURE
     params: dict[str, Any]
 
 
-def make_spec(id: str | MeasureId, **params: Any) -> Spec:
+def make_spec(id: str | MEASURE, **params: Any) -> Spec:
     """Build one ZADU specification item with typed autocomplete-friendly arguments."""
 
     return {
-        "id": id.value if isinstance(id, MeasureId) else id,
+        "id": id.value if isinstance(id, MEASURE) else id,
         "params": params,
     }

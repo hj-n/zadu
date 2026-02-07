@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from zadu import ZADU
+from zadu import ZADU, MEASURE, MeasureId, make_spec
 from zadu.measures import (
     internal_validation_measure as ivm,
     clustering_and_external_validation_measure as cevm,
@@ -75,3 +75,15 @@ def test_neighbor_dissimilarity_runs_with_sparse_snn_backend():
 
     assert "neighbor_dissimilarity" in score
     assert np.isfinite(score["neighbor_dissimilarity"])
+
+
+def test_typed_spec_uses_short_measure_enum_names():
+    raw = np.random.RandomState(0).rand(40, 6)
+    emb = np.random.RandomState(1).rand(40, 2)
+
+    score = ZADU([make_spec(MEASURE.TNC, k=10)], raw).measure(emb)[0]
+    assert "trustworthiness" in score
+
+    # Backward compatibility alias should still be supported.
+    score_alias = ZADU([make_spec(MeasureId.TNC, k=10)], raw).measure(emb)[0]
+    assert "trustworthiness" in score_alias

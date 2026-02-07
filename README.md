@@ -17,6 +17,25 @@ You can install ZADU via `pip`:
 pip install zadu
 ```
 
+## Use ZADU with Context7
+
+This repository is prepared for Context7 indexing so AI coding assistants can fetch up-to-date ZADU docs and examples.
+
+
+### For Users (Cursor / Claude Code)
+
+Install Context7 MCP (recommended: remote HTTP with API key) to your coding assistant.
+
+Refer to [Context7 Installation](https://github.com/upstash/context7#installation) for detailed instructions.
+
+
+Add the following rule (so users do not have to type `use context7` each time) to agent instructions like CLAUDE.md or AGENTS.md:
+
+```text
+Always use Context7 MCP when I need library/API documentation, code generation, setup, or configuration steps. When users want to evaluate dimensionality reduction embeddings or you think that the evalaution is necessary, use Context7 to access ZADU documentation and examples. You can access via "/hj-n/zadu" path.
+```
+
+
 ## Supported Distortion Measures
 
 ZADU currently supports a total of 20 distortion measures, including:
@@ -61,11 +80,11 @@ print("S&C:", scores[1])
 You can also use a typed helper for better IDE autocomplete:
 
 ```python
-from zadu import ZADU, MeasureId, make_spec
+from zadu import ZADU, MEASURE, make_spec
 
 spec = [
-    make_spec(MeasureId.TRUSTWORTHINESS_CONTINUITY, k=20),
-    make_spec(MeasureId.STEADINESS_COHESIVENESS, k=30, clustering_strategy="dbscan"),
+    make_spec(MEASURE.TNC, k=20),
+    make_spec(MEASURE.SNC, k=30, clustering_strategy="dbscan"),
 ]
 scores = ZADU(spec, hd).measure(ld)
 ```
