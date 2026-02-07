@@ -1,8 +1,7 @@
-from snc.snc import SNC
 import numpy as np
 import numpy.typing as npt
 
-# from .utils import knn
+from .utils.snc_cpu import SNCCPU
 
 
 def measure(
@@ -47,16 +46,16 @@ def measure(
     #     "emb_snn": emb_snn_graph,
     # }
 
-    snc_obj = SNC(
+    # Keep parity with the previous zadu behavior backed by `snc` package:
+    # zadu passed only alpha to SNC, so SNC internally used k=sqrt(N).
+    snc_obj = SNCCPU(
         orig,
         emb,
         iteration=iteration,
         walk_num_ratio=walk_num_ratio,
-        dist_strategy="snn",
-        dist_parameter={"alpha": alpha},
-        dist_function=None,
+        alpha=alpha,
+        k=None,
         cluster_strategy=clustering_strategy,
-        # snn_knn_matrix=snn_knn_matrix
     )
 
     snc_obj.fit(record_vis_info=return_local)
@@ -65,14 +64,7 @@ def measure(
     cohesiveness = snc_obj.cohesiveness()
 
     if return_local:
-        _, _, _, points_info = snc_obj.vis_info()
-
-        stead_local = np.array(
-            [1 - point_info["false_val"] for point_info in points_info]
-        )
-        cohev_local = np.array(
-            [1 - point_info["missing_val"] for point_info in points_info]
-        )
+        stead_local, cohev_local = snc_obj.local_scores()
 
     if return_local:
         return {"steadiness": steadiness, "cohesiveness": cohesiveness}, {  # TODO
