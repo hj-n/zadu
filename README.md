@@ -58,6 +58,18 @@ print("S&C:", scores[1])
 
 `hd` represents high-dimensional data, `ld` represents low-dimensional data
 
+You can also use a typed helper for better IDE autocomplete:
+
+```python
+from zadu import ZADU, MeasureId, make_spec
+
+spec = [
+    make_spec(MeasureId.TRUSTWORTHINESS_CONTINUITY, k=20),
+    make_spec(MeasureId.STEADINESS_COHESIVENESS, k=30, clustering_strategy="dbscan"),
+]
+scores = ZADU(spec, hd).measure(ld)
+```
+
 ## ZADU Class
 
 The ZADU class provides the main interface for the Zadu library, allowing users to evaluate and analyze dimensionality reduction (DR) embeddings effectively and reliably.

@@ -23,7 +23,7 @@ setuptools.setup(
         "numpy",
         "scikit-learn",
         "scipy",
-        "snc",
+        "hdbscan",
         "matplotlib",
         "faiss-cpu",
     ],
