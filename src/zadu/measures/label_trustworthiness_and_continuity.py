@@ -1,10 +1,16 @@
 import numpy as np
 import numpy.typing as npt
+from typing import Literal
 from .utils import label_cvms as lcvms
+
+CVMType = Literal["dsc", "ch_btw"]
 
 
 def measure(
-    orig: npt.NDArray, emb: npt.NDArray, label: npt.NDArray, cvm: str = "dsc"
+    orig: npt.NDArray,
+    emb: npt.NDArray,
+    label: npt.NDArray,
+    cvm: CVMType | str = "dsc",
 ) -> dict:
     """
     Compute label-trustworthiness and label-continuity of the embedding
@@ -32,7 +38,12 @@ def measure(
         int_labels[i] = label_dict[label[i]]
     label_num = len(unique_labels)
 
-    cvm = {"dsc": lcvms.dsc_normalize, "ch_btw": lcvms.btw_ch}[cvm]
+    cvm_name = cvm.lower()
+    cvms = {"dsc": lcvms.dsc_normalize, "ch_btw": lcvms.btw_ch}
+    if cvm_name not in cvms:
+        allowed = ", ".join(sorted(cvms.keys()))
+        raise ValueError(f"Invalid cvm '{cvm}'. Allowed values: {allowed}")
+    cvm_fn = cvms[cvm_name]
 
     # compute the label-pairwise cvm of the original data
     raw_cvm_mat = np.zeros((label_num, label_num))
@@ -55,8 +66,8 @@ def measure(
             emb_pair_label[emb_pair_label == label_j] = 1
 
             # compute cvm
-            raw_cvm_mat[label_i, label_j] = cvm(raw_pair, raw_pair_label)
-            emb_cvm_mat[label_i, label_j] = cvm(emb_pair, emb_pair_label)
+            raw_cvm_mat[label_i, label_j] = cvm_fn(raw_pair, raw_pair_label)
+            emb_cvm_mat[label_i, label_j] = cvm_fn(emb_pair, emb_pair_label)
 
     # compute the label-trustworthiness and label-continuity score
     lt_mat = raw_cvm_mat - emb_cvm_mat

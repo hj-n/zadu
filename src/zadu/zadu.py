@@ -3,6 +3,8 @@ from .measures.utils import knn
 from .measures.utils import pairwise_dist as pdist
 import math
 import numpy as np
+from copy import deepcopy
+from typing import Any, Sequence
 
 
 class ZADU:
@@ -34,7 +36,7 @@ class ZADU:
     def __init__(
         self, spec_list, orig, return_local=False, verbose=False, geodesic=False
     ):
-        self.spec_list = spec_list
+        self.spec_list = deepcopy(spec_list)
         self.return_local = return_local
         self.verbose = verbose
 
@@ -84,6 +86,12 @@ class ZADU:
         OUTPUT:
                 list: list of results
         """
+
+        if self.orig.shape[0] != emb.shape[0]:
+            raise ValueError(
+                "orig and emb must have the same number of rows "
+                f"(orig={self.orig.shape[0]}, emb={emb.shape[0]})"
+            )
 
         self.emb = emb
         self.label = label
@@ -137,12 +145,16 @@ class ZADU:
                         self.emb_knn_indices[:, :k_val],
                         self.emb_knn_ranking,
                     )
-                elif "knn_indices" == param:
+                elif "knn_info" == param:
                     k_val = exec_params["k"] if "k" in exec_params else self.DEFAULT_K
-                    exec_params["knn_indices"] = (
+                    exec_params["knn_info"] = (
                         self.orig_knn_indices[:, :k_val],
                         self.emb_knn_indices[:, :k_val],
                     )
+                elif "knn_emb_info" == param:
+                    if "knn_info" not in real_params:
+                        k_val = exec_params["k"] if "k" in exec_params else self.DEFAULT_K
+                        exec_params["knn_emb_info"] = self.emb_knn_indices[:, :k_val]
                 elif "return_local" == param:
                     exec_params["return_local"] = self.return_local
 
@@ -169,7 +181,19 @@ class ZADU:
         Perform sanity check on the measures specification list.
         """
         ## check whehter there exists invalid measure name
+        if not isinstance(self.spec_list, Sequence):
+            raise TypeError("spec_list must be a sequence of measure specifications")
+
         for spec in self.spec_list:
+            if "id" not in spec:
+                raise Exception(f"Measure specification missing required key 'id': {spec}")
+            if "params" not in spec or spec["params"] is None:
+                spec["params"] = {}
+            if not isinstance(spec["params"], dict):
+                raise Exception(
+                    f"Invalid params for measure {spec['id']}: params must be a dict"
+                )
+
             if spec["id"] not in self.ABBREVIATIONS.values():
                 if spec["id"] in self.ABBREVIATIONS:
                     spec["id"] = self.ABBREVIATIONS[spec["id"]]
@@ -188,6 +212,7 @@ class ZADU:
                     raise Exception(
                         f"Invalid parameter {param} for measure {measure_name}"
                     )
+            self.__validate_k_param(measure_name, given_params)
 
     def __interpret_measures_spec(self):
         """
@@ -208,7 +233,7 @@ class ZADU:
                     self.knn_ranking_flag_k = max(
                         self.knn_ranking_flag_k, self.DEFAULT_K
                     )
-            if "knn_info" in real_params:
+            if "knn_info" in real_params or "knn_emb_info" in real_params:
                 self.knn_flag = True
                 if "k" in given_params:
                     self.knn_flag_k = max(self.knn_flag_k, given_params["k"])
@@ -223,6 +248,20 @@ class ZADU:
         """
         measure_func = globals()[measure_name].measure
         return measure_func.__code__.co_varnames[: measure_func.__code__.co_argcount]
+
+    def __validate_k_param(self, measure_name: str, given_params: dict[str, Any]):
+        if "k" not in given_params:
+            return
+        k_val = given_params["k"]
+        if not isinstance(k_val, int):
+            raise TypeError(
+                f"Invalid parameter k for measure {measure_name}: expected int, got {type(k_val).__name__}"
+            )
+        n = self.orig.shape[0]
+        if k_val < 1 or k_val >= n:
+            raise ValueError(
+                f"Invalid parameter k for measure {measure_name}: k must satisfy 1 <= k < n (n={n}), got k={k_val}"
+            )
 
     def __geodesic_distance(self, phi1, lambda1, phi2, lambda2):
         return math.acos(

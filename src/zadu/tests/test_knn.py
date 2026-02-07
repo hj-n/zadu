@@ -8,7 +8,7 @@ def test_knn():
 
     gt_indices = np.array([[1, 2], [0, 2], [1, 0], [4, 5], [3, 5], [4, 3]])
 
-    np.array_equal(indices, gt_indices)
+    assert np.array_equal(indices, gt_indices)
 
 
 def test_knn_with_ranking():
@@ -28,13 +28,13 @@ def test_knn_with_ranking():
         ]
     )
 
-    np.array_equal(indices, gt_indices)
-    np.array_equal(rankings, gt_rankings)
+    assert np.array_equal(indices, gt_indices)
+    assert np.array_equal(rankings, gt_rankings)
 
 
 def test_snn():
     X = np.array([[-1, -1], [-2, -1], [-3, -2], [1, 1], [2, 1], [3, 2]])
-    snn_graph = snn(X, k=2)
+    snn_graph = snn(X, k=2).toarray()
     snn_gt = np.array(
         [
             [0.0, 1.0, 4.0, 0.0, 0.0, 0.0],
@@ -46,4 +46,4 @@ def test_snn():
         ]
     )
 
-    np.array_equal(snn_graph, snn_gt)
+    assert np.array_equal(snn_graph, snn_gt)

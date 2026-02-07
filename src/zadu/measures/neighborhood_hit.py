@@ -7,6 +7,7 @@ def measure(
     emb: npt.NDArray,
     label: npt.NDArray,
     k: int = 20,
+    knn_info: tuple | None = None,
     knn_emb_info: tuple | None = None,
     return_local: bool = False,
 ) -> tuple | dict:
@@ -20,10 +21,19 @@ def measure(
     OUTPUT:
             dict: neighborhood hit (nh)
     """
-    if knn_emb_info is None:
+    if knn_info is not None and knn_emb_info is not None:
+        raise ValueError("Provide only one of knn_info or knn_emb_info")
+
+    if knn_info is None:
+        knn_info = knn_emb_info
+
+    if knn_info is None:
         emb_knn_indices = knn.knn(emb, k)
     else:
-        emb_knn_indices = knn_emb_info
+        if isinstance(knn_info, tuple):
+            emb_knn_indices = knn_info[1]
+        else:
+            emb_knn_indices = knn_info
 
     points_num = emb.shape[0]
     nh_list = []

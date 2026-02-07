@@ -6,6 +6,16 @@ from sklearn.neighbors import KDTree
 from scipy.sparse import csr_matrix
 
 
+def _validate_k(points: npt.NDArray, k: int) -> None:
+    if not isinstance(k, int):
+        raise TypeError(f"k must be int, got {type(k).__name__}")
+    n = points.shape[0]
+    if n < 2:
+        raise ValueError("At least 2 points are required to compute nearest neighbors")
+    if k < 1 or k >= n:
+        raise ValueError(f"k must satisfy 1 <= k < n (n={n}), got k={k}")
+
+
 def knn_with_ranking(
     points: npt.NDArray, k: int, distance_matrix: npt.NDArray | None = None
 ) -> (npt.NDArray, npt.NDArray):
@@ -21,6 +31,8 @@ def knn_with_ranking(
         ndarray: knn_indices: k-nearest neighbors of each point
         ndarray: ranking: ranking of other points based on the distance to each point
     """
+
+    _validate_k(points, k)
 
     if distance_matrix is None:
         distance_matrix = pairwise_distance_matrix(points, "euclidean")
@@ -47,6 +59,8 @@ def knn(
     OUTPUT:
         ndarray: knn_indices: k-nearest neighbors of each point
     """
+
+    _validate_k(points, k)
 
     # make c-contiguous
     points = np.ascontiguousarray(points, dtype=np.float32)
@@ -81,6 +95,7 @@ def snn(
         ndarray: snn_graph: shared nearest neighbors (SNN) graph of the points
     """
     if knn_indices is None:
+        _validate_k(points, k)
         knn_indices = knn(points, k, distance_function)
 
     n = knn_indices.shape[0]

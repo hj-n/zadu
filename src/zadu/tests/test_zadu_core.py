@@ -1,0 +1,67 @@
+import numpy as np
+import pytest
+
+from zadu import ZADU
+from zadu.measures import (
+    internal_validation_measure as ivm,
+    clustering_and_external_validation_measure as cevm,
+    label_trustworthiness_and_continuity as ltnc,
+)
+from zadu.measures.utils import knn as knn_mod
+
+
+def test_spec_is_not_mutated_by_abbreviation_normalization():
+    orig = np.random.RandomState(0).rand(20, 5)
+    spec = [{"id": "tnc", "params": {"k": 5}}]
+
+    ZADU(spec, orig)
+
+    assert spec[0]["id"] == "tnc"
+
+
+def test_invalid_k_in_spec_raises_early():
+    orig = np.random.RandomState(0).rand(5, 3)
+
+    with pytest.raises(ValueError, match="1 <= k < n"):
+        ZADU([{"id": "tnc", "params": {"k": 5}}], orig)
+
+
+def test_invalid_string_options_raise_value_error():
+    emb = np.random.RandomState(0).rand(30, 2)
+    label = np.random.RandomState(1).randint(0, 3, 30)
+    raw = np.random.RandomState(2).rand(30, 5)
+
+    with pytest.raises(ValueError, match="Invalid internal validation measure"):
+        ivm.measure(emb, label, measure="foo")
+
+    with pytest.raises(ValueError, match="Invalid external validation measure"):
+        cevm.measure(emb, label, measure="foo")
+
+    with pytest.raises(ValueError, match="Invalid clustering algorithm"):
+        cevm.measure(emb, label, clustering="foo")
+
+    with pytest.raises(ValueError, match="Invalid cvm"):
+        ltnc.measure(raw, emb, label, cvm="foo")
+
+
+def test_knn_precompute_reused_for_knn_info_measures(monkeypatch):
+    raw = np.random.RandomState(0).rand(80, 5)
+    emb = np.random.RandomState(1).rand(80, 2)
+    call_count = {"knn": 0}
+
+    original_knn = knn_mod.knn
+
+    def wrapped_knn(*args, **kwargs):
+        call_count["knn"] += 1
+        return original_knn(*args, **kwargs)
+
+    monkeypatch.setattr(knn_mod, "knn", wrapped_knn)
+
+    spec = [
+        {"id": "proc", "params": {"k": 10}},
+        {"id": "lcmc", "params": {"k": 10}},
+    ]
+    ZADU(spec, raw).measure(emb)
+
+    # Precomputation should run once for raw and once for emb.
+    assert call_count["knn"] == 2

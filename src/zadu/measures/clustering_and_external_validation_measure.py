@@ -1,3 +1,4 @@
+from typing import Literal
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.metrics import (
     adjusted_rand_score,
@@ -7,46 +8,49 @@ from sklearn.metrics import (
 )
 import numpy.typing as npt
 
+EVMMeasure = Literal["arand", "ami", "nmi", "vmeasure"]
+ClusteringMethod = Literal["kmeans", "dbscan"]
+
 
 def measure(
     emb: npt.NDArray,
     label: npt.NDArray,
-    measure: str = "arand",
-    clustering: str = "kmeans",
+    measure: EVMMeasure | str = "arand",
+    clustering: ClusteringMethod | str = "kmeans",
     clustering_args=None,
 ) -> dict:
     """
-    Evaluate DR embedding using clustering and external validation measure
-    INPUT:
-            ndarray: emb: embedded data
-            str: clustering: clustering algorithm to use (Optional)
-                    Currently supports "K-Means", "DBSCAN"
-            dict: clustering_args: arguments for clustering algorithm (Optional)
-            str: measure: external validation measure to compute (Optional)
-                    Currently supports "arand", "ami", "nmi", "vmeasure"
-    OUTPUT:
-            dict: clustering and external validation measure value
+    Evaluate DR embedding using clustering and external validation measure.
     """
-    measure = measure.lower()
-    clustering = clustering.lower()
+    measure_name = measure.lower()
+    clustering_name = clustering.lower()
 
     if clustering_args is None:
         clustering_args = {}
 
-    if clustering == "kmeans":
-        clustering_result = KMeans(**clustering_args).fit(emb)
-    elif clustering == "dbscan":
-        clustering_result = DBSCAN(**clustering_args).fit(emb)
-    else:
-        raise ValueError("Invalid clustering algorithm")
+    clusterers = {
+        "kmeans": KMeans,
+        "dbscan": DBSCAN,
+    }
+    if clustering_name not in clusterers:
+        allowed = ", ".join(sorted(clusterers.keys()))
+        raise ValueError(
+            f"Invalid clustering algorithm '{clustering}'. Allowed values: {allowed}"
+        )
 
-    if measure == "arand":
-        score = adjusted_rand_score(label, clustering_result.labels_)
-    elif measure == "ami":
-        score = adjusted_mutual_info_score(label, clustering_result.labels_)
-    elif measure == "nmi":
-        score = normalized_mutual_info_score(label, clustering_result.labels_)
-    elif measure == "vmeasure":
-        score = v_measure_score(label, clustering_result.labels_)
+    clustering_result = clusterers[clustering_name](**clustering_args).fit(emb)
 
-    return {f"{clustering}_{measure}": score}
+    scorers = {
+        "arand": adjusted_rand_score,
+        "ami": adjusted_mutual_info_score,
+        "nmi": normalized_mutual_info_score,
+        "vmeasure": v_measure_score,
+    }
+    if measure_name not in scorers:
+        allowed = ", ".join(sorted(scorers.keys()))
+        raise ValueError(
+            f"Invalid external validation measure '{measure}'. Allowed values: {allowed}"
+        )
+
+    score = scorers[measure_name](label, clustering_result.labels_)
+    return {f"{clustering_name}_{measure_name}": score}
