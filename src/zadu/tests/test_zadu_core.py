@@ -65,3 +65,13 @@ def test_knn_precompute_reused_for_knn_info_measures(monkeypatch):
 
     # Precomputation should run once for raw and once for emb.
     assert call_count["knn"] == 2
+
+
+def test_neighbor_dissimilarity_runs_with_sparse_snn_backend():
+    raw = np.random.RandomState(0).rand(40, 6)
+    emb = np.random.RandomState(1).rand(40, 2)
+
+    score = ZADU([{"id": "nd", "params": {"k": 10}}], raw).measure(emb)[0]
+
+    assert "neighbor_dissimilarity" in score
+    assert np.isfinite(score["neighbor_dissimilarity"])

@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.typing as npt
+from scipy.sparse import issparse
 from .utils import knn
 
 
@@ -34,11 +35,17 @@ def measure(
 
     D = (orig_SNN_graph - emb_SNN_graph) / k
 
-    D_plus = D[D > 0]
-    D_minus = D[D < 0]
-
-    dissim_plus = np.sqrt(np.sum(D_plus**2))
-    dissim_minus = np.sqrt(np.sum(D_minus**2))
+    if issparse(D):
+        # Keep sparse operations sparse-safe: use element-wise square via .power.
+        D_plus = D.maximum(0)
+        D_minus = (-D).maximum(0)
+        dissim_plus = np.sqrt(D_plus.power(2).sum())
+        dissim_minus = np.sqrt(D_minus.power(2).sum())
+    else:
+        D_plus = D[D > 0]
+        D_minus = D[D < 0]
+        dissim_plus = np.sqrt(np.sum(D_plus**2))
+        dissim_minus = np.sqrt(np.sum(D_minus**2))
 
     nd = max(dissim_plus, dissim_minus)
 
