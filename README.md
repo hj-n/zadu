@@ -17,6 +17,33 @@ You can install ZADU via `pip`:
 pip install zadu
 ```
 
+## Quick Start
+
+Run two metrics (`tnc`, `mrre`) on random data:
+
+```python
+import numpy as np
+from zadu import ZADU
+
+rng = np.random.default_rng(0)
+hd = rng.normal(size=(200, 16))
+ld = hd[:, :2] + 0.05 * rng.normal(size=(200, 2))
+
+spec = [
+    {"id": "tnc", "params": {"k": 20}},
+    {"id": "mrre", "params": {"k": 20}},
+]
+
+scores = ZADU(spec, hd).measure(ld)
+print(scores)
+```
+
+Input checklist:
+
+- `hd` (`orig`) and `ld` (`emb`) must have the same number of rows.
+- For neighbor-based metrics with `k`, use `1 <= k < n`.
+- Pass `label` to `measure(ld, label)` for label-based metrics (`nh`, `ca_tnc`, `dsc`, `ivm`, `c_evm`, `l_tnc`).
+
 ## Use ZADU with Context7
 
 This repository is prepared for Context7 indexing so AI coding assistants can fetch up-to-date ZADU docs and examples.
@@ -89,6 +116,31 @@ spec = [
 scores = ZADU(spec, hd).measure(ld)
 ```
 
+`MEASURE` enum mapping (typed helper):
+
+| MEASURE | ID |
+|---|---|
+| `MEASURE.TNC` | `tnc` |
+| `MEASURE.MRRE` | `mrre` |
+| `MEASURE.LCMC` | `lcmc` |
+| `MEASURE.NH` | `nh` |
+| `MEASURE.CA_TNC` | `ca_tnc` |
+| `MEASURE.L_TNC` | `l_tnc` |
+| `MEASURE.ND` | `nd` |
+| `MEASURE.DTM` | `dtm` |
+| `MEASURE.KL_DIV` | `kl_div` |
+| `MEASURE.DSC` | `dsc` |
+| `MEASURE.PR` | `pr` |
+| `MEASURE.SRHO` | `srho` |
+| `MEASURE.IVM` | `ivm` |
+| `MEASURE.C_EVM` | `c_evm` |
+| `MEASURE.SNC` | `snc` |
+| `MEASURE.TOPO` | `topo` |
+| `MEASURE.PROC` | `proc` |
+| `MEASURE.STRESS` | `stress` |
+| `MEASURE.SN_STRESS` | `sn_stress` |
+| `MEASURE.NM_STRESS` | `nm_stress` |
+
 ## ZADU Class
 
 The ZADU class provides the main interface for the Zadu library, allowing users to evaluate and analyze dimensionality reduction (DR) embeddings effectively and reliably.
@@ -98,7 +150,13 @@ The ZADU class provides the main interface for the Zadu library, allowing users 
 The ZADU class constructor has the following signature:
 
 ```python
-class ZADU(spec: List[Dict[str, Union[str, dict]]], hd: np.ndarray, return_local: bool = False)
+class ZADU(
+    spec_list,
+    orig,
+    return_local: bool = False,
+    verbose: bool = False,
+    geodesic: bool = False,
+)
 
 ```
 
@@ -156,6 +214,27 @@ The original transformation was intended to map the DSC score into the \[0,1\] r
 > | Pearson’s correlation coefficient | pr | | [-1, 1] | 1
 > | Spearman’s rank correlation coefficient | srho | | [-1, 1] | 1 | 
 
+#### String Option Values
+
+- `ivm` (`internal_validation_measure`): `silhouette`, `calinski_harabasz`, `davies_bouldin`
+- `c_evm` (`clustering_and_external_validation_measure`)
+  - `measure`: `arand`, `ami`, `nmi`, `vmeasure`
+  - `clustering`: `kmeans`, `dbscan`
+- `l_tnc` (`label_trustworthiness_and_continuity`): `cvm` = `dsc`, `ch_btw`
+
+If an invalid option string is passed, ZADU raises a `ValueError` with allowed values.
+
+#### Return Key Summary
+
+- `tnc` -> `trustworthiness`, `continuity`
+- `mrre` -> `mrre_false`, `mrre_missing`
+- `ca_tnc` -> `ca_trustworthiness`, `ca_continuity`
+- `l_tnc` -> `label_trustworthiness`, `label_continuity`
+- `snc` -> `steadiness`, `cohesiveness`
+- `ivm` -> key is the selected measure name (e.g., `silhouette`)
+- `c_evm` -> key is `{clustering}_{measure}` (e.g., `kmeans_arand`)
+
+For `return_local=True`, local keys are returned in a second list entry per metric where supported.
 
 
 ##### `hd`
