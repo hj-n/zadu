@@ -1,33 +1,4 @@
 {
-  "$schema": "https://context7.com/schema/context7.json",
-  "projectTitle": "ZADU",
-  "description": "A Python library for evaluating dimensionality reduction embeddings.",
-  "folders": [],
-  "excludeFolders": [
-    ".git",
-    ".github",
-    ".venv",
-    ".pytest_cache",
-    "__pycache__",
-    "**/__pycache__",
-    "test",
-    "src/zadu/tests",
-    "*pytest*",
-    "scalability_eval",
-    "scalability_eval/result"
-  ],
-  "excludeFiles": [
-    "LICENSE",
-    "pytest.ini",
-    "visualization.ipynb",
-    "visualize.ipynb",
-    ".pre-commit-config.yaml"
-  ],
-  "rules": [
-    "Use the public API via `from zadu import ZADU`.",
-    "For neighborhood-based metrics, k must satisfy 1 <= k < n. Rule of thumb is to use the value similar to sqrt(n), where n is the number of samples.",
-    "Prefer documented metric IDs from README when constructing spec."
-  ],
 	"url": "https://context7.com/hj-n/zadu",
 	"public_key": "pk_lRnfPRoUGB8BFds9D65Z9"
 }
