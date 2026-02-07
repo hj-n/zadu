@@ -118,28 +118,28 @@ scores = ZADU(spec, hd).measure(ld)
 
 `MEASURE` enum mapping (typed helper):
 
-| MEASURE | ID |
-|---|---|
-| `MEASURE.TNC` | `tnc` |
-| `MEASURE.MRRE` | `mrre` |
-| `MEASURE.LCMC` | `lcmc` |
-| `MEASURE.NH` | `nh` |
-| `MEASURE.CA_TNC` | `ca_tnc` |
-| `MEASURE.L_TNC` | `l_tnc` |
-| `MEASURE.ND` | `nd` |
-| `MEASURE.DTM` | `dtm` |
-| `MEASURE.KL_DIV` | `kl_div` |
-| `MEASURE.DSC` | `dsc` |
-| `MEASURE.PR` | `pr` |
-| `MEASURE.SRHO` | `srho` |
-| `MEASURE.IVM` | `ivm` |
-| `MEASURE.C_EVM` | `c_evm` |
-| `MEASURE.SNC` | `snc` |
-| `MEASURE.TOPO` | `topo` |
-| `MEASURE.PROC` | `proc` |
-| `MEASURE.STRESS` | `stress` |
-| `MEASURE.SN_STRESS` | `sn_stress` |
-| `MEASURE.NM_STRESS` | `nm_stress` |
+| MEASURE | ID | Metric Name |
+|---|---|---|
+| `MEASURE.TNC` | `tnc` | Trustworthiness & Continuity |
+| `MEASURE.MRRE` | `mrre` | Mean Relative Rank Error |
+| `MEASURE.LCMC` | `lcmc` | Local Continuity Meta-Criteria |
+| `MEASURE.NH` | `nh` | Neighborhood Hit |
+| `MEASURE.CA_TNC` | `ca_tnc` | Class-Aware Trustworthiness & Continuity |
+| `MEASURE.L_TNC` | `l_tnc` | Label Trustworthiness & Continuity |
+| `MEASURE.ND` | `nd` | Neighbor Dissimilarity |
+| `MEASURE.DTM` | `dtm` | Distance-to-Measure |
+| `MEASURE.KL_DIV` | `kl_div` | Kullback-Leibler Divergence |
+| `MEASURE.DSC` | `dsc` | Distance Consistency |
+| `MEASURE.PR` | `pr` | Pearson's Correlation Coefficient |
+| `MEASURE.SRHO` | `srho` | Spearman's Rank Correlation Coefficient |
+| `MEASURE.IVM` | `ivm` | Internal Validation Measure |
+| `MEASURE.C_EVM` | `c_evm` | Clustering + External Validation Measure |
+| `MEASURE.SNC` | `snc` | Steadiness & Cohesiveness |
+| `MEASURE.TOPO` | `topo` | Topographic Product |
+| `MEASURE.PROC` | `proc` | Procrustes Measure |
+| `MEASURE.STRESS` | `stress` | Stress |
+| `MEASURE.SN_STRESS` | `sn_stress` | Scale-Normalized Stress |
+| `MEASURE.NM_STRESS` | `nm_stress` | Non-Metric Stress |
 
 ## ZADU Class
 
