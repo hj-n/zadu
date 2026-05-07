@@ -28,7 +28,8 @@ class ZADU:
         "proc": "procrustes",
         "stress": "stress",
         "sn_stress": "scale_normalized_stress",
-        "nm_stress": "non_metric_stress"
+        "nm_stress": "non_metric_stress",
+        "cadi": "class_angular_distortion_index"
     }
 
     DEFAULT_K = 20

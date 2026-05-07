@@ -26,6 +26,7 @@ setuptools.setup(
         "hdbscan",
         "matplotlib",
         "faiss-cpu",
+        "numba"
     ],
     package_dir={"": "src"},
     packages=["zadu", "zaduvis", "zadu.measures", "zadu.measures.utils"],

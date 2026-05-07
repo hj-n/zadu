@@ -19,6 +19,7 @@ __all__ = [
     "label_trustworthiness_and_continuity",
     "scale_normalized_stress",
     "non_metric_stress",
+    "class_angular_distortion_index",
 ]
 
 # add to __all__ if the function is added

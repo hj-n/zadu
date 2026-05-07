@@ -140,6 +140,7 @@ scores = ZADU(spec, hd).measure(ld)
 | `MEASURE.STRESS` | `stress` | Stress |
 | `MEASURE.SN_STRESS` | `sn_stress` | Scale-Normalized Stress |
 | `MEASURE.NM_STRESS` | `nm_stress` | Non-Metric Stress |
+| `MEASURE.CADI` | `cadi` | Class Angular Distortion Index
 
 ## ZADU Class
 
@@ -196,6 +197,7 @@ Each dictionary must contain the following keys:
 > | Internal Validation Measures | ivm | `measure="silhouette"` | Depends on IVM | Depends on IVM |
 > | Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` | Depends on EVM | Depends on EVM |
 > | Label Trustworthiness & Continuity[^1] | l_tnc | `cvm="dsc"` | [0, 1] | 1 |
+> | Class Angular Distortion Index | cadi | `n_triplets=0, random_seed=None` | [0, 1] | 0 |
 
 [^1]: The current implementation does not apply the rescaling step from the [original paper](https://www.hyeonjeon.com/assets/pdf/jeon23tvcg.pdf) on the cvm score when cvm='dsc'.
 The original transformation was intended to map the DSC score into the \[0,1\] range, but it is not needed here.
