@@ -25,6 +25,7 @@ class MEASURE(StrEnum):
     STRESS = "stress"
     SN_STRESS = "scale_normalized_stress"
     NM_STRESS = "non_metric_stress"
+    CADI = "class_angular_distortion_index"
 
 
 # Backward compatibility for previous typed API name.
