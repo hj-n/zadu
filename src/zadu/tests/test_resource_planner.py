@@ -5,7 +5,12 @@ import pytest
 
 from zadu import ZADU, ExecutionConfig
 from zadu.backends import NumpyResourceProvider
-from zadu.engine.resources import PairStrategy, ResourceKind, Space
+from zadu.engine.resources import (
+    PairStrategy,
+    ResourceKind,
+    Space,
+    compact_index_dtype,
+)
 from zadu.measures import (
     local_continuity_meta_criteria,
     neighborhood_hit,
@@ -101,10 +106,19 @@ def test_plan_deduplicates_resources_and_promotes_knn_to_ranking():
         (ResourceKind.DISTANCE_MATRIX, Space.EMBEDDED, None),
         (ResourceKind.NEIGHBOR_RANKING, Space.EMBEDDED, 10),
         (ResourceKind.PAIR_STATISTICS, Space.PAIRED, None),
+        (ResourceKind.RANK_COMPARISONS, Space.PAIRED, 5),
+        (ResourceKind.NEIGHBOR_STATISTICS, Space.PAIRED, 10),
     ]
 
     n = len(orig)
-    expected_bytes = 2 * n * n * 8 + 2 * (n * n * 8 + n * 10 * 8)
+    index_bytes = compact_index_dtype(n).itemsize
+    expected_bytes = (
+        2 * n * n * 8
+        + 2 * (n * n * index_bytes + n * 10 * index_bytes)
+        + 2 * n * 5 * index_bytes
+        + 2 * n * 5
+        + n * 8
+    )
     assert first.estimated_cache_bytes == expected_bytes
     assert first.ranking_k == 5
     assert first.knn_both_k == 10
@@ -189,7 +203,7 @@ def test_mixed_k_plan_preserves_exact_results_with_duplicate_ties():
 
 
 def test_registry_keeps_cache_names_as_typed_compatibility_view():
-    assert METRIC_BY_ALIAS["tnc"].cache == {"knn_ranking_info"}
+    assert METRIC_BY_ALIAS["tnc"].cache == {"rank_comparisons"}
     assert METRIC_BY_ALIAS["topo"].cache == {
         "knn_info",
         "topographic_product_statistics",

@@ -6,7 +6,12 @@ from scipy.spatial.distance import cdist
 
 from zadu import ZADU, ExecutionConfig
 from zadu.backends import NumpyResourceProvider, numpy_backend
-from zadu.engine.resources import PairStrategy, ResourceKind, Space
+from zadu.engine.resources import (
+    PairStrategy,
+    ResourceKind,
+    Space,
+    compact_index_dtype,
+)
 from zadu.measures import non_metric_stress, spearman_rho
 
 ORDERED_SPECS = [{"id": "srho"}, {"id": "nm_stress"}]
@@ -57,7 +62,8 @@ def test_ordered_metrics_share_exact_condensed_order_resource(dtype):
     _assert_scores_close(scores, _dense_reference(orig, emb))
 
     pair_count = len(orig) * (len(orig) - 1) // 2
-    expected_cache = pair_count * (8 + np.dtype(np.intp).itemsize + 8)
+    index_dtype = compact_index_dtype(len(orig))
+    expected_cache = pair_count * (8 + index_dtype.itemsize + 8)
     assert runner.estimated_cache_bytes == expected_cache
     order_resource = next(
         resource
@@ -67,7 +73,7 @@ def test_ordered_metrics_share_exact_condensed_order_resource(dtype):
     assert order_resource["reused"] is True
     assert order_resource["released"] is False
     assert order_resource["dtype"] == {
-        "indices": np.dtype(np.intp).name,
+        "indices": index_dtype.name,
         "sorted_ranks": "float64",
     }
     ordered_resource = runner.last_run_info["resources"][-1]
