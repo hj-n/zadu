@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy.typing as npt
 
-from zadu.engine.resources import NeighborRanking, PairOrder, ResourceKey
+from zadu.engine.resources import NeighborRanking, PairOrder, ResourceKey, Space
 
 if TYPE_CHECKING:
     from zadu.engine.planner import (
@@ -33,6 +33,11 @@ class ExactResourceProvider(Protocol):
 
     def fork(self) -> ExactResourceProvider:
         """Return an isolated provider context for one concurrent embedding."""
+
+        ...
+
+    def invalidate(self, space: Space) -> None:
+        """Release provider-private state for one invalidated resource space."""
 
         ...
 

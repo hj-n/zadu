@@ -136,3 +136,42 @@ dimensions, the warm distance-matrix path measured 3.35x faster than SciPy
 (`4.77 ms` versus `15.95 ms`). Condensed pairs measured 1.81x faster (`4.01 ms`
 versus `7.27 ms`). Both paths had a maximum absolute float32 delta of `1.70e-6`.
 Cold MLX times were about 31 ms, so cold and warm results must not be conflated.
+
+## Optional MLX neighbor resources
+
+Benchmark the stable full/inverse ranking, ordinary exact kNN, or stable-kNN
+resource independently:
+
+```bash
+python benchmarks/benchmark_mlx_neighbors.py \
+  --samples 2000 --dimension 20 --k 20 --kind ranking \
+  --device gpu --dtype float32 --repeat 3
+```
+
+Then exercise the resource planner and five downstream metrics together:
+
+```bash
+python benchmarks/benchmark_mlx_neighbor_metrics.py \
+  --samples 2000 --dimension 20 --k 20 \
+  --device gpu --dtype float32 --repeat 3
+```
+
+Both reports separate construction/compile and warm execution. The resource
+report also records exact index mismatches against the float64 NumPy baseline,
+block bounds, distance-source reuse, and zero-copy boundaries. The metric report
+compares Trustworthiness & Continuity, LCMC, Neighborhood Hit, Procrustes, and
+Topographic Product scores and includes the complete MLX run diagnostics.
+
+On an Apple M4 with MLX 0.32.1, `n=2,000`, 20 input dimensions, and `k=20`,
+warm full ranking measured 23.75x faster than NumPy (`10.56 ms` versus
+`250.88 ms`) and stable-kNN measured 20.30x faster (`7.11 ms` versus
+`144.28 ms`). The five-metric warm suite measured 11.38x faster (`33.64 ms`
+versus `382.84 ms`) with a maximum absolute score delta of `1.40e-6`.
+
+Standalone ordinary kNN measured `7.64 ms` in MLX versus `4.27 ms` in FAISS, so
+the default automatic backend remains NumPy/FAISS. MLX uses a stable full-order
+prefix because an `argpartition` boundary does not define duplicate-distance
+tie order; exact tie repair was slower than MLX's stable sort in the same
+benchmark. Float32 full rankings can also differ from the float64 baseline when
+nearly equal non-tied distances cross after rounding, so score and index deltas
+are reported rather than hidden.

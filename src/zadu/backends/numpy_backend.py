@@ -23,6 +23,7 @@ from zadu.engine.resources import (
     RankComparisons,
     ResourceKey,
     ResourceKind,
+    Space,
     TopographicProductStatistics,
     compact_index_dtype,
 )
@@ -56,6 +57,11 @@ class NumpyResourceProvider:
         """Return a stateless provider context for one embedding worker."""
 
         return type(self)()
+
+    def invalidate(self, space: Space) -> None:
+        """The stateless NumPy provider has no private resources to release."""
+
+        del space
 
     def build(
         self,

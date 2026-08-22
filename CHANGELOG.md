@@ -25,7 +25,8 @@
 - Opt-in, memory-bounded `embedding_workers` for exact repeated-embedding
   execution and indexed `EmbeddingExecutionError` failures.
 - An optional, lazily imported MLX provider for memory-bounded Euclidean
-  distance matrices and condensed pairs on Apple Silicon.
+  distance matrices, condensed pairs, stable full/inverse rankings, exact
+  neighbor prefixes, and stable-kNN tables on Apple Silicon.
 
 ### Changed
 
@@ -55,6 +56,10 @@
 - Explicit MLX device and dtype selection now preserves the NumPy default,
   forbids silent precision downgrade, records cold/warm/transfer timings, and
   falls back to NumPy/SciPy/FAISS per unsupported resource.
+- MLX distance outputs are reused through unified-memory views by dependent
+  rankings; embedded workspaces are invalidated between runs, and neighbor
+  diagnostics expose stable tie handling, self exclusion, block bounds, and
+  zero-copy boundaries.
 
 ## 0.5.0
 
