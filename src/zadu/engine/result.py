@@ -58,6 +58,11 @@ def build_run_info(
         "pair_strategy": (
             plan.pair_plan.strategy.value if plan.pair_plan is not None else None
         ),
+        "topographic_strategy": (
+            "blockwise_selected_distances"
+            if plan.topographic_plan is not None
+            else None
+        ),
         "resource_seconds": float(
             sum(
                 record.build_seconds

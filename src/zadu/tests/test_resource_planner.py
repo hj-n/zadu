@@ -190,7 +190,10 @@ def test_mixed_k_plan_preserves_exact_results_with_duplicate_ties():
 
 def test_registry_keeps_cache_names_as_typed_compatibility_view():
     assert METRIC_BY_ALIAS["tnc"].cache == {"knn_ranking_info"}
-    assert METRIC_BY_ALIAS["topo"].cache == {"distance_matrices", "knn_info"}
+    assert METRIC_BY_ALIAS["topo"].cache == {
+        "knn_info",
+        "topographic_product_statistics",
+    }
     assert METRIC_BY_ALIAS["cadi"].cache == set()
     assert all(
         not isinstance(requirement, str)
@@ -272,13 +275,16 @@ def test_planner_records_mixed_numpy_and_faiss_resource_providers():
         resource["provider"] for resource in knn_only.last_run_info["resources"]
     } == {"faiss"}
 
-    with_distance = ZADU([{"id": "topo", "params": {"k": 5}}], orig)
-    with_distance.measure(emb)
+    selected = ZADU([{"id": "topo", "params": {"k": 5}}], orig)
+    selected.measure(emb)
     providers = {
         (resource["kind"], resource["provider"])
-        for resource in with_distance.last_run_info["resources"]
+        for resource in selected.last_run_info["resources"]
     }
-    assert providers == {("distance_matrix", "numpy"), ("knn", "numpy")}
+    assert providers == {
+        ("stable_knn", "scipy"),
+        ("topographic_product_statistics", "numpy"),
+    }
 
 
 def test_metrics_without_resources_produce_an_empty_resource_plan():
