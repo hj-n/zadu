@@ -39,7 +39,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
           ruff check .
-          black --check src test scalability_eval
+          black --check src test scalability_eval benchmarks
           python -m pytest --cov=zadu --cov=zaduvis --cov-fail-under=85
           python -m build
           python -m twine check dist/*

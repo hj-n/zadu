@@ -3,6 +3,7 @@ import numpy.typing as npt
 
 from .utils import knn
 from .utils.validation import validate_pair, validate_trustworthiness_k
+from .utils.vectorized import gather_ranks, rowwise_membership
 
 
 def measure(
@@ -62,16 +63,10 @@ def tnc_computation(
     """
     Core computation of trustworthiness and continuity
     """
-    local_distortion_list = []
     points_num = base_knn_indices.shape[0]
-
-    for i in range(points_num):
-        missings = np.setdiff1d(target_knn_indices[i], base_knn_indices[i])
-        local_distortion = 0.0
-        for missing in missings:
-            local_distortion += base_ranking[i, missing] - k
-        local_distortion_list.append(local_distortion)
-    local_distortion_list = np.array(local_distortion_list)
+    missing_mask = ~rowwise_membership(target_knn_indices, base_knn_indices)
+    target_ranks = gather_ranks(base_ranking, target_knn_indices)
+    local_distortion_list = np.sum((target_ranks - k) * missing_mask, axis=1)
     local_distortion_list = 1 - local_distortion_list * (
         2 / (k * (2 * points_num - 3 * k - 1))
     )

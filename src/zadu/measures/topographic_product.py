@@ -23,14 +23,15 @@ def measure(
             topographic product result
     """
     orig, emb = validate_pair(orig, emb)
-    N = len(emb)
-    sum_of_log_p3 = 0
+    points_num = len(emb)
 
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
     else:
         orig_distance_matrix, emb_distance_matrix = distance_matrices
+    orig_distance_matrix = np.asarray(orig_distance_matrix)
+    emb_distance_matrix = np.asarray(emb_distance_matrix)
 
     # k nearest neighbors in original space and embedded space each
     if knn_info is None:
@@ -38,46 +39,34 @@ def measure(
         emb_knn_indices = knn.knn(emb, k)
     else:
         orig_knn_indices, emb_knn_indices = knn_info
+    orig_knn_indices = np.asarray(orig_knn_indices)[:, :k]
+    emb_knn_indices = np.asarray(emb_knn_indices)[:, :k]
 
-    for j in range(N):
-        for ki in range(k):
-            q1_product, q2_product = 1, 1
-            for neighbor_rank in range(ki + 1):
-                distance_origin_to_emb_knn = orig_distance_matrix[j][
-                    emb_knn_indices[j][neighbor_rank]
-                ]
-                distance_origin_to_origin_knn = orig_distance_matrix[j][
-                    orig_knn_indices[j][neighbor_rank]
-                ]
-                if distance_origin_to_origin_knn <= 0:
-                    raise ValueError(
-                        "Topographic Product is undefined for zero-distance "
-                        "original-space neighbors"
-                    )
-                q1 = distance_origin_to_emb_knn / distance_origin_to_origin_knn
-                q1_product *= q1
+    rows = np.arange(points_num)[:, None]
+    distance_origin_to_emb_knn = orig_distance_matrix[rows, emb_knn_indices]
+    distance_origin_to_origin_knn = orig_distance_matrix[rows, orig_knn_indices]
+    if np.any(distance_origin_to_origin_knn <= 0):
+        raise ValueError(
+            "Topographic Product is undefined for zero-distance "
+            "original-space neighbors"
+        )
 
-                distance_emb_to_emb_knn = emb_distance_matrix[j][
-                    emb_knn_indices[j][neighbor_rank]
-                ]
-                distance_emb_to_origin_knn = emb_distance_matrix[j][
-                    orig_knn_indices[j][neighbor_rank]
-                ]
-                if distance_emb_to_origin_knn <= 0:
-                    raise ValueError(
-                        "Topographic Product is undefined for zero-distance "
-                        "embedded-space neighbors"
-                    )
-                q2 = distance_emb_to_emb_knn / distance_emb_to_origin_knn
-                q2_product *= q2
+    distance_emb_to_emb_knn = emb_distance_matrix[rows, emb_knn_indices]
+    distance_emb_to_origin_knn = emb_distance_matrix[rows, orig_knn_indices]
+    if np.any(distance_emb_to_origin_knn <= 0):
+        raise ValueError(
+            "Topographic Product is undefined for zero-distance "
+            "embedded-space neighbors"
+        )
 
-            product = q1_product * q2_product
-            if product <= 0 or not np.isfinite(product):
-                raise ValueError(
-                    "Topographic Product is undefined for coincident points"
-                )
-            p3 = pow(product, 1 / (2 * (ki + 1)))
-            sum_of_log_p3 += np.log(p3)
+    q1 = distance_origin_to_emb_knn / distance_origin_to_origin_knn
+    q2 = distance_emb_to_emb_knn / distance_emb_to_origin_knn
+    ratios = q1 * q2
+    if np.any(ratios <= 0) or not np.all(np.isfinite(ratios)):
+        raise ValueError("Topographic Product is undefined for coincident points")
 
-    topographic_product = sum_of_log_p3 / (N * k)
+    prefix_log_products = np.cumsum(np.log(ratios), axis=1)
+    prefix_lengths = np.arange(1, k + 1)
+    log_p3 = prefix_log_products / (2 * prefix_lengths)
+    topographic_product = np.mean(log_p3)
     return {"topographic_product": float(topographic_product)}

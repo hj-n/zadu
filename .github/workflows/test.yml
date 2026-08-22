@@ -24,7 +24,7 @@ jobs:
       - name: Ruff
         run: ruff check .
       - name: Black
-        run: black --check src test scalability_eval
+        run: black --check src test scalability_eval benchmarks
 
   test:
     runs-on: ubuntu-latest
@@ -44,7 +44,7 @@ jobs:
       - name: Run tests with coverage
         run: python -m pytest --cov=zadu --cov=zaduvis --cov-fail-under=85
       - name: Compile Python sources
-        run: python -m compileall -q src test scalability_eval
+        run: python -m compileall -q src test scalability_eval benchmarks
 
   snc-compat:
     runs-on: ubuntu-latest

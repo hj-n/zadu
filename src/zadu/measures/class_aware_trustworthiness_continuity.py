@@ -3,6 +3,7 @@ import numpy.typing as npt
 
 from .utils import knn
 from .utils.validation import validate_labels, validate_pair, validate_trustworthiness_k
+from .utils.vectorized import gather_ranks, rowwise_membership
 
 
 def measure(
@@ -97,25 +98,20 @@ def ca_tnc_computation(
     Core computation of class-aware trustworthiness and continuity
     """
 
-    local_distortion_list = []
+    if type_description not in {"false", "missing"}:
+        raise ValueError("type should be 'false' or 'missing'")
+
     points_num = base_knn_indices.shape[0]
-
-    for i in range(points_num):
-        missings = np.setdiff1d(target_knn_indices[i], base_knn_indices[i])
-        local_distortion = 0.0
-        for missing in missings:
-            if type_description == "false":
-                if label[i] != label[missing]:
-                    local_distortion += base_ranking[i, missing] - k
-            elif type_description == "missing":
-                if label[i] == label[missing]:
-                    local_distortion += base_ranking[i, missing] - k
-            else:
-                raise ValueError("type should be 'false' or 'missing'")
-
-        local_distortion_list.append(local_distortion)
-
-    local_distortion_list = np.array(local_distortion_list)
+    missing_mask = ~rowwise_membership(target_knn_indices, base_knn_indices)
+    target_ranks = gather_ranks(base_ranking, target_knn_indices)
+    target_labels = label[target_knn_indices]
+    if type_description == "false":
+        class_mask = target_labels != label[:, None]
+    else:
+        class_mask = target_labels == label[:, None]
+    local_distortion_list = np.sum(
+        (target_ranks - k) * missing_mask * class_mask, axis=1
+    )
     local_distortion_list = 1 - local_distortion_list * (
         2 / (k * (2 * points_num - 3 * k - 1))
     )
