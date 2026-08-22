@@ -3,6 +3,7 @@ import numpy.typing as npt
 
 from .utils import knn
 from .utils.validation import validate_pair
+from .utils.vectorized import rowwise_intersection_count
 
 
 def measure(
@@ -30,15 +31,9 @@ def measure(
         orig_knn_indices, emb_knn_indices = knn_info
 
     point_num = orig.shape[0]
-    local_distortion_list = []
-
-    for i in range(point_num):
-        local_distortion_list.append(
-            np.intersect1d(orig_knn_indices[i], emb_knn_indices[i]).shape[0]
-            - ((k * k) / (point_num - 1))
-        )
-
-    local_distortion_list = np.array(local_distortion_list)
+    local_distortion_list = rowwise_intersection_count(
+        orig_knn_indices, emb_knn_indices
+    ) - ((k * k) / (point_num - 1))
     local_distortion_list = local_distortion_list / k
 
     average_distortion = float(np.mean(local_distortion_list))

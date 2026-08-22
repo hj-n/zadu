@@ -38,15 +38,8 @@ def measure(
     else:
         emb_knn_indices = knn_info[1] if isinstance(knn_info, tuple) else knn_info
 
-    points_num = emb.shape[0]
-    nh_list = []
-    for i in range(points_num):
-        emb_knn_index = emb_knn_indices[i]
-        emb_knn_index_label = label[emb_knn_index]
-        nh_list.append(np.sum((emb_knn_index_label == label[i]).astype(int)))
-
-    nh_list = np.array(nh_list)
-    nh_list = nh_list / k
+    neighbor_labels = label[emb_knn_indices]
+    nh_list = np.sum(neighbor_labels == label[:, None], axis=1) / k
 
     nh = float(np.mean(nh_list))
 

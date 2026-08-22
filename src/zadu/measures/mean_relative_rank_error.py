@@ -3,6 +3,7 @@ import numpy.typing as npt
 
 from .utils import knn
 from .utils.validation import validate_pair
+from .utils.vectorized import gather_ranks
 
 
 def measure(
@@ -67,17 +68,14 @@ def mrre_computation(
     """
     Core computation of MRRE
     """
-    local_distortion_list = []
     points_num = target_knn_indices.shape[0]
-    for i in range(points_num):
-        base_rank_arr = base_ranking[i][target_knn_indices[i]]
-        target_rank_arr = target_ranking[i][target_knn_indices[i]]
-        local_distortion_list.append(
-            np.sum(np.abs(base_rank_arr - target_rank_arr) / target_rank_arr)
-        )
+    base_rank_arr = gather_ranks(base_ranking, target_knn_indices)
+    target_rank_arr = gather_ranks(target_ranking, target_knn_indices)
+    local_distortion_list = np.sum(
+        np.abs(base_rank_arr - target_rank_arr) / target_rank_arr, axis=1
+    )
 
     c = sum([abs(points_num - 2 * i + 1) / i for i in range(1, k + 1)])
-    local_distortion_list = np.array(local_distortion_list)
     local_distortion_list = 1 - local_distortion_list / c
 
     average_distortion = float(np.mean(local_distortion_list))
