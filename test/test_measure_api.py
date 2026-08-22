@@ -1,6 +1,10 @@
 import numpy as np
 
-from zadu.measures import neighborhood_hit, trustworthiness_continuity
+from zadu.measures import (
+    class_angular_distortion_index,
+    neighborhood_hit,
+    trustworthiness_continuity,
+)
 
 
 def test_measure_modules_are_importable_and_callable():
@@ -28,3 +32,25 @@ def test_neighborhood_hit_returns_unit_for_perfectly_separated_clusters():
 
     assert "neighborhood_hit" in nh
     assert nh["neighborhood_hit"] == 1.0
+
+
+def test_cadi_uses_the_standard_snake_case_return_key():
+    orig = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [0.2, 0.0, 0.1],
+            [0.0, 0.2, 0.1],
+            [5.0, 5.0, 5.0],
+            [5.2, 5.0, 5.1],
+            [5.0, 5.2, 5.1],
+        ]
+    )
+    emb = orig[:, :2]
+    label = np.array([0, 0, 0, 1, 1, 1])
+
+    cadi = class_angular_distortion_index.measure(
+        orig, emb, label, n_triplets=20, random_seed=0
+    )
+
+    assert set(cadi) == {"class_angular_distortion_index"}
+    assert 0.0 <= cadi["class_angular_distortion_index"] <= 1.0

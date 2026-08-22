@@ -2,10 +2,12 @@
 File Reader API for external clustering benchmark.
 reads the bin data and converts it to data and label np array
 """
-import numpy as np
-import zlib
 import json
 import os
+import zlib
+from pathlib import Path
+
+import numpy as np
 
 
 def read_dataset(name):
@@ -28,8 +30,9 @@ def read_dataset(name):
 
 
 def read_dataset_by_path(path):
-    path_data = path + "data.bin"
-    path_labels = path + "labels.bin"
+    dataset_path = Path(path)
+    path_data = dataset_path / "data.bin"
+    path_labels = dataset_path / "labels.bin"
     ## open the data and label binary file
     with open(path_data, "rb") as f:
         data_comp = f.read()

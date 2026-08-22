@@ -1,35 +1,41 @@
 import sys
-
-sys.path.append("../src")
-
-from data import reader
-from tqdm import tqdm
-
-from sklearn.preprocessing import StandardScaler
-
-import umap
 import time
-import os
+from pathlib import Path
 
-from bayes_opt import BayesianOptimization
-
-from zadu import zadu
-from zadu.measures import *
+BASE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = BASE_DIR.parent
+sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(BASE_DIR))
 
 import pandas as pd
+import umap
+from bayes_opt import BayesianOptimization
+from data import reader
+from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
 
+from zadu import ZADU
+from zadu.measures import (
+    distance_to_measure,
+    kl_divergence,
+    mean_relative_rank_error,
+    steadiness_cohesiveness,
+    trustworthiness_continuity,
+)
 
-DATASET_LIST = os.listdir("./data/compressed/")
-DATASET_LIST.remove(".gitignore")
+DATA_ROOT = BASE_DIR / "data" / "compressed"
+DATASET_LIST = sorted(path.name for path in DATA_ROOT.iterdir() if path.is_dir())
+if not DATASET_LIST:
+    raise RuntimeError(f"No benchmark datasets found under {DATA_ROOT}")
 
 pbounds = {"n_neighbors": (2, 200), "min_dist": (0.001, 0.99)}
 
 spec_list = [
-    {"measure": "tnc", "params": {"k": 25}},
-    {"measure": "mrre", "params": {"k": 25}},
-    {"measure": "snc"},
-    {"measure": "dtm"},
-    {"measure": "kl_div"},
+    {"id": "tnc", "params": {"k": 25}},
+    {"id": "mrre", "params": {"k": 25}},
+    {"id": "snc", "params": {}},
+    {"id": "dtm", "params": {}},
+    {"id": "kl_div", "params": {}},
 ]
 
 
@@ -38,22 +44,19 @@ without_scheduling = []
 dataset_size = []
 dataset_dim = []
 
-DATASET_LIST = DATASET_LIST
-
-
 for dataset in tqdm(DATASET_LIST):
-    data, label = reader.read_dataset_by_path(f"./data/compressed/{dataset}/")
+    data, label = reader.read_dataset_by_path(str(DATA_ROOT / dataset))
     data = StandardScaler().fit_transform(data)
 
     dataset_size.append(data.shape[0])
     dataset_dim.append(data.shape[1])
 
-    def run_with_scheduling(n_neighbors, min_dist):
+    def run_with_scheduling(n_neighbors, min_dist, data=data):
         umap_obj = umap.UMAP(n_neighbors=int(n_neighbors), min_dist=min_dist)
 
         umap_result = umap_obj.fit_transform(data)
 
-        zadu_obj = zadu.ZADU(spec_list, data)
+        zadu_obj = ZADU(spec_list, data)
         scores = zadu_obj.measure(umap_result)
 
         tnc_score = (scores[0]["trustworthiness"] * scores[0]["continuity"]) / (
@@ -72,7 +75,7 @@ for dataset in tqdm(DATASET_LIST):
 
         return avg_score
 
-    def run_without_scheduling(n_neighbors, min_dist):
+    def run_without_scheduling(n_neighbors, min_dist, data=data):
         umap_obj = umap.UMAP(n_neighbors=int(n_neighbors), min_dist=min_dist)
         umap_result = umap_obj.fit_transform(data)
 
@@ -129,4 +132,4 @@ df = pd.DataFrame(
     }
 )
 
-df.to_csv("result/results_full_10.csv", index=False)
+df.to_csv(BASE_DIR / "result" / "results_full_10.csv", index=False)

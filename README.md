@@ -65,13 +65,13 @@ Always use Context7 MCP when I need library/API documentation, code generation, 
 
 ## Supported Distortion Measures
 
-ZADU currently supports a total of 20 distortion measures, including:
+ZADU currently supports a total of 21 distortion measures, including:
 
 - 7 local measures
-- 5 cluster-level measures
+- 6 cluster-level measures
 - 8 global measures
 
-For a complete list of supported measures, refer to [measures](/src/zadu/measures). The library initially provided 17 measures when it was first introduced by our academic paper. We added three more measures (label trustworthiness & continuity, non-metric stress, and scale-normalized stress) to the library. 
+For a complete list of supported measures, refer to [measures](/src/zadu/measures). The library initially provided 17 measures when it was first introduced by our academic paper. We later added label trustworthiness & continuity, non-metric stress, scale-normalized stress, and the class angular distortion index.
 
 ## How To Use ZADU
 
@@ -193,7 +193,7 @@ Each dictionary must contain the following keys:
 > | Measure | ID | Parameters | Range | Optimum |
 > |---------|----|------------|-------|---------|
 > | Steadiness & Cohesiveness | snc | `iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clustering_strategy="dbscan"` | [0, 1] | 1 |
-> | Distance Consistency | dsc | | [0.5, 1] | 0.5 | 
+> | Distance Consistency | dsc | | [0, 1] | 1 |
 > | Internal Validation Measures | ivm | `measure="silhouette"` | Depends on IVM | Depends on IVM |
 > | Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` | Depends on EVM | Depends on EVM |
 > | Label Trustworthiness & Continuity[^1] | l_tnc | `cvm="dsc"` | [0, 1] | 1 |
@@ -233,6 +233,7 @@ If an invalid option string is passed, ZADU raises a `ValueError` with allowed v
 - `ca_tnc` -> `ca_trustworthiness`, `ca_continuity`
 - `l_tnc` -> `label_trustworthiness`, `label_continuity`
 - `snc` -> `steadiness`, `cohesiveness`
+- `cadi` -> `class_angular_distortion_index`
 - `ivm` -> key is the selected measure name (e.g., `silhouette`)
 - `c_evm` -> key is `{clustering}_{measure}` (e.g., `kmeans_arand`)
 

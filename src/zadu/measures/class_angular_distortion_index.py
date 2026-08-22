@@ -61,7 +61,7 @@ def measure(
         n_triplets,
         rng
     )
-    return {"Class Angular Distortion Index": score}
+    return {"class_angular_distortion_index": score}
 
 def _get_cluster_info(labels):
     classes = np.unique(labels)
