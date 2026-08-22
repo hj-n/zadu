@@ -1,5 +1,6 @@
-import numpy as np
 from itertools import combinations
+
+import numpy as np
 import numpy.typing as npt
 
 
@@ -64,7 +65,7 @@ def shift_range(X, label, iter_num):
     orig = shift(X, label)
     orig_result = 1 / (1 + orig ** (-1))
     e_val_sum = 0
-    for i in range(iter_num):
+    for _ in range(iter_num):
         np.random.shuffle(label)
         e_val_sum += shift(X, label)
     e_val = e_val_sum / iter_num

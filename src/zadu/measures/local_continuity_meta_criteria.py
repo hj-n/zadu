@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
+
 from .utils import knn
+from .utils.validation import validate_pair
 
 
 def measure(
@@ -20,6 +22,7 @@ def measure(
     OUTPUT:
                   dict: local continuity meta-criteria
     """
+    orig, emb = validate_pair(orig, emb)
     if knn_info is None:
         orig_knn_indices = knn.knn(orig, k)
         emb_knn_indices = knn.knn(emb, k)
@@ -38,7 +41,7 @@ def measure(
     local_distortion_list = np.array(local_distortion_list)
     local_distortion_list = local_distortion_list / k
 
-    average_distortion = np.mean(local_distortion_list)
+    average_distortion = float(np.mean(local_distortion_list))
 
     if return_local:
         return ({"lcmc": average_distortion}, {"local_lcmc": local_distortion_list})

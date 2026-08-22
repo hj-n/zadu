@@ -1,7 +1,9 @@
-from .utils import pairwise_dist as pdist
-from sklearn.isotonic import IsotonicRegression
 import numpy as np
 import numpy.typing as npt
+from sklearn.isotonic import IsotonicRegression
+
+from .utils import pairwise_dist as pdist
+from .utils.validation import require_nonzero_distances, validate_pair
 
 
 def measure(
@@ -21,12 +23,16 @@ def measure(
     OUTPUT:
         dict: non_metric_stress
     """
+    orig, emb = validate_pair(orig, emb)
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
 
     else:
         orig_distance_matrix, emb_distance_matrix = distance_matrices
+
+    require_nonzero_distances(orig_distance_matrix, "Non-metric stress")
+    require_nonzero_distances(emb_distance_matrix, "Non-metric stress")
 
     # Extract upper triangular of both matrices into 1d arrays
     # Diagonal is always zero, we can offset by one
@@ -52,4 +58,4 @@ def measure(
 
     non_metric_stress = np.sqrt(raw_stress / normalization_factor)
 
-    return {"non_metric_stress": non_metric_stress}
+    return {"non_metric_stress": float(non_metric_stress)}

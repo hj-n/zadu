@@ -1,7 +1,9 @@
-from .utils import pairwise_dist as pdist
 import numpy as np
 import numpy.typing as npt
+
 from .stress import measure as stressmeasure
+from .utils import pairwise_dist as pdist
+from .utils.validation import require_nonzero_distances, validate_pair
 
 
 def measure(
@@ -16,6 +18,7 @@ def measure(
     OUTPUT:
         dict: non_metric_stress
     """
+    orig, emb = validate_pair(orig, emb)
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
@@ -23,6 +26,8 @@ def measure(
     else:
         orig_distance_matrix, emb_distance_matrix = distance_matrices
 
+    require_nonzero_distances(orig_distance_matrix, "Scale-normalized stress")
+    require_nonzero_distances(emb_distance_matrix, "Scale-normalized stress")
     alpha = np.sum(np.multiply(orig_distance_matrix, emb_distance_matrix)) / np.sum(
         np.square(emb_distance_matrix)
     )
@@ -30,4 +35,4 @@ def measure(
         orig, alpha * emb, (orig_distance_matrix, alpha * emb_distance_matrix)
     )
 
-    return {"scale_normalized_stress": sns["stress"]}
+    return {"scale_normalized_stress": float(sns["stress"])}

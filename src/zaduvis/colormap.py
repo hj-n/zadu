@@ -54,14 +54,19 @@ def checkviz_cmap(dist_false, dist_missing):
     dist_false = 1 - dist_false
     dist_missing = 1 - dist_missing
 
-    powScale = lambda x: x**1.5145
-    aScale = lambda x: 30 * cScale * x
-    bScale = lambda x: 20 * cScale * x
+    def pow_scale(x):
+        return x**1.5145
+
+    def a_scale(x):
+        return 30 * cScale * x
+
+    def b_scale(x):
+        return 20 * cScale * x
 
     lab = [
-        powScale(1 - (dist_false + dist_missing) / 2) * 100,
-        aScale(dist_false - dist_missing),
-        bScale(dist_missing - dist_false),
+        pow_scale(1 - (dist_false + dist_missing) / 2) * 100,
+        a_scale(dist_false - dist_missing),
+        b_scale(dist_missing - dist_false),
     ]
     ## change the cielab color to rgb that can be used by matplotlib
     # print(lab)

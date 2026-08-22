@@ -2,6 +2,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .utils.snc_cpu import SNCCPU
+from .utils.validation import validate_pair
 
 
 def measure(
@@ -10,10 +11,11 @@ def measure(
     iteration: int = 150,
     walk_num_ratio: float = 0.3,
     alpha: float = 0.1,
-    k: int = 50,
+    k: int | None = None,
     clustering_strategy: str = "dbscan",
     knn_info: tuple | None = None,
     return_local: bool = False,
+    random_state: int | np.random.Generator | None = None,
 ) -> tuple | dict:
     """
     Compute the Steadiness and Cohesiveness of the embedding
@@ -26,39 +28,24 @@ def measure(
             int: k: number of nearest neighbors to consider
             str: clustering_strategy: clustering strategy to use (dbscan or kmeans)
             tuple: knn_info: precomputed k-nearest neighbors of the original and embedded data (Optional)
+            int: random_state: seed for reproducible walks and KMeans clustering
     OUTPUT:
             dict: steadiness and cohesiveness score
     """
 
-    # if knn_info is None:
-    #     orig_knn_indices = knn.knn(orig, k)
-    #     emb_knn_indices = knn.knn(emb, k)
-    # else:
-    #     orig_knn_indices, emb_knn_indices = knn_info
-
-    # orig_snn_graph = knn.snn(orig, k, knn_indices=orig_knn_indices, directed=True)
-    # emb_snn_graph = knn.snn(emb, k, knn_indices=emb_knn_indices, directed=True)
-
-    # snn_knn_matrix = {
-    #     "raw_knn": orig_knn_indices,
-    #     "raw_snn": orig_snn_graph,
-    #     "emb_knn": emb_knn_indices,
-    #     "emb_snn": emb_snn_graph,
-    # }
-
-    # Keep parity with the previous zadu behavior backed by `snc` package:
-    # zadu passed only alpha to SNC, so SNC internally used k=sqrt(N).
+    orig, emb = validate_pair(orig, emb)
     snc_obj = SNCCPU(
         orig,
         emb,
         iteration=iteration,
         walk_num_ratio=walk_num_ratio,
         alpha=alpha,
-        k=None,
+        k=k,
         cluster_strategy=clustering_strategy,
+        random_state=random_state,
     )
 
-    snc_obj.fit(record_vis_info=return_local)
+    snc_obj.fit(record_vis_info=return_local, knn_info=knn_info)
 
     steadiness = snc_obj.steadiness()
     cohesiveness = snc_obj.cohesiveness()
@@ -67,7 +54,7 @@ def measure(
         stead_local, cohev_local = snc_obj.local_scores()
 
     if return_local:
-        return {"steadiness": steadiness, "cohesiveness": cohesiveness}, {  # TODO
+        return {"steadiness": steadiness, "cohesiveness": cohesiveness}, {
             "local_steadiness": stead_local,
             "local_cohesiveness": cohev_local,
         }

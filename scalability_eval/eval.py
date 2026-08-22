@@ -24,6 +24,10 @@ from zadu.measures import (
 )
 
 DATA_ROOT = BASE_DIR / "data" / "compressed"
+if not DATA_ROOT.is_dir():
+    raise RuntimeError(
+        f"Benchmark datasets are not bundled; see {BASE_DIR / 'README.md'}"
+    )
 DATASET_LIST = sorted(path.name for path in DATA_ROOT.iterdir() if path.is_dir())
 if not DATASET_LIST:
     raise RuntimeError(f"No benchmark datasets found under {DATA_ROOT}")
@@ -33,7 +37,7 @@ pbounds = {"n_neighbors": (2, 200), "min_dist": (0.001, 0.99)}
 spec_list = [
     {"id": "tnc", "params": {"k": 25}},
     {"id": "mrre", "params": {"k": 25}},
-    {"id": "snc", "params": {}},
+    {"id": "snc", "params": {"random_state": 0}},
     {"id": "dtm", "params": {}},
     {"id": "kl_div", "params": {}},
 ]
@@ -52,7 +56,9 @@ for dataset in tqdm(DATASET_LIST):
     dataset_dim.append(data.shape[1])
 
     def run_with_scheduling(n_neighbors, min_dist, data=data):
-        umap_obj = umap.UMAP(n_neighbors=int(n_neighbors), min_dist=min_dist)
+        umap_obj = umap.UMAP(
+            n_neighbors=int(n_neighbors), min_dist=min_dist, random_state=0
+        )
 
         umap_result = umap_obj.fit_transform(data)
 
@@ -76,12 +82,14 @@ for dataset in tqdm(DATASET_LIST):
         return avg_score
 
     def run_without_scheduling(n_neighbors, min_dist, data=data):
-        umap_obj = umap.UMAP(n_neighbors=int(n_neighbors), min_dist=min_dist)
+        umap_obj = umap.UMAP(
+            n_neighbors=int(n_neighbors), min_dist=min_dist, random_state=0
+        )
         umap_result = umap_obj.fit_transform(data)
 
         tnc = trustworthiness_continuity.measure(data, umap_result, k=25)
         mrre = mean_relative_rank_error.measure(data, umap_result, k=25)
-        snc = steadiness_cohesiveness.measure(data, umap_result)
+        snc = steadiness_cohesiveness.measure(data, umap_result, random_state=0)
         dtm = distance_to_measure.measure(data, umap_result)
         kl = kl_divergence.measure(data, umap_result)
 

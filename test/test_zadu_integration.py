@@ -42,3 +42,44 @@ def test_zadu_label_metric_variants_run():
     for score in scores:
         assert "label_trustworthiness" in score
         assert "label_continuity" in score
+
+
+def test_all_registered_metrics_execute_together():
+    raw, emb, label = _sample_data(seed=12, n=60)
+    specs = [
+        {"id": "tnc", "params": {"k": 5}},
+        {"id": "mrre", "params": {"k": 7}},
+        {"id": "lcmc", "params": {"k": 9}},
+        {"id": "nh", "params": {"k": 6}},
+        {"id": "ca_tnc", "params": {"k": 5}},
+        {"id": "l_tnc"},
+        {"id": "nd", "params": {"k": 5}},
+        {"id": "dtm"},
+        {"id": "kl_div"},
+        {"id": "dsc"},
+        {"id": "pr"},
+        {"id": "srho"},
+        {"id": "ivm"},
+        {"id": "c_evm"},
+        {
+            "id": "snc",
+            "params": {
+                "iteration": 2,
+                "k": 5,
+                "clustering_strategy": "kmeans",
+                "random_state": 0,
+            },
+        },
+        {"id": "topo", "params": {"k": 5}},
+        {"id": "proc", "params": {"k": 5}},
+        {"id": "stress"},
+        {"id": "sn_stress"},
+        {"id": "nm_stress"},
+        {"id": "cadi", "params": {"n_triplets": 10, "random_seed": 0}},
+        {"id": "gi"},
+    ]
+
+    scores = ZADU(specs, raw).measure(emb, label)
+
+    assert len(scores) == 22
+    assert all(np.isfinite(value) for score in scores for value in score.values())

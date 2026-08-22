@@ -2,6 +2,7 @@ name: Tests
 
 on:
   push:
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -9,39 +10,72 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install lint tools
+        run: python -m pip install black==26.5.1 ruff==0.16.4
+      - name: Ruff
+        run: ruff check .
+      - name: Black
+        run: black --check src test scalability_eval
+
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
-
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: setup.py
-
+          cache-dependency-path: pyproject.toml
       - name: Install package and test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e . pytest build
-
-      - name: Run tests
-        run: python -m pytest -q
-
+        run: python -m pip install -e ".[dev]"
+      - name: Run tests with coverage
+        run: python -m pytest --cov=zadu --cov=zaduvis --cov-fail-under=85
       - name: Compile Python sources
         run: python -m compileall -q src test scalability_eval
 
-      - name: Build distributions
-        run: python -m build
+  snc-compat:
+    runs-on: ubuntu-latest
+    env:
+      NUMBA_ENABLE_CUDASIM: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install ZADU and the legacy SNC oracle
+        run: python -m pip install -e ".[dev]" "snc==0.2.0"
+      - name: Compare the CPU port with SNC 0.2.0
+        run: python -m pytest src/zadu/tests/test_snc_cpu_compat.py -q
 
-      - name: Verify Gap Index license is packaged
+  build:
+    needs: [lint, test, snc-compat]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build distributions
+        run: |
+          python -m pip install build twine
+          python -m build
+          python -m twine check dist/*
+      - name: Verify third-party notices are packaged
         run: |
           python - <<'PY'
           import tarfile
@@ -53,10 +87,12 @@ jobs:
           sdist = next(path for path in artifacts if path.name.endswith(".tar.gz"))
 
           with zipfile.ZipFile(wheel) as archive:
-              assert any(name.endswith("gap-index-MIT.txt") for name in archive.namelist())
-              assert any(name.endswith("THIRD_PARTY_NOTICES.md") for name in archive.namelist())
+              names = archive.namelist()
+              assert any(name.endswith("gap-index-MIT.txt") for name in names)
+              assert any(name.endswith("THIRD_PARTY_NOTICES.md") for name in names)
 
           with tarfile.open(sdist) as archive:
-              assert any(name.endswith("gap-index-MIT.txt") for name in archive.getnames())
-              assert any(name.endswith("THIRD_PARTY_NOTICES.md") for name in archive.getnames())
+              names = archive.getnames()
+              assert any(name.endswith("gap-index-MIT.txt") for name in names)
+              assert any(name.endswith("THIRD_PARTY_NOTICES.md") for name in names)
           PY

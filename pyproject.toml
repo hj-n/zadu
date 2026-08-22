@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zadu"
+version = "0.5.0"
+description = "A Python Toolkit for Evaluating the Reliability of Dimensionality Reduction Embeddings"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE", "LICENSES/*", "THIRD_PARTY_NOTICES.md"]
+authors = [
+  { name = "Hyeon Jeon", email = "hj@hcil.snu.ac.kr" },
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "numpy>=1.23",
+  "scikit-learn>=1.2",
+  "scipy>=1.9",
+  "hdbscan>=0.8.33",
+  "matplotlib>=3.7",
+  "faiss-cpu>=1.7.4",
+  "numba>=0.57",
+]
+
+[project.urls]
+Homepage = "https://github.com/hj-n/zadu"
+Repository = "https://github.com/hj-n/zadu"
+Issues = "https://github.com/hj-n/zadu/issues"
+
+[project.optional-dependencies]
+dev = [
+  "black==26.5.1",
+  "build>=1.2",
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff==0.16.4",
+  "twine>=5.0",
+]
+benchmark = [
+  "bayesian-optimization",
+  "pandas",
+  "tqdm",
+  "umap-learn",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["zadu*", "zaduvis*"]
+exclude = ["zadu.tests*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["src/zadu/tests", "test"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"scalability_eval/eval.py" = ["E402"]
+"*.ipynb" = ["E402"]
+
+[tool.coverage.run]
+source = ["zadu", "zaduvis"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

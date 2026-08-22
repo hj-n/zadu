@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:  # Python 3.10
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        """Minimal Python 3.10-compatible backport used by the public API."""
+
+        def __str__(self) -> str:
+            return self.value
+
+
 from typing import Any, TypedDict
 
 

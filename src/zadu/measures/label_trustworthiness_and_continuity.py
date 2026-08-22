@@ -1,7 +1,10 @@
+from typing import Literal
+
 import numpy as np
 import numpy.typing as npt
-from typing import Literal
+
 from .utils import label_cvms as lcvms
+from .utils.validation import validate_labels, validate_pair
 
 CVMType = Literal["dsc", "ch_btw"]
 
@@ -23,9 +26,8 @@ def measure(
             dict: label-trustworthiness and label-continuity
     """
 
-    orig = np.array(orig)
-    emb = np.array(emb)
-    label = np.array(label)
+    orig, emb = validate_pair(orig, emb)
+    label = validate_labels(label, orig.shape[0], min_classes=2)
 
     # change label into 0, 1, 2,....
     unique_labels = np.unique(label)
@@ -79,4 +81,4 @@ def measure(
     lc = 1 - np.sum(lc_mat) / (label_num * (label_num - 1) / 2)
 
     # set the dictionary to return
-    return {"label_trustworthiness": lt, "label_continuity": lc}
+    return {"label_trustworthiness": float(lt), "label_continuity": float(lc)}

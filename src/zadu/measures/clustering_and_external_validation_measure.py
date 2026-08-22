@@ -1,12 +1,16 @@
 from typing import Literal
-from sklearn.cluster import KMeans, DBSCAN
+
+import numpy as np
+import numpy.typing as npt
+from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics import (
-    adjusted_rand_score,
     adjusted_mutual_info_score,
+    adjusted_rand_score,
     normalized_mutual_info_score,
     v_measure_score,
 )
-import numpy.typing as npt
+
+from .utils.validation import as_finite_2d, validate_labels
 
 EVMMeasure = Literal["arand", "ami", "nmi", "vmeasure"]
 ClusteringMethod = Literal["kmeans", "dbscan"]
@@ -22,11 +26,12 @@ def measure(
     """
     Evaluate DR embedding using clustering and external validation measure.
     """
+    emb = as_finite_2d(emb, "emb")
+    label = validate_labels(label, emb.shape[0], min_classes=2)
     measure_name = measure.lower()
     clustering_name = clustering.lower()
 
-    if clustering_args is None:
-        clustering_args = {}
+    clustering_args = {} if clustering_args is None else dict(clustering_args)
 
     clusterers = {
         "kmeans": KMeans,
@@ -37,6 +42,11 @@ def measure(
         raise ValueError(
             f"Invalid clustering algorithm '{clustering}'. Allowed values: {allowed}"
         )
+
+    if clustering_name == "kmeans":
+        clustering_args.setdefault("n_clusters", np.unique(label).size)
+        clustering_args.setdefault("n_init", "auto")
+        clustering_args.setdefault("random_state", 0)
 
     clustering_result = clusterers[clustering_name](**clustering_args).fit(emb)
 
@@ -52,5 +62,5 @@ def measure(
             f"Invalid external validation measure '{measure}'. Allowed values: {allowed}"
         )
 
-    score = scorers[measure_name](label, clustering_result.labels_)
+    score = float(scorers[measure_name](label, clustering_result.labels_))
     return {f"{clustering_name}_{measure_name}": score}

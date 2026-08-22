@@ -94,7 +94,7 @@ def _resolve_metric(metric: DistanceMetric) -> Callable:
 
     metric_fn = getattr(distance, metric, None)
     if not callable(metric_fn):
-        raise ValueError(  # noqa: TRY004 - a known type with an unknown value
+        raise ValueError(
             f"Unknown scipy distance metric '{metric}'. Pass a callable distance "
             "function or use 'precomputed'."
         )
@@ -107,10 +107,7 @@ def _triangle_area_from_sides(a: float, b: float, c: float) -> float:
 
     semiperimeter = (a + b + c) / 2.0
     radicand = (
-        semiperimeter
-        * (semiperimeter - a)
-        * (semiperimeter - b)
-        * (semiperimeter - c)
+        semiperimeter * (semiperimeter - a) * (semiperimeter - b) * (semiperimeter - c)
     )
     scale = max(a, b, c, 1.0) ** 4
     if radicand < -_TRIANGLE_TOLERANCE * scale:
@@ -126,9 +123,7 @@ def _compute_areas(
     if metric == "precomputed":
         areas = np.array(
             [
-                _triangle_area_from_sides(
-                    points[a, b], points[a, c], points[b, c]
-                )
+                _triangle_area_from_sides(points[a, b], points[a, c], points[b, c])
                 for a, b, c in triangles
             ],
             dtype=float,

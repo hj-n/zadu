@@ -1,6 +1,8 @@
 import numpy as np
-from .utils import knn
 import numpy.typing as npt
+
+from .utils import knn
+from .utils.validation import validate_labels, validate_pair, validate_trustworthiness_k
 
 
 def measure(
@@ -22,6 +24,10 @@ def measure(
     OUTPUT:
         dict: class-aware trustworthiness (ca_trustworthiness) and class-aware continuity (ca_continuity)
     """
+
+    orig, emb = validate_pair(orig, emb)
+    label = validate_labels(label, orig.shape[0], min_classes=2)
+    k = validate_trustworthiness_k(orig.shape[0], k)
 
     if knn_ranking_info is None:
         orig_knn_indices, orig_ranking = knn.knn_with_ranking(orig, k)
@@ -114,7 +120,7 @@ def ca_tnc_computation(
         2 / (k * (2 * points_num - 3 * k - 1))
     )
 
-    average_distortion = np.mean(local_distortion_list)
+    average_distortion = float(np.mean(local_distortion_list))
 
     if return_local:
         return average_distortion, local_distortion_list

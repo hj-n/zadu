@@ -2,6 +2,7 @@
 File Reader API for external clustering benchmark.
 reads the bin data and converts it to data and label np array
 """
+
 import json
 import os
 import zlib

@@ -1,7 +1,9 @@
 import numpy as np
 import numpy.typing as npt
 from scipy.sparse import issparse
+
 from .utils import knn
+from .utils.validation import validate_pair
 
 
 def measure(
@@ -22,6 +24,7 @@ def measure(
             dict: neighbor dissimilarity (ND)
     """
 
+    orig, emb = validate_pair(orig, emb)
     if snn_info is None:
         if knn_info is None:
             orig_SNN_graph = knn.snn(orig, k, directed=False)
@@ -47,6 +50,6 @@ def measure(
         dissim_plus = np.sqrt(np.sum(D_plus**2))
         dissim_minus = np.sqrt(np.sum(D_minus**2))
 
-    nd = max(dissim_plus, dissim_minus)
+    nd = float(max(dissim_plus, dissim_minus))
 
     return {"neighbor_dissimilarity": nd}

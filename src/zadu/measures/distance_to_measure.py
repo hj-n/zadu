@@ -1,6 +1,8 @@
-from .utils import pairwise_dist as pdist
 import numpy as np
 import numpy.typing as npt
+
+from .utils import pairwise_dist as pdist
+from .utils.validation import validate_pair
 
 
 def measure(
@@ -19,6 +21,7 @@ def measure(
         dict: distance to measure (dtm)
     """
 
+    orig, emb = validate_pair(orig, emb)
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
@@ -30,4 +33,4 @@ def measure(
 
     dtm = np.abs(density_orig - density_emb).sum()
 
-    return {"distance_to_measure": dtm}
+    return {"distance_to_measure": float(dtm)}

@@ -1,6 +1,8 @@
-from .utils import knn
 import numpy as np
 import numpy.typing as npt
+
+from .utils import knn
+from .utils.validation import as_finite_2d, validate_labels, validate_neighbor_k
 
 
 def measure(
@@ -21,6 +23,10 @@ def measure(
     OUTPUT:
             dict: neighborhood hit (nh)
     """
+    emb = as_finite_2d(emb, "emb")
+    label = validate_labels(label, emb.shape[0])
+    k = validate_neighbor_k(emb.shape[0], k)
+
     if knn_info is not None and knn_emb_info is not None:
         raise ValueError("Provide only one of knn_info or knn_emb_info")
 
@@ -30,10 +36,7 @@ def measure(
     if knn_info is None:
         emb_knn_indices = knn.knn(emb, k)
     else:
-        if isinstance(knn_info, tuple):
-            emb_knn_indices = knn_info[1]
-        else:
-            emb_knn_indices = knn_info
+        emb_knn_indices = knn_info[1] if isinstance(knn_info, tuple) else knn_info
 
     points_num = emb.shape[0]
     nh_list = []
@@ -45,7 +48,7 @@ def measure(
     nh_list = np.array(nh_list)
     nh_list = nh_list / k
 
-    nh = np.mean(nh_list)
+    nh = float(np.mean(nh_list))
 
     if return_local:
         return ({"neighborhood_hit": nh}, {"local_neighborhood_hit": nh_list})

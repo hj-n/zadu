@@ -26,7 +26,7 @@ def test_gap_index_matches_upstream_reference_implementation():
     assert result.score == pytest.approx(expected, abs=1e-12)
     assert result.triangles.shape[1] == 3
     assert result.deformations.shape == (result.triangles.shape[0],)
-    assert np.all((-1.0 <= result.deformations) & (result.deformations <= 1.0))
+    assert np.all((result.deformations >= -1.0) & (result.deformations <= 1.0))
     assert np.sum(result.original_relative_areas) == pytest.approx(1.0)
     assert np.sum(result.embedded_relative_areas) == pytest.approx(1.0)
 
@@ -36,9 +36,7 @@ def test_gap_index_precomputed_distances_match_coordinate_input():
     distance_matrix = squareform(pdist(orig))
 
     coordinate_score = gap_index.gap_index(orig, emb)
-    precomputed_score = gap_index.gap_index(
-        distance_matrix, emb, metric="precomputed"
-    )
+    precomputed_score = gap_index.gap_index(distance_matrix, emb, metric="precomputed")
 
     assert precomputed_score == pytest.approx(coordinate_score, abs=1e-12)
 

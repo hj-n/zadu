@@ -1,6 +1,8 @@
-from .utils import pairwise_dist as pdist
 import numpy as np
 import numpy.typing as npt
+
+from .utils import pairwise_dist as pdist
+from .utils.validation import require_nonzero_distances, validate_pair
 
 
 def measure(
@@ -15,6 +17,7 @@ def measure(
     OUTPUT:
             dict: stress
     """
+    orig, emb = validate_pair(orig, emb)
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
@@ -22,9 +25,10 @@ def measure(
     else:
         orig_distance_matrix, emb_distance_matrix = distance_matrices
 
+    require_nonzero_distances(orig_distance_matrix, "Stress")
     diff_squared_sum = np.square(orig_distance_matrix - emb_distance_matrix).sum()
     orig_squared_sum = np.square(orig_distance_matrix).sum()
 
     stress = np.sqrt(diff_squared_sum / orig_squared_sum)
 
-    return {"stress": stress}
+    return {"stress": float(stress)}

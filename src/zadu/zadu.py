@@ -1,59 +1,59 @@
-from .measures import *
+"""Scheduled execution of ZADU dimensionality-reduction metrics."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Sequence
+from copy import deepcopy
+from typing import Any, ClassVar
+
+import numpy as np
+
 from .measures.utils import knn
 from .measures.utils import pairwise_dist as pdist
-import math
-import numpy as np
-from copy import deepcopy
-from typing import Any, Sequence
+from .measures.utils.validation import (
+    as_finite_2d,
+    validate_labels,
+    validate_neighbor_k,
+    validate_trustworthiness_k,
+)
+from .registry import METRIC_BY_ALIAS, METRIC_BY_ID, MetricDefinition
 
 
 class ZADU:
-    ABBREVIATIONS = {
-        "tnc": "trustworthiness_continuity",
-        "mrre": "mean_relative_rank_error",
-        "lcmc": "local_continuity_meta_criteria",
-        "nh": "neighborhood_hit",
-        "ca_tnc": "class_aware_trustworthiness_continuity",
-        "l_tnc": "label_trustworthiness_and_continuity",
-        "nd": "neighbor_dissimilarity",
-        "dtm": "distance_to_measure",
-        "kl_div": "kl_divergence",
-        "dsc": "distance_consistency",
-        "pr": "pearson_r",
-        "srho": "spearman_rho",
-        "ivm": "internal_validation_measure",
-        "c_evm": "clustering_and_external_validation_measure",
-        "snc": "steadiness_cohesiveness",
-        "topo": "topographic_product",
-        "proc": "procrustes",
-        "stress": "stress",
-        "sn_stress": "scale_normalized_stress",
-        "nm_stress": "non_metric_stress",
-        "cadi": "class_angular_distortion_index",
-        "gi": "gap_index",
-    }
+    """Evaluate one embedding with one or more registered metrics."""
 
+    ABBREVIATIONS: ClassVar[dict[str, str]] = {
+        alias: metric.id for alias, metric in METRIC_BY_ALIAS.items()
+    }
     DEFAULT_K = 20
 
     def __init__(
-        self, spec_list, orig, return_local=False, verbose=False, geodesic=False
+        self,
+        spec_list,
+        orig,
+        return_local: bool = False,
+        verbose: bool = False,
+        geodesic: bool = False,
+        max_memory_bytes: int | None = None,
     ):
         self.spec_list = deepcopy(spec_list)
-        self.return_local = return_local
-        self.verbose = verbose
+        self.return_local = bool(return_local)
+        self.verbose = bool(verbose)
+        self.geodesic = bool(geodesic)
+        if max_memory_bytes is not None and max_memory_bytes < 1:
+            raise ValueError("max_memory_bytes must be greater than zero")
+        self.max_memory_bytes = max_memory_bytes
 
-        self.orig = orig
+        self.orig = as_finite_2d(orig, "orig")
         self.emb = None
         self.label = None
 
-        ## FLAGS for scheduling
-        self.knn_flag = False
-        self.knn_flag_k = -1
-        self.knn_ranking_flag = False
-        self.knn_ranking_flag_k = -1
         self.distance_matrices_flag = False
+        self.ranking_k = -1
+        self.knn_both_k = -1
+        self.knn_emb_k = -1
 
-        ## variables for holding precomputed results (prerequisite for some measures)
         self.orig_distance_matrix = None
         self.emb_distance_matrix = None
         self.orig_knn_ranking = None
@@ -61,227 +61,249 @@ class ZADU:
         self.orig_knn_indices = None
         self.emb_knn_indices = None
 
-        self.__sanity_check_measures_spec()
-        self.__interpret_measures_spec()
-
-        if self.distance_matrices_flag:
-            if geodesic:
-                self.orig_distance_matrix = self.__pairwise_geodesic_distance_matrix(
-                    orig
-                )
-            else:
-                self.orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
-        if self.knn_ranking_flag:
-            self.orig_knn_indices, self.orig_knn_ranking = knn.knn_with_ranking(
-                orig, self.knn_ranking_flag_k, distance_matrix=self.orig_distance_matrix
+        self._definitions: list[MetricDefinition] = []
+        self._validate_and_normalize_specs()
+        self._interpret_specs()
+        self.estimated_cache_bytes = self._estimate_cache_bytes()
+        if (
+            self.max_memory_bytes is not None
+            and self.estimated_cache_bytes > self.max_memory_bytes
+        ):
+            raise MemoryError(
+                "Estimated ZADU cache size exceeds max_memory_bytes "
+                f"({self.estimated_cache_bytes} > {self.max_memory_bytes})"
             )
-        elif self.knn_flag and self.knn_flag_k > self.knn_ranking_flag_k:
-            self.orig_knn_indices = knn.knn(
-                orig, self.knn_flag_k, distance_function="euclidean"
-            )
+        self._prepare_original_space()
 
     def measure(self, emb, label=None):
-        """
-        Run the functions specified in spec_list
-        INPUT:
-                emb:  embedded data
-        OUTPUT:
-                list: list of results
-        """
+        """Compute every configured metric for *emb* in specification order."""
 
-        if self.orig.shape[0] != emb.shape[0]:
+        emb_array = as_finite_2d(emb, "emb")
+        if self.orig.shape[0] != emb_array.shape[0]:
             raise ValueError(
                 "orig and emb must have the same number of rows "
-                f"(orig={self.orig.shape[0]}, emb={emb.shape[0]})"
+                f"(orig={self.orig.shape[0]}, emb={emb_array.shape[0]})"
             )
 
-        self.emb = emb
+        if any(definition.needs_label for definition in self._definitions):
+            if label is None:
+                names = [
+                    definition.id
+                    for definition in self._definitions
+                    if definition.needs_label
+                ]
+                raise ValueError(
+                    f"Label is required for measure(s): {', '.join(names)}"
+                )
+            label = validate_labels(label, emb_array.shape[0])
+
+        self.emb = emb_array
         self.label = label
+        self._prepare_embedded_space()
 
-        ## compute the distance matrices
-        if self.distance_matrices_flag:
-            self.emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
-        if self.knn_ranking_flag:
-            self.emb_knn_indices, self.emb_knn_ranking = knn.knn_with_ranking(
-                emb, self.knn_ranking_flag_k, distance_matrix=self.emb_distance_matrix
-            )
-        elif self.knn_flag and self.knn_flag_k > self.knn_ranking_flag_k:
-            self.emb_knn_indices = knn.knn(
-                emb, self.knn_flag_k, distance_function="euclidean"
-            )
-
-        ## compute the measures
         score_results = []
         local_results = []
-        for spec in self.spec_list:
-            measure_name = spec["id"]
-            given_params = spec["params"] if "params" in spec else {}
-            real_params = self.__get_real_params(measure_name)
+        for spec, definition in zip(self.spec_list, self._definitions, strict=True):
+            exec_params = dict(spec["params"])
+            if "orig" in definition.inputs:
+                exec_params["orig"] = self.orig
+            if "emb" in definition.inputs:
+                exec_params["emb"] = self.emb
+            if definition.needs_label:
+                exec_params["label"] = self.label
 
-            ## construct the execution parameters to be injected in the function
-            exec_params = {}
-            for param in given_params.keys():
-                exec_params[param] = given_params[param]
+            k_value = exec_params.get("k", self.DEFAULT_K)
+            if "distance_matrices" in definition.cache:
+                exec_params["distance_matrices"] = (
+                    self.orig_distance_matrix,
+                    self.emb_distance_matrix,
+                )
+            if "knn_ranking_info" in definition.cache:
+                exec_params["knn_ranking_info"] = (
+                    self.orig_knn_indices[:, :k_value],
+                    self.orig_knn_ranking,
+                    self.emb_knn_indices[:, :k_value],
+                    self.emb_knn_ranking,
+                )
+            if "knn_info" in definition.cache:
+                exec_params["knn_info"] = (
+                    self.orig_knn_indices[:, :k_value],
+                    self.emb_knn_indices[:, :k_value],
+                )
+            if "knn_emb_info" in definition.cache:
+                exec_params["knn_emb_info"] = self.emb_knn_indices[:, :k_value]
+            if definition.supports_local:
+                exec_params["return_local"] = self.return_local
 
-            for param in real_params:
-                if "orig" == param:
-                    exec_params["orig"] = self.orig
-                elif "emb" == param:
-                    exec_params["emb"] = self.emb
-                elif "label" == param:
-                    if label is None:
-                        raise Exception(
-                            "Label is required for measure {}".format(measure_name)
-                        )
-                    exec_params["label"] = label
-                elif "distance_matrices" == param:
-                    exec_params["distance_matrices"] = (
-                        self.orig_distance_matrix,
-                        self.emb_distance_matrix,
-                    )
-                elif "knn_ranking_info" == param:
-                    k_val = exec_params["k"] if "k" in exec_params else self.DEFAULT_K
-                    exec_params["knn_ranking_info"] = (
-                        self.orig_knn_indices[:, :k_val],
-                        self.orig_knn_ranking,
-                        self.emb_knn_indices[:, :k_val],
-                        self.emb_knn_ranking,
-                    )
-                elif "knn_info" == param:
-                    k_val = exec_params["k"] if "k" in exec_params else self.DEFAULT_K
-                    exec_params["knn_info"] = (
-                        self.orig_knn_indices[:, :k_val],
-                        self.emb_knn_indices[:, :k_val],
-                    )
-                elif "knn_emb_info" == param:
-                    if "knn_info" not in real_params:
-                        k_val = exec_params["k"] if "k" in exec_params else self.DEFAULT_K
-                        exec_params["knn_emb_info"] = self.emb_knn_indices[:, :k_val]
-                elif "return_local" == param:
-                    exec_params["return_local"] = self.return_local
-
-            ## execute the function
-            if self.return_local and "return_local" in exec_params:
-                score, local = globals()[measure_name].measure(**exec_params)
-                score_results.append(score)
+            if self.verbose:
+                print(f"Computing {definition.id}")
+            result = definition.load().measure(**exec_params)
+            if self.return_local and definition.supports_local:
+                score, local = result
+                score_results.append(_python_scalars(score))
                 local_results.append(local)
-            elif self.return_local and "return_local" not in exec_params:
-                score = globals()[measure_name].measure(**exec_params)
-                score_results.append(score)
-                local_results.append(None)
             else:
-                score = globals()[measure_name].measure(**exec_params)
-                score_results.append(score)
+                score_results.append(_python_scalars(result))
+                if self.return_local:
+                    local_results.append(None)
 
         if self.return_local:
             return score_results, local_results
-        else:
-            return score_results
+        return score_results
 
-    def __sanity_check_measures_spec(self):
-        """
-        Perform sanity check on the measures specification list.
-        """
-        ## check whehter there exists invalid measure name
-        if not isinstance(self.spec_list, Sequence):
+    def _validate_and_normalize_specs(self) -> None:
+        if isinstance(self.spec_list, (str, bytes)) or not isinstance(
+            self.spec_list, Sequence
+        ):
             raise TypeError("spec_list must be a sequence of measure specifications")
 
         for spec in self.spec_list:
+            if not isinstance(spec, dict):
+                raise TypeError("Each measure specification must be a dictionary")
             if "id" not in spec:
-                raise Exception(f"Measure specification missing required key 'id': {spec}")
-            if "params" not in spec or spec["params"] is None:
-                spec["params"] = {}
-            if not isinstance(spec["params"], dict):
-                raise Exception(
-                    f"Invalid params for measure {spec['id']}: params must be a dict"
+                raise ValueError(
+                    f"Measure specification missing required key 'id': {spec}"
                 )
 
-            if spec["id"] not in self.ABBREVIATIONS.values():
-                if spec["id"] in self.ABBREVIATIONS:
-                    spec["id"] = self.ABBREVIATIONS[spec["id"]]
-                else:
-                    raise Exception("Invalid measure name: {}".format(spec["id"]))
+            raw_id = spec["id"]
+            measure_id = raw_id.value if hasattr(raw_id, "value") else str(raw_id)
+            definition = METRIC_BY_ID.get(measure_id) or METRIC_BY_ALIAS.get(measure_id)
+            if definition is None:
+                raise ValueError(f"Invalid measure name: {measure_id}")
 
-        ## check whether the parameters are valid
-        for spec in self.spec_list:
-            measure_name = spec["id"]
-            given_params = spec["params"] if "params" in spec else {}
-            real_params = self.__get_real_params(measure_name)
+            params = spec.get("params")
+            if params is None:
+                params = {}
+            if not isinstance(params, dict):
+                raise TypeError(
+                    f"Invalid params for measure {measure_id}: params must be a dict"
+                )
 
-            ## check whether the given parameters are valid
-            for param in given_params:
-                if param not in real_params:
-                    raise Exception(
-                        f"Invalid parameter {param} for measure {measure_name}"
-                    )
-            self.__validate_k_param(measure_name, given_params)
+            unknown = set(params) - definition.user_params
+            if unknown:
+                names = ", ".join(sorted(unknown))
+                raise ValueError(
+                    f"Invalid parameter(s) {names} for measure {definition.id}"
+                )
 
-    def __interpret_measures_spec(self):
-        """
-        Interpret the measures spec and specify the preprequisites (knn, distance matrices)
-        """
-        for spec in self.spec_list:
-            measure_name = spec["id"]
-            given_params = spec["params"] if "params" in spec else {}
-            real_params = self.__get_real_params(measure_name)
+            spec["id"] = definition.id
+            spec["params"] = params
+            self._validate_k(definition, params)
+            self._definitions.append(definition)
 
-            if "knn_ranking_info" in real_params:
-                self.knn_ranking_flag = True
-                if "k" in given_params:
-                    self.knn_ranking_flag_k = max(
-                        self.knn_ranking_flag_k, given_params["k"]
-                    )
-                else:
-                    self.knn_ranking_flag_k = max(
-                        self.knn_ranking_flag_k, self.DEFAULT_K
-                    )
-            if "knn_info" in real_params or "knn_emb_info" in real_params:
-                self.knn_flag = True
-                if "k" in given_params:
-                    self.knn_flag_k = max(self.knn_flag_k, given_params["k"])
-                else:
-                    self.knn_flag_k = max(self.knn_flag_k, self.DEFAULT_K)
-            if "distance_matrices" in real_params:
-                self.distance_matrices_flag = True
-
-    def __get_real_params(self, measure_name):
-        """
-        Get the real parameters of a measure.
-        """
-        measure_func = globals()[measure_name].measure
-        return measure_func.__code__.co_varnames[: measure_func.__code__.co_argcount]
-
-    def __validate_k_param(self, measure_name: str, given_params: dict[str, Any]):
-        if "k" not in given_params:
+    def _validate_k(self, definition: MetricDefinition, params: dict[str, Any]) -> None:
+        if definition.k_rule is None:
             return
-        k_val = given_params["k"]
-        if not isinstance(k_val, int):
-            raise TypeError(
-                f"Invalid parameter k for measure {measure_name}: expected int, got {type(k_val).__name__}"
+        value = params.get("k")
+        if definition.k_rule == "optional_neighbor" and value is None:
+            return
+        if value is None:
+            value = self.DEFAULT_K
+        if definition.k_rule == "trustworthiness":
+            validate_trustworthiness_k(self.orig.shape[0], value)
+        else:
+            validate_neighbor_k(self.orig.shape[0], value)
+
+    def _interpret_specs(self) -> None:
+        for spec, definition in zip(self.spec_list, self._definitions, strict=True):
+            params = spec["params"]
+            if "distance_matrices" in definition.cache:
+                self.distance_matrices_flag = True
+            if "knn_ranking_info" in definition.cache:
+                self.ranking_k = max(self.ranking_k, params.get("k", self.DEFAULT_K))
+            if "knn_info" in definition.cache:
+                self.knn_both_k = max(self.knn_both_k, params.get("k", self.DEFAULT_K))
+            if "knn_emb_info" in definition.cache:
+                self.knn_emb_k = max(self.knn_emb_k, params.get("k", self.DEFAULT_K))
+
+    def _prepare_original_space(self) -> None:
+        if self.distance_matrices_flag:
+            if self.geodesic:
+                self.orig_distance_matrix = self._pairwise_geodesic_distance_matrix(
+                    self.orig
+                )
+            else:
+                self.orig_distance_matrix = pdist.pairwise_distance_matrix(self.orig)
+
+        orig_k = max(self.ranking_k, self.knn_both_k)
+        if orig_k < 0:
+            return
+        if self.ranking_k >= 0:
+            self.orig_knn_indices, self.orig_knn_ranking = knn.knn_with_ranking(
+                self.orig, orig_k, distance_matrix=self.orig_distance_matrix
             )
-        n = self.orig.shape[0]
-        if k_val < 1 or k_val >= n:
+        elif self.orig_distance_matrix is not None:
+            self.orig_knn_indices = knn.knn_from_distance_matrix(
+                self.orig_distance_matrix, orig_k
+            )
+        else:
+            self.orig_knn_indices = knn.knn(self.orig, orig_k)
+
+    def _estimate_cache_bytes(self) -> int:
+        """Estimate persistent original+embedded cache storage."""
+
+        n_samples = self.orig.shape[0]
+        total = 0
+        if self.distance_matrices_flag:
+            total += 2 * n_samples * n_samples * np.dtype(np.float64).itemsize
+        if self.ranking_k >= 0:
+            total += 2 * n_samples * n_samples * np.dtype(np.intp).itemsize
+        orig_k = max(self.ranking_k, self.knn_both_k, 0)
+        emb_k = max(self.ranking_k, self.knn_both_k, self.knn_emb_k, 0)
+        total += (orig_k + emb_k) * n_samples * np.dtype(np.int64).itemsize
+        return int(total)
+
+    def _prepare_embedded_space(self) -> None:
+        if self.distance_matrices_flag:
+            self.emb_distance_matrix = pdist.pairwise_distance_matrix(self.emb)
+
+        emb_k = max(self.ranking_k, self.knn_both_k, self.knn_emb_k)
+        if emb_k < 0:
+            return
+        if self.ranking_k >= 0:
+            self.emb_knn_indices, self.emb_knn_ranking = knn.knn_with_ranking(
+                self.emb, emb_k, distance_matrix=self.emb_distance_matrix
+            )
+        elif self.emb_distance_matrix is not None:
+            self.emb_knn_indices = knn.knn_from_distance_matrix(
+                self.emb_distance_matrix, emb_k
+            )
+        else:
+            self.emb_knn_indices = knn.knn(self.emb, emb_k)
+
+    @staticmethod
+    def _geodesic_distance(phi1, lambda1, phi2, lambda2) -> float:
+        cosine = math.sin(phi1) * math.sin(phi2) + math.cos(phi1) * math.cos(
+            phi2
+        ) * math.cos(abs(lambda2 - lambda1))
+        return math.acos(float(np.clip(cosine, -1.0, 1.0)))
+
+    @classmethod
+    def _pairwise_geodesic_distance_matrix(cls, orig):
+        if orig.shape[1] < 2:
             raise ValueError(
-                f"Invalid parameter k for measure {measure_name}: k must satisfy 1 <= k < n (n={n}), got k={k_val}"
+                "geodesic=True requires orig[:, 0] = longitude and "
+                "orig[:, 1] = latitude in radians"
             )
-
-    def __geodesic_distance(self, phi1, lambda1, phi2, lambda2):
-        return math.acos(
-            math.sin(phi1) * math.sin(phi2)
-            + math.cos(phi1) * math.cos(phi2) * math.cos(abs(lambda2 - lambda1))
-        )
-
-    def __pairwise_geodesic_distance_matrix(self, orig):
         data_len = len(orig)
         distance_matrix = np.zeros((data_len, data_len))
         for i in range(data_len):
-            for j in range(i, data_len):
-                if i == j:
-                    distance_matrix[i][j] = 0
-                else:
-                    distance_matrix[i][j] = distance_matrix[j][
-                        i
-                    ] = self.__geodesic_distance(
-                        orig[i][1], orig[i][0], orig[j][1], orig[j][0]
-                    )
+            for j in range(i + 1, data_len):
+                distance_matrix[i, j] = distance_matrix[j, i] = cls._geodesic_distance(
+                    orig[i, 1], orig[i, 0], orig[j, 1], orig[j, 0]
+                )
         return distance_matrix
+
+
+def _python_scalars(value):
+    """Convert NumPy scalar results while preserving arrays used by local output."""
+
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {key: _python_scalars(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_python_scalars(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_python_scalars(item) for item in value)
+    return value

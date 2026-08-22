@@ -1,10 +1,13 @@
 from typing import Literal
+
+import numpy.typing as npt
 from sklearn.metrics import (
-    silhouette_score,
     calinski_harabasz_score,
     davies_bouldin_score,
+    silhouette_score,
 )
-import numpy.typing as npt
+
+from .utils.validation import as_finite_2d, validate_labels
 
 IVMMeasure = Literal["silhouette", "calinski_harabasz", "davies_bouldin"]
 
@@ -18,6 +21,8 @@ def measure(
     Compute internal validation measure of the embedding.
     """
 
+    emb = as_finite_2d(emb, "emb")
+    label = validate_labels(label, emb.shape[0], min_classes=2)
     measure_name = measure.lower()
     scorers = {
         "silhouette": silhouette_score,
@@ -31,5 +36,5 @@ def measure(
             f"Invalid internal validation measure '{measure}'. Allowed values: {allowed}"
         )
 
-    score = scorers[measure_name](emb, label)
+    score = float(scorers[measure_name](emb, label))
     return {measure_name: score}

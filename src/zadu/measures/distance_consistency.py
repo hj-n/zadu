@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
+from .utils.validation import as_finite_2d, validate_labels
+
 
 def measure(emb: npt.NDArray, label: npt.NDArray) -> dict:
     """
@@ -12,26 +14,12 @@ def measure(emb: npt.NDArray, label: npt.NDArray) -> dict:
         dict: distance consistency (dsc)
     """
 
-    # compute centroids
-    point_num = emb.shape[0]
-    label_num = np.unique(label).shape[0]
-
-    centroids = np.zeros((label_num, emb.shape[1]))
-    for i in range(label_num):
-        centroids[i] = np.mean(emb[label == i], axis=0)
-
-    # compute distance consistency
-    consistent_num = 0
-    for idx in range(point_num):
-        current_label = -1
-        current_dist = 1e10
-        for c_idx in range(len(centroids)):
-            dist = np.linalg.norm(emb[idx] - centroids[c_idx])
-            if dist < current_dist:
-                current_dist = dist
-                current_label = c_idx
-        if current_label == label[idx]:
-            consistent_num += 1
-
-    dsc = consistent_num / point_num
-    return {"distance_consistency": dsc}
+    emb = as_finite_2d(emb, "emb")
+    label = validate_labels(label, emb.shape[0], min_classes=2)
+    classes, encoded = np.unique(label, return_inverse=True)
+    centroids = np.vstack(
+        [np.mean(emb[encoded == i], axis=0) for i in range(len(classes))]
+    )
+    distances = np.linalg.norm(emb[:, None, :] - centroids[None, :, :], axis=2)
+    predicted = np.argmin(distances, axis=1)
+    return {"distance_consistency": float(np.mean(predicted == encoded))}

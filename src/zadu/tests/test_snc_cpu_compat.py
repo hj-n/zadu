@@ -3,7 +3,6 @@ import pytest
 
 from zadu.measures import steadiness_cohesiveness as zadu_snc
 
-
 snc_external = pytest.importorskip("snc.snc")
 
 
@@ -68,8 +67,12 @@ def test_snc_local_output_contract_and_proximity_to_legacy():
     expected_score, expected_local = _legacy_score(raw, emb, return_local=True)
     actual_score, actual_local = _local_score(raw, emb, return_local=True)
 
-    assert actual_score["steadiness"] == pytest.approx(expected_score["steadiness"], abs=0.03)
-    assert actual_score["cohesiveness"] == pytest.approx(expected_score["cohesiveness"], abs=0.03)
+    assert actual_score["steadiness"] == pytest.approx(
+        expected_score["steadiness"], abs=0.03
+    )
+    assert actual_score["cohesiveness"] == pytest.approx(
+        expected_score["cohesiveness"], abs=0.03
+    )
 
     assert actual_local["local_steadiness"].shape == (raw.shape[0],)
     assert actual_local["local_cohesiveness"].shape == (raw.shape[0],)
@@ -77,10 +80,19 @@ def test_snc_local_output_contract_and_proximity_to_legacy():
     assert np.all(np.isfinite(actual_local["local_cohesiveness"]))
 
     mean_delta_stead = float(
-        np.mean(np.abs(actual_local["local_steadiness"] - expected_local["local_steadiness"]))
+        np.mean(
+            np.abs(
+                actual_local["local_steadiness"] - expected_local["local_steadiness"]
+            )
+        )
     )
     mean_delta_cohev = float(
-        np.mean(np.abs(actual_local["local_cohesiveness"] - expected_local["local_cohesiveness"]))
+        np.mean(
+            np.abs(
+                actual_local["local_cohesiveness"]
+                - expected_local["local_cohesiveness"]
+            )
+        )
     )
 
     # Local values are stochastic and amplified by normalization, so compare by mean deviation.

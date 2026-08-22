@@ -1,6 +1,8 @@
-from .utils import pairwise_dist as pdist
 import numpy as np
 import numpy.typing as npt
+
+from .utils import pairwise_dist as pdist
+from .utils.validation import validate_pair
 
 
 def measure(
@@ -19,6 +21,7 @@ def measure(
         dict: Kullback-Leibler divergence (kl)
     """
 
+    orig, emb = validate_pair(orig, emb)
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
@@ -29,4 +32,4 @@ def measure(
     density_emb = pdist.distance_matrix_to_density(emb_distance_matrix, sigma)
 
     kl = np.sum(density_orig * np.log(density_orig / density_emb))
-    return {"kl_divergence": kl}
+    return {"kl_divergence": float(kl)}

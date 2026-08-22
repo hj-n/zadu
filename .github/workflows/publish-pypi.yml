@@ -7,7 +7,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  snc-compat:
+    runs-on: ubuntu-latest
+    env:
+      NUMBA_ENABLE_CUDASIM: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install ZADU and the legacy SNC oracle
+        run: python -m pip install -e ".[dev]" "snc==0.2.0"
+      - name: Compare the CPU port with SNC 0.2.0
+        run: python -m pytest src/zadu/tests/test_snc_cpu_compat.py -q
+
+  verify-and-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,11 +34,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build distribution artifacts
+      - name: Verify source and build distribution artifacts
         run: |
           python -m pip install --upgrade pip
-          pip install build
+          python -m pip install -e ".[dev]"
+          ruff check .
+          black --check src test scalability_eval
+          python -m pytest --cov=zadu --cov=zaduvis --cov-fail-under=85
           python -m build
+          python -m twine check dist/*
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -31,7 +51,7 @@ jobs:
           path: dist/
 
   publish:
-    needs: build
+    needs: [verify-and-build, snc-compat]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

@@ -1,13 +1,18 @@
 import numpy as np
 import pytest
 
-from zadu import ZADU, MEASURE, MeasureId, make_spec
+from zadu import MEASURE, ZADU, MeasureId, make_spec
+from zadu.measures import (
+    clustering_and_external_validation_measure as cevm,
+)
 from zadu.measures import (
     internal_validation_measure as ivm,
-    clustering_and_external_validation_measure as cevm,
+)
+from zadu.measures import (
     label_trustworthiness_and_continuity as ltnc,
 )
 from zadu.measures.utils import knn as knn_mod
+from zadu.registry import METRICS
 
 
 def test_spec_is_not_mutated_by_abbreviation_normalization():
@@ -87,3 +92,19 @@ def test_typed_spec_uses_short_measure_enum_names():
     # Backward compatibility alias should still be supported.
     score_alias = ZADU([make_spec(MeasureId.TNC, k=10)], raw).measure(emb)[0]
     assert "trustworthiness" in score_alias
+
+
+def test_typed_measure_enum_and_registry_stay_in_sync():
+    assert {member.value for member in MEASURE} == {metric.id for metric in METRICS}
+    assert len({metric.alias for metric in METRICS}) == len(METRICS)
+
+
+def test_cache_memory_estimate_can_guard_large_allocations():
+    raw = np.random.RandomState(0).rand(60, 5)
+    specs = [{"id": "tnc", "params": {"k": 5}}, {"id": "stress"}]
+
+    with pytest.raises(MemoryError, match="Estimated ZADU cache size"):
+        ZADU(specs, raw, max_memory_bytes=1)
+
+    runner = ZADU(specs, raw)
+    assert runner.estimated_cache_bytes > 0

@@ -1,5 +1,6 @@
-from zadu.measures.utils.knn import knn, knn_with_ranking, snn
 import numpy as np
+
+from zadu.measures.utils.knn import knn, knn_with_ranking, snn
 
 
 def test_knn():

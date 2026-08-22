@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
+
 from .utils import knn
+from .utils.validation import validate_pair
 
 
 def measure(
@@ -20,6 +22,7 @@ def measure(
     OUTPUT:
             dict: MRRE_false and MRRE_missing
     """
+    orig, emb = validate_pair(orig, emb)
     if knn_ranking_info is None:
         orig_knn_indices, orig_ranking = knn.knn_with_ranking(orig, k)
         emb_knn_indices, emb_ranking = knn.knn_with_ranking(emb, k)
@@ -77,7 +80,7 @@ def mrre_computation(
     local_distortion_list = np.array(local_distortion_list)
     local_distortion_list = 1 - local_distortion_list / c
 
-    average_distortion = np.mean(local_distortion_list)
+    average_distortion = float(np.mean(local_distortion_list))
 
     if return_local:
         return average_distortion, local_distortion_list

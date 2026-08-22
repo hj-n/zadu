@@ -40,9 +40,11 @@ print(scores)
 
 Input checklist:
 
-- `hd` (`orig`) and `ld` (`emb`) must have the same number of rows.
+- `hd` (`orig`) and `ld` (`emb`) must be finite 2D numeric arrays with the same number of rows.
 - For neighbor-based metrics with `k`, use `1 <= k < n`.
-- Pass `label` to `measure(ld, label)` for label-based metrics (`nh`, `ca_tnc`, `dsc`, `ivm`, `c_evm`, `l_tnc`).
+- For `tnc` and `ca_tnc`, the standard normalization additionally requires `k < n / 2`.
+- Pass `label` to `measure(ld, label)` for label-based metrics (`nh`, `ca_tnc`, `dsc`, `ivm`, `c_evm`, `l_tnc`, `cadi`). Labels may be strings or arbitrary numeric values.
+- Metrics that are mathematically undefined for constant distances, a single class, or coincident neighborhoods raise `ValueError` instead of returning `nan` or `inf`.
 
 ## Use ZADU with Context7
 
@@ -184,7 +186,7 @@ Each dictionary must contain the following keys:
 > |---------|----|------------|-------|---------|
 > | Trustworthiness & Continuity | tnc | `k=20` | [0.5, 1] | 1 |
 > | Mean Relative Rank Errors | mrre | `k=20` | [0, 1] | 1 | 
-> | Local Continuity Meta-Criteria | lcmc | `k=20` | [0, 1] | 1 |
+> | Local Continuity Meta-Criteria | lcmc | `k=20` | [-k/(n-1), 1-k/(n-1)] | 1-k/(n-1) |
 > | Neighborhood hit | nh | `k=20` | [0, 1] | 1 |
 > | Neighbor Dissimilarity | nd | `k=20` | R+ | 0 |
 > | Class-Aware Trustworthiness & Continuity | ca_tnc | `k=20` | [0.5, 1] | 1|
@@ -194,7 +196,7 @@ Each dictionary must contain the following keys:
 > 
 > | Measure | ID | Parameters | Range | Optimum |
 > |---------|----|------------|-------|---------|
-> | Steadiness & Cohesiveness | snc | `iteration=150, walk_num_ratio=0.3, alpha=0.1, k=50, clustering_strategy="dbscan"` | [0, 1] | 1 |
+> | Steadiness & Cohesiveness | snc | `iteration=150, walk_num_ratio=0.3, alpha=0.1, k=None, clustering_strategy="dbscan", random_state=None` | [0, 1] | 1 |
 > | Distance Consistency | dsc | | [0, 1] | 1 |
 > | Internal Validation Measures | ivm | `measure="silhouette"` | Depends on IVM | Depends on IVM |
 > | Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` | Depends on EVM | Depends on EVM |
@@ -218,6 +220,8 @@ The original transformation was intended to map the DSC score into the \[0,1\] r
 > | Pearson’s correlation coefficient | pr | | [-1, 1] | 1
 > | Spearman’s rank correlation coefficient | srho | | [-1, 1] | 1 | 
 
+Pearson and Spearman correlations use each unique off-diagonal distance once (the upper triangle of each distance matrix). Stress-family and density-family metrics reject all-zero distance matrices because their normalizations are undefined there.
+
 > ##### Gap-based Regional Measures
 >
 > | Measure | ID | Parameters | Range | Optimum |
@@ -234,6 +238,7 @@ The Gap Index operates on empty triangular regions of a 2D projection rather tha
 - `c_evm` (`clustering_and_external_validation_measure`)
   - `measure`: `arand`, `ami`, `nmi`, `vmeasure`
   - `clustering`: `kmeans`, `dbscan`
+  - When `clustering="kmeans"`, `n_clusters` defaults to the number of unique labels and `random_state` defaults to `0`; both can be overridden in `clustering_args`.
 - `l_tnc` (`label_trustworthiness_and_continuity`): `cvm` = `dsc`, `ch_btw`
 
 If an invalid option string is passed, ZADU raises a `ValueError` with allowed values.
@@ -278,7 +283,9 @@ nh  = neighborhood_hit.measure(ld, label, k=20)
 
 ### Optimizing the Execution
 
-ZADU automatically optimizes the execution of multiple distortion measures. It minimizes the computational overhead associated with preprocessing stages such as pairwise distance calculation, pointwise distance ranking determination, and k-nearest neighbor identification.
+ZADU automatically optimizes the execution of multiple distortion measures. Its explicit metric registry shares pairwise distances, rankings, and nearest-neighbor indices while retaining the largest requested `k`, so mixed-`k` specifications remain equivalent to direct metric calls. Exact distance and ranking metrics still require O(n²) memory. `ZADU(...).estimated_cache_bytes` exposes the persistent-cache estimate; pass `max_memory_bytes=` to fail before allocation, or use a representative sample when the full pairwise matrix would exceed available memory.
+
+For spherical coordinates, pass `geodesic=True` to `ZADU`. In that mode `orig[:, 0]` is longitude, `orig[:, 1]` is latitude, and both must be expressed in radians. Geodesic distance is used only for the registered original space; embedded-space distances remain Euclidean.
 
 ### Computing Pointwise Local Distortions
 
@@ -356,7 +363,7 @@ For more information about the available distortion measures, their use cases, a
 
 ## Citation
 
-> Hyeon Jeon, Aeri Cho, Jinhwa Jang, Soohyun Lee, Jake Hyun, Hyung-Kwon Ko, Jaemin Jo, and Jinwook Seo. Zadu: A python library for evaluating the reliability of dimensionality reduction embeddings. In 2023 IEEE Visualization and Visual Analytics (VIS), 2023. to appear.
+> Hyeon Jeon, Aeri Cho, Jinhwa Jang, Soohyun Lee, Jake Hyun, Hyung-Kwon Ko, Jaemin Jo, and Jinwook Seo. Zadu: A python library for evaluating the reliability of dimensionality reduction embeddings. In 2023 IEEE Visualization and Visual Analytics (VIS), pages 196–200, 2023.
 
 ```bib
 @INPROCEEDINGS{jeon23vis,
