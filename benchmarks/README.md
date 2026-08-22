@@ -27,3 +27,19 @@ The PR targets are 10x for T&C and class-aware T&C, 4x for MRRE, 5x for LCMC,
 10x for Neighborhood Hit, 50x for Topographic Product, and 1.5x for Procrustes
 on a representative large input. These are review targets, not shared-CI timing
 gates; noisy pull-request runners only enforce correctness.
+
+## Pair-resource planner
+
+Compare the legacy two-dense-matrix path with the fused exact pair-resource
+planner in isolated child processes:
+
+```bash
+python benchmarks/benchmark_pair_resources.py \
+  --samples 2000 --dimension 20 --repeat 5
+```
+
+Use `--memory-budget 16MiB` with the example workload to exercise block
+streaming. The JSON report includes cold resource construction, warm repeated-
+embedding time, isolated process peak RSS, planned cache/peak bytes, selected
+strategy, speedup, and maximum score delta. Peak RSS remains process-wide rather
+than an allocation delta.

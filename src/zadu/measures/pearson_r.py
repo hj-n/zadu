@@ -2,12 +2,18 @@ import numpy as np
 import numpy.typing as npt
 from scipy.stats import pearsonr
 
+from zadu.engine.resources import PairStatistics
+from zadu.kernels import pearson_from_statistics
+
 from .utils import pairwise_dist as pdist
 from .utils.validation import validate_pair
 
 
 def measure(
-    orig: npt.NDArray, emb: npt.NDArray, distance_matrices: tuple | None = None
+    orig: npt.NDArray,
+    emb: npt.NDArray,
+    distance_matrices: tuple | None = None,
+    pair_statistics: PairStatistics | None = None,
 ):
     """
     Compute Pearson's correlation coefficient of the embedding
@@ -20,6 +26,8 @@ def measure(
     """
 
     orig, emb = validate_pair(orig, emb)
+    if pair_statistics is not None:
+        return {"pearson_r": float(pearson_from_statistics(pair_statistics))}
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)

@@ -169,9 +169,17 @@ class ZADU(
 
 ### Exact Execution Planning
 
-ZADU plans distance matrices, neighbor tables, and full rankings as typed exact
-resources. Compatible requests are computed once: a larger `k` serves smaller
-prefixes, and a full ranking also serves metrics that only need kNN indices.
+ZADU plans pair reductions, distance matrices, neighbor tables, and full rankings
+as typed exact resources. Compatible requests are computed once: a larger `k`
+serves smaller prefixes, a full ranking also serves metrics that only need kNN
+indices, and Stress, Scale-Normalized Stress, and Pearson share one exact pass
+over unique point pairs.
+
+Pair-only specifications avoid two persistent `n x n` distance matrices. The
+planner uses compact upper-triangle storage when it fits, switches to bounded
+block streaming for larger or memory-constrained workloads, and reuses dense
+matrices when another requested metric already needs them. Every point pair is
+still evaluated; neither path is approximate.
 
 The optional execution configuration currently exposes the exact NumPy/FAISS
 CPU path and a human-readable memory budget:
@@ -193,10 +201,11 @@ print(runner.last_run_info)
 ```
 
 `last_run_info` is separate from metric scores. It records the exact backend,
-resource providers, dtype, allocation size, construction and metric timings,
-cache reuse, and each resource's first and last consumer. MLX and PyTorch
-providers will be added in later acceleration PRs; unsupported backend or device
-requests currently raise an explicit `ValueError`.
+resource providers, selected pair strategy and block size, estimated cache and
+peak working memory, dtype, construction and metric timings, release/reuse, and
+each resource's first and last consumer. MLX and PyTorch providers will be added
+in later acceleration PRs; unsupported backend or device requests currently
+raise an explicit `ValueError`.
 
 ### Parameters:
 
@@ -316,7 +325,7 @@ nh  = neighborhood_hit.measure(ld, label, k=20)
 
 ### Optimizing the Execution
 
-ZADU automatically optimizes the execution of multiple distortion measures. Its explicit metric registry shares pairwise distances, rankings, and nearest-neighbor indices while retaining the largest requested `k`, so mixed-`k` specifications remain equivalent to direct metric calls. Exact distance and ranking metrics still require O(n²) memory. `ZADU(...).estimated_cache_bytes` exposes the persistent-cache estimate; pass `max_memory_bytes=` to fail before allocation, or use a representative sample when the full pairwise matrix would exceed available memory.
+ZADU automatically optimizes the execution of multiple distortion measures. Its explicit metric registry shares exact pair statistics, pairwise distances, rankings, and nearest-neighbor indices while retaining the largest requested `k`, so mixed-`k` specifications remain equivalent to direct metric calls. Pair-only Stress, Scale-Normalized Stress, and Pearson runs use condensed or memory-bounded streaming resources; metrics requiring full ranks or global distance ordering still need O(n²) storage. `ZADU(...).estimated_cache_bytes` exposes the persistent-cache estimate, while `last_run_info["planned_peak_bytes"]` includes package-managed pair working memory. Pass `max_memory_bytes=` or `ExecutionConfig(memory_budget=...)` to select a bounded strategy or fail before an oversized package-managed allocation.
 
 For spherical coordinates, pass `geodesic=True` to `ZADU`. In that mode `orig[:, 0]` is longitude, `orig[:, 1]` is latitude, and both must be expressed in radians. Geodesic distance is used only for the registered original space; embedded-space distances remain Euclidean.
 

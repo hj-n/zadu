@@ -5,7 +5,7 @@ import pytest
 
 from zadu import ZADU, ExecutionConfig
 from zadu.backends import NumpyResourceProvider
-from zadu.engine.resources import ResourceKind, Space
+from zadu.engine.resources import PairStrategy, ResourceKind, Space
 from zadu.measures import (
     local_continuity_meta_criteria,
     neighborhood_hit,
@@ -100,6 +100,7 @@ def test_plan_deduplicates_resources_and_promotes_knn_to_ranking():
         (ResourceKind.NEIGHBOR_RANKING, Space.ORIGINAL, 10),
         (ResourceKind.DISTANCE_MATRIX, Space.EMBEDDED, None),
         (ResourceKind.NEIGHBOR_RANKING, Space.EMBEDDED, 10),
+        (ResourceKind.PAIR_STATISTICS, Space.PAIRED, None),
     ]
 
     n = len(orig)
@@ -108,6 +109,7 @@ def test_plan_deduplicates_resources_and_promotes_knn_to_ranking():
     assert first.ranking_k == 5
     assert first.knn_both_k == 10
     assert first.knn_emb_k == 7
+    assert first._execution_plan.pair_plan.strategy is PairStrategy.DENSE
 
 
 def test_mixed_k_plan_preserves_exact_results_with_duplicate_ties():

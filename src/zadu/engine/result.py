@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
-from .resources import NeighborRanking, ResourceCache
+from .resources import ResourceCache
 
 if TYPE_CHECKING:
     from .planner import ExecutionPlan
@@ -34,11 +32,13 @@ def build_run_info(
                 "space": key.space.value,
                 "k": key.k,
                 "provider": record.provider,
-                "dtype": _dtype_description(record.value),
+                "dtype": record.dtype,
                 "bytes": record.bytes,
                 "build_seconds": record.build_seconds,
                 "built_in_run": record.generation == cache.generation,
                 "reused": record.generation != cache.generation,
+                "released": record.released,
+                "details": record.details,
                 "consumer_count": len(consumer_indices),
                 "consumers": [
                     plan.metric_plans[index].metric_id for index in consumer_indices
@@ -53,6 +53,11 @@ def build_run_info(
         "backend": backend,
         "device": device,
         "estimated_cache_bytes": plan.estimated_cache_bytes,
+        "planned_peak_bytes": plan.planned_peak_bytes,
+        "memory_budget_bytes": plan.memory_budget_bytes,
+        "pair_strategy": (
+            plan.pair_plan.strategy.value if plan.pair_plan is not None else None
+        ),
         "resource_seconds": float(
             sum(
                 record.build_seconds
@@ -68,14 +73,3 @@ def build_run_info(
             for metric_id, seconds in metric_timings
         ],
     }
-
-
-def _dtype_description(value: Any) -> str | dict[str, str] | None:
-    if isinstance(value, NeighborRanking):
-        return {
-            "indices": value.indices.dtype.name,
-            "ranking": value.ranking.dtype.name,
-        }
-    if isinstance(value, np.ndarray):
-        return value.dtype.name
-    return None
