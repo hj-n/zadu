@@ -44,6 +44,21 @@ jobs:
           python -m build
           python -m twine check dist/*
 
+      - name: Verify release tag matches package version
+        if: github.ref_type == 'tag'
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+
+          with open("pyproject.toml", "rb") as handle:
+              version = tomllib.load(handle)["project"]["version"]
+          expected = f"v{version}"
+          actual = os.environ["GITHUB_REF_NAME"]
+          if actual != expected:
+              raise SystemExit(f"Release tag {actual!r} does not match {expected!r}")
+          PY
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

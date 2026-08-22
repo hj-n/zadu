@@ -1,0 +1,123 @@
+name: Benchmarks
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install benchmark environment
+        run: python -m pip install -e ".[dev]"
+      - name: Run exact CPU benchmarks
+        run: |
+          mkdir -p benchmark-results
+          python benchmarks/benchmark_numpy_kernels.py \
+            --samples 2000 --dimension 50 --neighbors 20 --repeat 5 \
+            --json benchmark-results/numpy-kernels.json
+          python benchmarks/benchmark_pair_resources.py \
+            --samples 2000 --dimension 20 --repeat 5 \
+            --json benchmark-results/pair-resources.json
+          python benchmarks/benchmark_topographic_resources.py \
+            --samples 2000 --dimension 20 --neighbors 20 --repeat 5 \
+            --json benchmark-results/topographic-resources.json
+          python benchmarks/benchmark_measure_many.py \
+            --samples 2000 --dimension 20 --embeddings 8 --workers 2 --repeat 3 \
+            --json benchmark-results/measure-many.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpu-benchmarks-${{ github.run_id }}
+          path: benchmark-results
+
+  apple-accelerators:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install MLX and PyTorch benchmark environment
+        run: python -m pip install -e ".[dev,mlx,torch]"
+      - name: Assert maintained Apple accelerators
+        run: |
+          python -c "import mlx.core as mx; assert mx.metal.is_available()"
+          python -c "import torch; assert torch.backends.mps.is_available()"
+      - name: Run Apple accelerator benchmarks
+        run: |
+          mkdir -p benchmark-results
+          python benchmarks/benchmark_mlx_pairwise.py \
+            --samples 2000 --dimension 20 --device gpu --dtype float32 --repeat 5 \
+            --json benchmark-results/mlx-pairwise.json
+          python benchmarks/benchmark_mlx_neighbors.py \
+            --samples 2000 --dimension 20 --k 20 --kind ranking \
+            --device gpu --dtype float32 --repeat 5 \
+            --json benchmark-results/mlx-ranking.json
+          python benchmarks/benchmark_mlx_measure_many.py \
+            --samples 2000 --dimension 20 --embeddings 8 --batch-size 4 --k 20 \
+            --device gpu --dtype float32 --repeat 3 \
+            --json benchmark-results/mlx-measure-many.json
+          python benchmarks/benchmark_torch_pairwise.py \
+            --samples 2000 --dimension 20 --device cpu --dtype float64 --repeat 5 \
+            --json benchmark-results/torch-cpu-pairwise.json
+          python benchmarks/benchmark_torch_neighbors.py \
+            --samples 2000 --dimension 20 --k 20 --kind ranking \
+            --device mps --dtype float32 --repeat 5 \
+            --json benchmark-results/torch-mps-ranking.json
+          python benchmarks/benchmark_torch_measure_many.py \
+            --samples 2000 --dimension 20 --embeddings 8 --batch-size 4 --k 20 \
+            --device mps --dtype float32 --repeat 3 \
+            --json benchmark-results/torch-mps-measure-many.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apple-accelerator-benchmarks-${{ github.run_id }}
+          path: benchmark-results
+
+  release-history:
+    runs-on: ubuntu-latest
+    env:
+      NUMBA_ENABLE_CUDASIM: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install shared historical environment
+        run: python -m pip install -e ".[dev]" "snc==0.2.0"
+      - name: Check out stable baselines
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/zadu-v0.1.1" v0.1.1
+          git worktree add --detach "$RUNNER_TEMP/zadu-v0.5.0" v0.5.0
+      - name: Compare release history
+        run: |
+          mkdir -p benchmark-results
+          python benchmarks/benchmark_release_history.py \
+            --source "2023-v0.1.1=$RUNNER_TEMP/zadu-v0.1.1" \
+            --source "pre-acceleration-v0.5.0=$RUNNER_TEMP/zadu-v0.5.0" \
+            --source "current=$GITHUB_WORKSPACE" \
+            --samples 500 1000 2000 --dimension 20 --k 20 --repeat 5 \
+            --json benchmark-results/release-history.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-history-${{ github.run_id }}
+          path: benchmark-results

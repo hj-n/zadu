@@ -10,6 +10,7 @@ _MEMORY_PATTERN = re.compile(
     r"^\s*(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>B|KIB|MIB|GIB|KB|MB|GB)?\s*$",
     re.IGNORECASE,
 )
+_BACKEND_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 _MEMORY_MULTIPLIERS = {
     None: 1,
     "B": 1,
@@ -75,8 +76,6 @@ class ExecutionConfig:
         backend = self.backend.lower()
         device = self.device.lower()
         dtype = self.dtype.lower() if self.dtype is not None else None
-        if backend not in {"auto", "numpy", "mlx", "torch"}:
-            raise ValueError("backend must be 'auto', 'numpy', 'mlx', or 'torch'")
         if backend in {"auto", "numpy"}:
             if device not in {"auto", "cpu"}:
                 raise ValueError("device must be 'auto' or 'cpu' for the NumPy backend")
@@ -96,7 +95,7 @@ class ExecutionConfig:
                 )
             if device == "gpu" and dtype != "float32":
                 raise ValueError("The MLX GPU requires dtype='float32'")
-        else:
+        elif backend == "torch":
             if device not in {"auto", "cpu", "mps", "cuda"}:
                 raise ValueError(
                     "device must be 'auto', 'cpu', 'mps', or 'cuda' for the "
@@ -109,6 +108,16 @@ class ExecutionConfig:
                 )
             if device == "mps" and dtype != "float32":
                 raise ValueError("PyTorch MPS requires dtype='float32'")
+        else:
+            if _BACKEND_PATTERN.fullmatch(backend) is None:
+                raise ValueError(
+                    "External backend names must start with a letter and contain "
+                    "only lowercase letters, digits, '.', '_', or '-'"
+                )
+            if not device:
+                raise ValueError("device must not be empty for an external backend")
+            if dtype == "":
+                raise ValueError("dtype must not be empty for an external backend")
         object.__setattr__(self, "backend", backend)
         object.__setattr__(self, "device", device)
         object.__setattr__(self, "dtype", dtype)
@@ -125,7 +134,7 @@ class ExecutionConfig:
 
     @property
     def resolved_backend(self) -> str:
-        return self.backend if self.backend in {"mlx", "torch"} else "numpy"
+        return "numpy" if self.backend == "auto" else self.backend
 
     @property
     def resolved_device(self) -> str:

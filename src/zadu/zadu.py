@@ -77,6 +77,11 @@ class ZADU:
         self._validate_and_normalize_specs()
         self._interpret_specs()
         self._provider = create_resource_provider(self.execution)
+        provider_working_memory = getattr(
+            self._provider,
+            "working_memory_bytes",
+            None,
+        )
         self._execution_plan = build_execution_plan(
             self._definitions,
             self.spec_list,
@@ -87,6 +92,7 @@ class ZADU:
             geodesic=self.geodesic,
             backend=self._provider.name,
             resource_dtype_bytes=np.dtype(self._provider.dtype).itemsize,
+            provider_working_memory=provider_working_memory,
         )
         self.distance_matrices_flag = any(
             key.kind is ResourceKind.DISTANCE_MATRIX

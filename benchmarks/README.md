@@ -28,6 +28,39 @@ The PR targets are 10x for T&C and class-aware T&C, 4x for MRRE, 5x for LCMC,
 on a representative large input. These are review targets, not shared-CI timing
 gates; noisy pull-request runners only enforce correctness.
 
+## Release-history comparison
+
+Compare the current source against the stable 2023 tag and the release
+immediately before the 0.5.1 acceleration work under one interpreter/dependency
+environment:
+
+```bash
+git worktree add --detach /tmp/zadu-v0.1.1 v0.1.1
+git worktree add --detach /tmp/zadu-v0.5.0 v0.5.0
+
+python benchmarks/benchmark_release_history.py \
+  --source 2023-v0.1.1=/tmp/zadu-v0.1.1 \
+  --source pre-acceleration-v0.5.0=/tmp/zadu-v0.5.0 \
+  --source current=. \
+  --samples 500 1000 2000 --dimension 20 --k 20 --repeat 5 \
+  --json benchmarks/results/0.5.1/history-default.json
+```
+
+The worker runs every source in an isolated process and reports constructor,
+first-evaluation, warm median, process peak RSS, score deltas, revisions, and
+environment metadata. Use `--suite` to select a common workload or
+`--embeddings 8` for repeated evaluation. To compare one current explicit
+backend with historical defaults, add for example:
+
+```bash
+--accelerated-label current --backend mlx --device gpu --dtype float32
+```
+
+This is a same-machine source comparison, not a reconstruction of 2023 hardware
+or dependencies. Metric fixes can also invalidate equal-work claims; inspect the
+reported score delta and the full
+[0.5.1 report](../docs/performance/0.5.1-acceleration-report.md).
+
 ## Pair-resource planner
 
 Compare the legacy two-dense-matrix path with the fused exact pair-resource

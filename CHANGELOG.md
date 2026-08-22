@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1
 
 ### Added
 
@@ -35,6 +35,10 @@
 - Provider-native PyTorch batching for equal-shaped repeated embeddings using
   batched `cdist` and stable sorting, with bounded batch width and indexed
   failures.
+- A provisional `zadu.backends` entry-point contract for separately packaged
+  exact providers, including an optional planner working-memory hook.
+- A backend capability guide, scheduled benchmark workflow, reproducible
+  release-history benchmark, and 0.5.1 acceleration report.
 
 ### Changed
 

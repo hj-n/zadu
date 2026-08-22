@@ -217,6 +217,10 @@ resource providers, selected pair strategy and block size, estimated cache and
 peak working memory, dtype, construction and metric timings, release/reuse, and
 each resource's first and last consumer.
 
+See the [backend capability table](docs/backends.md) for dtype/device support,
+fallback boundaries, CUDA validation status, and the provisional third-party
+`zadu.backends` entry-point contract.
+
 ### Optional MLX preview
 
 On Apple Silicon, install MLX separately and select it explicitly:

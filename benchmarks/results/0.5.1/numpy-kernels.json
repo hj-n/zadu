@@ -1,0 +1,72 @@
+{
+  "metadata": {
+    "samples": 2000,
+    "dimension": 50,
+    "embedding_dimension": 2,
+    "neighbors": 20,
+    "dtype": "float64",
+    "repeat": 5,
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "results": [
+    {
+      "metric": "T&C",
+      "reference_seconds": 0.026547082932665944,
+      "current_seconds": 0.001281416043639183,
+      "speedup": 20.716989665021696,
+      "absolute_delta": 0.0,
+      "peak_rss_mib": 341.234375
+    },
+    {
+      "metric": "Class-aware T&C",
+      "reference_seconds": 0.029025250114500523,
+      "current_seconds": 0.001339457929134369,
+      "speedup": 21.669400347092818,
+      "absolute_delta": 0.0,
+      "peak_rss_mib": 341.546875
+    },
+    {
+      "metric": "MRRE",
+      "reference_seconds": 0.004727791994810104,
+      "current_seconds": 0.0007455421146005392,
+      "speedup": 6.34141506190197,
+      "absolute_delta": 0.0,
+      "peak_rss_mib": 341.859375
+    },
+    {
+      "metric": "LCMC",
+      "reference_seconds": 0.010125749977305532,
+      "current_seconds": 0.0009832079522311687,
+      "speedup": 10.29868600465184,
+      "absolute_delta": 0.0,
+      "peak_rss_mib": 341.875
+    },
+    {
+      "metric": "Neighborhood Hit",
+      "reference_seconds": 0.003180083120241761,
+      "current_seconds": 0.000218207947909832,
+      "speedup": 14.57363561090743,
+      "absolute_delta": 0.0,
+      "peak_rss_mib": 341.875
+    },
+    {
+      "metric": "Topographic Product",
+      "reference_seconds": 0.1994862910360098,
+      "current_seconds": 0.002563375048339367,
+      "speedup": 77.82173395393043,
+      "absolute_delta": 1.7763568394002505e-15,
+      "peak_rss_mib": 343.453125
+    },
+    {
+      "metric": "Procrustes",
+      "reference_seconds": 0.049260167172178626,
+      "current_seconds": 0.011713000014424324,
+      "speedup": 4.205597806839898,
+      "absolute_delta": 0.0,
+      "peak_rss_mib": 351.546875
+    }
+  ]
+}

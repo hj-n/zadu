@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zadu"
-version = "0.5.0"
+version = "0.5.1"
 description = "A Python Toolkit for Evaluating the Reliability of Dimensionality Reduction Embeddings"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -59,6 +59,11 @@ benchmark = [
   "tqdm",
   "umap-learn",
 ]
+
+[project.entry-points."zadu.backends"]
+numpy = "zadu.backends:numpy_backend_entrypoint"
+mlx = "zadu.backends:mlx_backend_entrypoint"
+torch = "zadu.backends:torch_backend_entrypoint"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

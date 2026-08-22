@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from zadu import ZADU, ExecutionConfig
+from zadu import ZADU, ExecutionConfig, backends
 from zadu.backends import NumpyResourceProvider
 from zadu.engine.resources import (
     PairStrategy,
@@ -57,7 +57,7 @@ def test_execution_config_normalizes_exact_numpy_options():
 @pytest.mark.parametrize(
     "kwargs,error,match",
     [
-        ({"backend": "other"}, ValueError, "auto.*numpy.*mlx.*torch"),
+        ({"backend": "Bad Backend"}, ValueError, "External backend names"),
         ({"backend": 1}, TypeError, "backend"),
         ({"device": "gpu"}, ValueError, "auto.*cpu"),
         ({"device": 1}, TypeError, "device"),
@@ -131,6 +131,68 @@ def test_execution_config_normalizes_explicit_torch_options():
         embedding_workers=3,
     )
     assert batched.embedding_workers == 3
+
+
+def test_external_backend_entry_point_is_loaded_and_can_plan_working_memory(
+    monkeypatch,
+):
+    class ExternalProvider(NumpyResourceProvider):
+        name = "test_backend"
+
+        @staticmethod
+        def working_memory_bytes(key, n_samples, available_bytes):
+            del key, n_samples
+            return min(4096, available_bytes)
+
+    class EntryPoint:
+        name = "test_backend"
+
+        @staticmethod
+        def load():
+            return lambda execution: ExternalProvider()
+
+    class EntryPoints(tuple):
+        def select(self, *, group):
+            return self if group == "zadu.backends" else ()
+
+    monkeypatch.setattr(backends, "entry_points", lambda: EntryPoints([EntryPoint()]))
+    config = ExecutionConfig(
+        backend="TEST_BACKEND",
+        device="cpu",
+        dtype="float64",
+    )
+    orig, emb, _ = _sample()
+    runner = ZADU([{"id": "stress"}], orig, execution=config)
+
+    scores = runner.measure(emb)
+
+    assert config.resolved_backend == "test_backend"
+    assert runner.last_run_info["backend"] == "test_backend"
+    assert scores[0]["stress"] >= 0
+    assert backends.available_resource_backends() == (
+        "mlx",
+        "numpy",
+        "test_backend",
+        "torch",
+    )
+    assert runner._execution_plan.resource_working_bytes
+    assert set(runner._execution_plan.resource_working_bytes.values()) == {4096}
+
+
+def test_missing_external_backend_entry_point_has_actionable_error(monkeypatch):
+    class EntryPoints(tuple):
+        def select(self, *, group):
+            del group
+            return ()
+
+    monkeypatch.setattr(backends, "entry_points", lambda: EntryPoints())
+
+    with pytest.raises(ValueError, match=r"No installed.*missing_backend.*Available"):
+        ZADU(
+            [],
+            np.ones((3, 1)),
+            execution=ExecutionConfig(backend="missing_backend"),
+        )
 
 
 def test_legacy_and_config_memory_budgets_are_mutually_exclusive():

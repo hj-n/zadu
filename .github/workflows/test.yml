@@ -107,7 +107,7 @@ jobs:
           python -m pip install build twine
           python -m build
           python -m twine check dist/*
-      - name: Verify third-party notices are packaged
+      - name: Verify wheel metadata and third-party notices
         run: |
           python - <<'PY'
           import tarfile
@@ -122,6 +122,19 @@ jobs:
               names = archive.namelist()
               assert any(name.endswith("gap-index-MIT.txt") for name in names)
               assert any(name.endswith("THIRD_PARTY_NOTICES.md") for name in names)
+              metadata_name = next(name for name in names if name.endswith("/METADATA"))
+              metadata = archive.read(metadata_name).decode()
+              assert "Version: 0.5.1" in metadata
+              assert "Provides-Extra: mlx" in metadata
+              assert "Provides-Extra: torch" in metadata
+              entry_points_name = next(
+                  name for name in names if name.endswith("/entry_points.txt")
+              )
+              entry_points = archive.read(entry_points_name).decode()
+              assert "[zadu.backends]" in entry_points
+              assert "numpy = zadu.backends:numpy_backend_entrypoint" in entry_points
+              assert "mlx = zadu.backends:mlx_backend_entrypoint" in entry_points
+              assert "torch = zadu.backends:torch_backend_entrypoint" in entry_points
 
           with tarfile.open(sdist) as archive:
               names = archive.getnames()
