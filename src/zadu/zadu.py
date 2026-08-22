@@ -29,7 +29,8 @@ class ZADU:
         "stress": "stress",
         "sn_stress": "scale_normalized_stress",
         "nm_stress": "non_metric_stress",
-        "cadi": "class_angular_distortion_index"
+        "cadi": "class_angular_distortion_index",
+        "gi": "gap_index",
     }
 
     DEFAULT_K = 20

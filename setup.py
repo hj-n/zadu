@@ -30,5 +30,6 @@ setuptools.setup(
     ],
     package_dir={"": "src"},
     packages=["zadu", "zaduvis", "zadu.measures", "zadu.measures.utils"],
+    license_files=["LICENSE", "LICENSES/*", "THIRD_PARTY_NOTICES.md"],
     python_requires=">=3.10.0",
 )
