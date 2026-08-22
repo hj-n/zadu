@@ -10,6 +10,8 @@
   NumPy/FAISS resource provider.
 - `ExecutionConfig` for backend, device, and memory-budget selection, plus
   `ZADU.last_run_info` for separate execution diagnostics.
+- Exact condensed and memory-bounded streaming pair resources, with an isolated
+  dense-versus-planned benchmark.
 
 ### Changed
 
@@ -19,6 +21,9 @@
 - Metric registry cache declarations now use typed resource requirements; full
   rankings satisfy compatible kNN requests and larger `k` resources serve
   smaller prefixes.
+- Stress, Scale-Normalized Stress, and Pearson now share one stable sufficient-
+  statistics pass over unique off-diagonal pairs and release per-run pair
+  temporaries after their final consumer.
 
 ## 0.5.0
 
