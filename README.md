@@ -173,13 +173,18 @@ ZADU plans pair reductions, distance matrices, neighbor tables, and full ranking
 as typed exact resources. Compatible requests are computed once: a larger `k`
 serves smaller prefixes, a full ranking also serves metrics that only need kNN
 indices, and Stress, Scale-Normalized Stress, and Pearson share one exact pass
-over unique point pairs.
+over unique point pairs. Spearman and Non-Metric Stress share one exact,
+tie-aware original-space pair order across repeated embeddings.
 
 Pair-only specifications avoid two persistent `n x n` distance matrices. The
 planner uses compact upper-triangle storage when it fits, switches to bounded
 block streaming for larger or memory-constrained workloads, and reuses dense
 matrices when another requested metric already needs them. Every point pair is
 still evaluated; neither path is approximate.
+
+Metrics that require a global pair order cannot use block streaming. For those
+metrics, an explicit memory budget that cannot hold the exact condensed/order
+plan raises `MemoryError` before distance allocation begins.
 
 The optional execution configuration currently exposes the exact NumPy/FAISS
 CPU path and a human-readable memory budget:
