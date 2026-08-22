@@ -185,8 +185,8 @@ def test_snc_lifecycle_and_precomputed_knn_validation():
         obj.fit(knn_info=(knn(raw, 3), np.zeros((11, 3), dtype=int)))
 
     obj.fit(knn_info=(knn(raw, 4), knn(emb, 4)))
-    assert np.all(np.diag(obj.raw_snn) == 0)
-    assert np.all(np.diag(obj.emb_snn) == 0)
+    assert np.all(obj.raw_snn.diagonal() == 0)
+    assert np.all(obj.emb_snn.diagonal() == 0)
 
 
 @pytest.mark.parametrize(

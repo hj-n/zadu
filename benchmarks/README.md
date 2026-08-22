@@ -83,3 +83,18 @@ python benchmarks/benchmark_compact_fused_resources.py \
 The report covers eight representative density, rank, and neighbor metrics. It
 includes cold and repeated-embedding time, isolated peak RSS, persistent cache
 and planned peak bytes, selected fusion strategies, and maximum score delta.
+
+## Steadiness & Cohesiveness CPU execution
+
+Compare the pre-PR dense SNN and scalar cluster-pair path with the exact sparse,
+batched single-worker and deterministic multi-worker paths:
+
+```bash
+python benchmarks/benchmark_snc_cpu.py \
+  --samples 2000 --neighbors 20 --iterations 50 --workers 4 --repeat 3
+```
+
+The three modes run in isolated processes and report execution time, peak RSS,
+cache/planned-peak bytes, effective workers, and score deltas. Parallel timing
+is reported separately because the single-worker path can be faster when native
+library calls are short relative to thread scheduling overhead.

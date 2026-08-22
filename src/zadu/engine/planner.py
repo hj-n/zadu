@@ -34,6 +34,8 @@ RANK_WORK_BYTES_PER_COMPARISON = 1
 NEIGHBOR_WORK_BYTES_PER_COMPARISON = 1
 NEIGHBOR_GRAPH_BYTES_PER_EDGE = 16
 NEIGHBOR_PRODUCT_BYTES_PER_CELL = 48
+SNC_SPARSE_BYTES_PER_ENTRY = 16
+SNC_ITERATION_BYTES_PER_CELL = 24
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +107,14 @@ class NeighborStatisticsExecutionPlan:
     metric_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class SNCExecutionPlan:
+    requested_workers: dict[int, int]
+    effective_workers: dict[int, int]
+    metric_working_bytes: dict[int, int]
+    working_bytes: int
+
+
 @dataclass(slots=True)
 class ExecutionPlan:
     resources: tuple[ResourceKey, ...]
@@ -118,6 +128,7 @@ class ExecutionPlan:
     topographic_plan: TopographicExecutionPlan | None
     rank_comparison_plan: RankComparisonExecutionPlan | None
     neighbor_statistics_plan: NeighborStatisticsExecutionPlan | None
+    snc_plan: SNCExecutionPlan | None
     resource_working_bytes: dict[ResourceKey, int]
     release_after_prepare: dict[Space, tuple[ResourceKey, ...]]
 
@@ -145,7 +156,15 @@ def build_execution_plan(
     for definition, spec in zip(definitions, specs, strict=True):
         bindings = []
         for requirement in definition.resources:
-            k = spec["params"].get("k", default_k) if requirement.uses_k else None
+            if requirement.uses_k:
+                requirement_default_k = (
+                    math.isqrt(n_samples)
+                    if requirement.k_default_rule == "sqrt"
+                    else default_k
+                )
+                k = spec["params"].get("k", requirement_default_k)
+            else:
+                k = None
             parameter = (
                 spec["params"].get(
                     requirement.parameter_name,
@@ -741,6 +760,52 @@ def build_execution_plan(
             ),
         )
 
+    snc_plan = None
+    snc_metric_indices = [
+        index
+        for index, definition in enumerate(definitions)
+        if definition.id == "steadiness_cohesiveness"
+    ]
+    if snc_metric_indices:
+        requested_workers = {}
+        effective_workers = {}
+        metric_working_bytes = {}
+        for metric_index in snc_metric_indices:
+            params = specs[metric_index]["params"]
+            k = params.get("k", math.isqrt(n_samples))
+            walk_num = max(1, int(n_samples * params.get("walk_num_ratio", 0.3)))
+            workers = params.get("n_jobs", 1)
+            usable_workers = min(workers, params.get("iteration", 150))
+            graph_entries = n_samples * n_samples
+            graph_bytes = (
+                2 * graph_entries * SNC_SPARSE_BYTES_PER_ENTRY
+                + 2 * n_samples * k * np.dtype(np.float64).itemsize
+            )
+            cluster_size = min(n_samples, walk_num + k + 1)
+            iteration_bytes = max(
+                1,
+                SNC_ITERATION_BYTES_PER_CELL * cluster_size * cluster_size,
+            )
+            if memory_budget is None:
+                planned_workers = usable_workers
+            else:
+                worker_capacity = max(
+                    0,
+                    (available_work_bytes - graph_bytes) // iteration_bytes,
+                )
+                planned_workers = max(1, min(usable_workers, worker_capacity))
+            working_bytes = graph_bytes + planned_workers * iteration_bytes
+            requested_workers[metric_index] = workers
+            effective_workers[metric_index] = planned_workers
+            metric_working_bytes[metric_index] = working_bytes
+            peak_working_bytes = max(peak_working_bytes, working_bytes)
+        snc_plan = SNCExecutionPlan(
+            requested_workers=requested_workers,
+            effective_workers=effective_workers,
+            metric_working_bytes=metric_working_bytes,
+            working_bytes=max(metric_working_bytes.values()),
+        )
+
     planned_peak_bytes = estimated_cache_bytes + peak_working_bytes
 
     return ExecutionPlan(
@@ -755,6 +820,7 @@ def build_execution_plan(
         topographic_plan=topographic_plan,
         rank_comparison_plan=rank_comparison_plan,
         neighbor_statistics_plan=neighbor_statistics_plan,
+        snc_plan=snc_plan,
         resource_working_bytes=resource_working_bytes,
         release_after_prepare=release_after_prepare,
     )
