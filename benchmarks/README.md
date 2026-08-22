@@ -69,3 +69,17 @@ python benchmarks/benchmark_topographic_resources.py \
 
 The report separates cold and repeated-embedding timing, isolated process peak
 RSS, persistent cache and bounded-work estimates, and score delta.
+
+## Compact and fused CPU resources
+
+Compare the pre-fusion exact scheduler with compact indices, shared densities,
+gathered-rank fusion, and blockwise neighbor statistics:
+
+```bash
+python benchmarks/benchmark_compact_fused_resources.py \
+  --samples 2000 --dimension 20 --neighbors 20 --repeat 5
+```
+
+The report covers eight representative density, rank, and neighbor metrics. It
+includes cold and repeated-embedding time, isolated peak RSS, persistent cache
+and planned peak bytes, selected fusion strategies, and maximum score delta.
