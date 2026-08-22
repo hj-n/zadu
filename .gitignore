@@ -4,6 +4,7 @@
 .venv/
 htmlcov/
 uv.lock
+benchmarks/result/
 
 
 .vscode/
