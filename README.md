@@ -222,9 +222,11 @@ The original transformation was intended to map the DSC score into the \[0,1\] r
 >
 > | Measure | ID | Parameters | Range | Optimum |
 > |---------|----|------------|-------|---------|
-> | Gap Index | gi | `metric="euclidean"` | [0, 1] | 0 |
+> | Gap Index[^2] | gi | `metric="euclidean"` | [0, 1] | 0 |
 
 The Gap Index operates on empty triangular regions of a 2D projection rather than fitting cleanly into the local, cluster-level, or global categories above. It supports a SciPy distance function or function name, and `metric="precomputed"` when `hd` is a square distance matrix.
+
+[^2]: Introduced by Jaume Ros, Alessio Arleo, and Fernando Paulovich ([paper](https://arxiv.org/abs/2607.28324), [reference implementation](https://codeberg.org/jros/gap-index)); ZADU retains the original [MIT license](/LICENSES/gap-index-MIT.txt) and [provenance notice](/THIRD_PARTY_NOTICES.md).
 
 #### String Option Values
 
@@ -249,36 +251,6 @@ If an invalid option string is passed, ZADU raises a `ValueError` with allowed v
 - `c_evm` -> key is `{clustering}_{measure}` (e.g., `kmeans_arand`)
 
 For `return_local=True`, local keys are returned in a second list entry per metric where supported.
-
-#### Gap Index Attribution and Citation
-
-The Gap Index was introduced by Jaume Ros, Alessio Arleo, and Fernando Paulovich in *Measuring Distortion in the Empty Regions of Dimensionality Reduction Scatterplots with the Gap Index*. ZADU's implementation is adapted from the authors' [MIT-licensed reference implementation](https://codeberg.org/jros/gap-index) at revision `0a11e4887864fe5d41526d8487eea33685b8f0b4`. The original license is retained in [`LICENSES/gap-index-MIT.txt`](/LICENSES/gap-index-MIT.txt), with additional provenance in [`THIRD_PARTY_NOTICES.md`](/THIRD_PARTY_NOTICES.md).
-
-If you use the Gap Index through ZADU, please cite the original paper:
-
-```python
-from zadu import ZADU
-from zadu.measures import gap_index
-
-score = ZADU([{"id": "gi", "params": {}}], hd).measure(ld)[0]["gap_index"]
-
-# Access the Delaunay triangles and their signed regional deformations.
-details = gap_index.compute(hd, ld)
-print(details.score, details.triangles, details.deformations)
-```
-
-```bibtex
-@misc{ros2026measuringdistortionregionsdimensionality,
-  title={Measuring Distortion in the Empty Regions of Dimensionality Reduction Scatterplots with the Gap Index},
-  author={Jaume Ros and Alessio Arleo and Fernando Paulovich},
-  year={2026},
-  eprint={2607.28324},
-  archivePrefix={arXiv},
-  primaryClass={cs.LG},
-  url={https://arxiv.org/abs/2607.28324}
-}
-```
-
 
 ##### `hd`
 &nbsp;&nbsp;&nbsp;&nbsp;
