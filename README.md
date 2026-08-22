@@ -161,9 +161,42 @@ class ZADU(
     return_local: bool = False,
     verbose: bool = False,
     geodesic: bool = False,
+    max_memory_bytes: int | None = None,
+    execution: ExecutionConfig | None = None,
 )
 
 ```
+
+### Exact Execution Planning
+
+ZADU plans distance matrices, neighbor tables, and full rankings as typed exact
+resources. Compatible requests are computed once: a larger `k` serves smaller
+prefixes, and a full ranking also serves metrics that only need kNN indices.
+
+The optional execution configuration currently exposes the exact NumPy/FAISS
+CPU path and a human-readable memory budget:
+
+```python
+from zadu import ExecutionConfig, ZADU
+
+runner = ZADU(
+    spec,
+    hd,
+    execution=ExecutionConfig(
+        backend="auto",       # "auto" or "numpy"
+        device="auto",        # "auto" or "cpu"
+        memory_budget="4GiB",
+    ),
+)
+scores = runner.measure(ld)
+print(runner.last_run_info)
+```
+
+`last_run_info` is separate from metric scores. It records the exact backend,
+resource providers, dtype, allocation size, construction and metric timings,
+cache reuse, and each resource's first and last consumer. MLX and PyTorch
+providers will be added in later acceleration PRs; unsupported backend or device
+requests currently raise an explicit `ValueError`.
 
 ### Parameters:
 
