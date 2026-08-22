@@ -117,3 +117,22 @@ and maximum-`k` neighbor resources from the small API overhead relative to an
 already-correct manual `measure()` loop. It also reports exact score deltas,
 process peak RSS, planned collection peak bytes, effective workers, and
 reuse-event counts.
+
+## Optional MLX pairwise provider
+
+Install `zadu[mlx]` on Apple Silicon, then compare cold and warm distance
+resource construction against the NumPy/SciPy baseline:
+
+```bash
+python benchmarks/benchmark_mlx_pairwise.py \
+  --samples 2000 --dimension 20 --kind distance-matrix \
+  --device gpu --dtype float32 --repeat 3
+```
+
+The report separates input/output transfer, first compile plus execution, and
+warm execution time. It also records the memory-bounded block plan and maximum
+absolute distance delta. On an Apple M4 with MLX 0.32.1, `n=2,000` and 20 input
+dimensions, the warm distance-matrix path measured 3.35x faster than SciPy
+(`4.77 ms` versus `15.95 ms`). Condensed pairs measured 1.81x faster (`4.01 ms`
+versus `7.27 ms`). Both paths had a maximum absolute float32 delta of `1.70e-6`.
+Cold MLX times were about 31 ms, so cold and warm results must not be conflated.

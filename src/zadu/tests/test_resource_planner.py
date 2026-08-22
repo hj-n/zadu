@@ -49,6 +49,7 @@ def test_execution_config_normalizes_exact_numpy_options():
     assert config.device == "cpu"
     assert config.resolved_backend == "numpy"
     assert config.resolved_device == "cpu"
+    assert config.resolved_dtype == "float64"
     assert config.memory_budget_bytes == int(1.5 * 1024**2)
     assert config.embedding_workers == 3
 
@@ -60,6 +61,19 @@ def test_execution_config_normalizes_exact_numpy_options():
         ({"backend": 1}, TypeError, "backend"),
         ({"device": "gpu"}, ValueError, "auto.*cpu"),
         ({"device": 1}, TypeError, "device"),
+        ({"dtype": 32}, TypeError, "dtype"),
+        ({"dtype": "float32"}, ValueError, "float64.*NumPy"),
+        ({"backend": "mlx"}, ValueError, "explicit.*float32.*float64"),
+        (
+            {"backend": "mlx", "device": "gpu", "dtype": "float64"},
+            ValueError,
+            "GPU.*float32",
+        ),
+        (
+            {"backend": "mlx", "dtype": "float32", "embedding_workers": 2},
+            ValueError,
+            "embedding_workers=1",
+        ),
         ({"memory_budget": True}, TypeError, "memory_budget"),
         ({"memory_budget": 0}, ValueError, "greater than zero"),
         ({"memory_budget": "many"}, ValueError, "4GiB"),
@@ -71,6 +85,17 @@ def test_execution_config_normalizes_exact_numpy_options():
 def test_execution_config_rejects_unsupported_options(kwargs, error, match):
     with pytest.raises(error, match=match):
         ExecutionConfig(**kwargs)
+
+
+def test_execution_config_normalizes_explicit_mlx_options():
+    config = ExecutionConfig(backend="MLX", device="GPU", dtype="FLOAT32")
+
+    assert config.backend == "mlx"
+    assert config.device == "gpu"
+    assert config.dtype == "float32"
+    assert config.resolved_backend == "mlx"
+    assert config.resolved_device == "gpu"
+    assert config.resolved_dtype == "float32"
 
 
 def test_legacy_and_config_memory_budgets_are_mutually_exclusive():

@@ -36,6 +36,7 @@ NEIGHBOR_GRAPH_BYTES_PER_EDGE = 16
 NEIGHBOR_PRODUCT_BYTES_PER_CELL = 48
 SNC_SPARSE_BYTES_PER_ENTRY = 16
 SNC_ITERATION_BYTES_PER_CELL = 24
+MLX_PAIRWISE_WORK_ARRAYS = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +153,8 @@ def build_execution_plan(
     default_k: int,
     memory_budget: int | None = None,
     geodesic: bool = False,
+    backend: str = "numpy",
+    resource_dtype_bytes: int = np.dtype(np.float64).itemsize,
 ) -> ExecutionPlan:
     """Build one deterministic plan and collapse compatible kNN requests."""
 
@@ -646,6 +649,21 @@ def build_execution_plan(
         )
 
     resource_working_bytes = {}
+    if backend == "mlx":
+        bytes_per_row = n_samples * resource_dtype_bytes * MLX_PAIRWISE_WORK_ARRAYS
+        for key in resources:
+            if key.kind not in {
+                ResourceKind.DISTANCE_MATRIX,
+                ResourceKind.CONDENSED_PAIRS,
+            }:
+                continue
+            block_rows = max(
+                1,
+                min(n_samples, available_work_bytes // bytes_per_row),
+            )
+            working_bytes = block_rows * bytes_per_row
+            resource_working_bytes[key] = working_bytes
+            peak_working_bytes = max(peak_working_bytes, working_bytes)
     for key in resources:
         if key.kind is not ResourceKind.STABLE_KNN:
             continue

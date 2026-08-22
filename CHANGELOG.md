@@ -24,6 +24,8 @@
   per-embedding results, and aggregate JSON-compatible diagnostics.
 - Opt-in, memory-bounded `embedding_workers` for exact repeated-embedding
   execution and indexed `EmbeddingExecutionError` failures.
+- An optional, lazily imported MLX provider for memory-bounded Euclidean
+  distance matrices and condensed pairs on Apple Silicon.
 
 ### Changed
 
@@ -50,6 +52,9 @@
 - Parallel repeated-embedding runs share frozen original resources, isolate
   mutable per-embedding caches, limit native inner threads, and automatically
   fall back for unsafe random-state configurations.
+- Explicit MLX device and dtype selection now preserves the NumPy default,
+  forbids silent precision downgrade, records cold/warm/transfer timings, and
+  falls back to NumPy/SciPy/FAISS per unsupported resource.
 
 ## 0.5.0
 

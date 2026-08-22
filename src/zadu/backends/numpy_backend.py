@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 class NumpyResourceProvider:
     name = "numpy"
     device = "cpu"
+    dtype = "float64"
     exact = True
 
     def fork(self) -> NumpyResourceProvider:
