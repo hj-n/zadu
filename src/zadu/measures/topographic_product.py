@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
+from zadu.engine.resources import TopographicProductStatistics
+
 from .utils import knn
 from .utils import pairwise_dist as pdist
 from .utils.validation import validate_pair
@@ -12,6 +14,7 @@ def measure(
     k: int = 20,
     distance_matrices: tuple | None = None,
     knn_info: tuple | None = None,
+    topographic_product_statistics: TopographicProductStatistics | None = None,
 ) -> dict:
     """
     Compute topographic product
@@ -24,6 +27,18 @@ def measure(
     """
     orig, emb = validate_pair(orig, emb)
     points_num = len(emb)
+
+    if topographic_product_statistics is not None:
+        if k < 1 or k > topographic_product_statistics.scores.size:
+            raise RuntimeError(
+                "Topographic Product statistics do not contain the requested k"
+            )
+        value = float(topographic_product_statistics.scores[k - 1])
+        if not np.isfinite(value):
+            raise RuntimeError(
+                "Topographic Product statistics do not contain the requested k"
+            )
+        return {"topographic_product": value}
 
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)

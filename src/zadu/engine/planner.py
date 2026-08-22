@@ -27,6 +27,9 @@ PAIR_WORK_BYTES_PER_CELL = 64
 CONDENSED_WORK_BYTES_PER_PAIR = 48
 PAIR_ORDER_BYTES_PER_PAIR = np.dtype(np.intp).itemsize + np.dtype(np.float64).itemsize
 ORDERED_WORK_BYTES_PER_PAIR = 64
+DEFAULT_RESOURCE_WORK_BYTES = 64 * 1024**2
+STABLE_KNN_WORK_BYTES_PER_CELL = 32
+TOPOGRAPHIC_WORK_BYTES_PER_SELECTED_DISTANCE = 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +60,20 @@ class PairExecutionPlan:
     ordered_metric_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class TopographicExecutionPlan:
+    statistics_key: ResourceKey
+    original_knn_key: ResourceKey
+    embedded_knn_key: ResourceKey
+    k: int
+    block_rows: int
+    work_budget_bytes: int
+    working_bytes: int
+    metric_ids: tuple[str, ...]
+    requested_ks: tuple[int, ...]
+    geodesic: bool
+
+
 @dataclass(slots=True)
 class ExecutionPlan:
     resources: tuple[ResourceKey, ...]
@@ -67,6 +84,8 @@ class ExecutionPlan:
     planned_peak_bytes: int
     memory_budget_bytes: int | None
     pair_plan: PairExecutionPlan | None
+    topographic_plan: TopographicExecutionPlan | None
+    resource_working_bytes: dict[ResourceKey, int]
 
     def resolve(self, request: ResourceRequest) -> ResourceKey:
         return self.request_to_key[request]
@@ -80,6 +99,7 @@ def build_execution_plan(
     specs: list[dict],
     *,
     n_samples: int,
+    original_dimension: int,
     default_k: int,
     memory_budget: int | None = None,
     geodesic: bool = False,
@@ -181,6 +201,13 @@ def build_execution_plan(
             resources.append(key)
             canonical_by_pair[knn_pair] = key
 
+        stable_knn_pair = (ResourceKind.STABLE_KNN, space)
+        stable_knn_k = maxima.get(stable_knn_pair, -1)
+        if stable_knn_k >= 0:
+            key = ResourceKey(ResourceKind.STABLE_KNN, space, stable_knn_k)
+            resources.append(key)
+            canonical_by_pair[stable_knn_pair] = key
+
     order_key = None
     if has_ordered_pair_statistics:
         order_key = ResourceKey(ResourceKind.PAIR_ORDER, Space.ORIGINAL)
@@ -202,6 +229,22 @@ def build_execution_plan(
         canonical_by_pair[(ResourceKind.ORDERED_PAIR_STATISTICS, Space.PAIRED)] = (
             ordered_statistics_key
         )
+
+    topographic_k = maxima.get(
+        (ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS, Space.PAIRED),
+        -1,
+    )
+    topographic_statistics_key = None
+    if topographic_k >= 0:
+        topographic_statistics_key = ResourceKey(
+            ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS,
+            Space.PAIRED,
+            topographic_k,
+        )
+        resources.append(topographic_statistics_key)
+        canonical_by_pair[
+            (ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS, Space.PAIRED)
+        ] = topographic_statistics_key
 
     request_to_key = {
         request: canonical_by_pair[(request.kind, request.space)]
@@ -242,6 +285,23 @@ def build_execution_plan(
     if order_key is not None:
         consumer_sets[order_key].update(ordered_pair_consumers)
 
+    topographic_consumers = (
+        set()
+        if topographic_statistics_key is None
+        else consumer_sets[topographic_statistics_key]
+    )
+    topographic_original_knn_key = None
+    topographic_embedded_knn_key = None
+    if topographic_statistics_key is not None:
+        topographic_original_knn_key = canonical_by_pair[
+            (ResourceKind.STABLE_KNN, Space.ORIGINAL)
+        ]
+        topographic_embedded_knn_key = canonical_by_pair[
+            (ResourceKind.STABLE_KNN, Space.EMBEDDED)
+        ]
+        consumer_sets[topographic_original_knn_key].update(topographic_consumers)
+        consumer_sets[topographic_embedded_knn_key].update(topographic_consumers)
+
     if pair_strategy is PairStrategy.DENSE:
         for metric_index, metric_plan in enumerate(metric_plans):
             for binding in metric_plan.bindings:
@@ -259,12 +319,15 @@ def build_execution_plan(
 
     estimated_cache_bytes = _estimate_cache_bytes(resources, n_samples)
     pair_plan = None
-    planned_peak_bytes = estimated_cache_bytes
+    peak_working_bytes = 0
+    available_work_bytes = (
+        DEFAULT_RESOURCE_WORK_BYTES
+        if memory_budget is None
+        else max(0, memory_budget - estimated_cache_bytes)
+    )
     if pair_strategy is not None:
-        available_work_bytes = (
-            DEFAULT_PAIR_WORK_BYTES
-            if memory_budget is None
-            else max(0, memory_budget - estimated_cache_bytes)
+        pair_work_bytes = (
+            DEFAULT_PAIR_WORK_BYTES if memory_budget is None else available_work_bytes
         )
         block_rows = None
         chunk_pairs = None
@@ -275,7 +338,7 @@ def build_execution_plan(
                     1,
                     min(
                         pair_count,
-                        available_work_bytes // CONDENSED_WORK_BYTES_PER_PAIR,
+                        pair_work_bytes // CONDENSED_WORK_BYTES_PER_PAIR,
                     ),
                 )
                 statistics_working_bytes = chunk_pairs * CONDENSED_WORK_BYTES_PER_PAIR
@@ -284,7 +347,7 @@ def build_execution_plan(
                     1,
                     min(
                         n_samples,
-                        math.isqrt(available_work_bytes // PAIR_WORK_BYTES_PER_CELL),
+                        math.isqrt(pair_work_bytes // PAIR_WORK_BYTES_PER_CELL),
                     ),
                 )
                 statistics_working_bytes = PAIR_WORK_BYTES_PER_CELL * block_rows**2
@@ -294,7 +357,7 @@ def build_execution_plan(
             else 0
         )
         working_bytes = max(statistics_working_bytes, ordered_working_bytes)
-        planned_peak_bytes += working_bytes
+        peak_working_bytes = max(peak_working_bytes, working_bytes)
         pair_plan = PairExecutionPlan(
             strategy=pair_strategy,
             statistics_key=statistics_key,
@@ -315,6 +378,60 @@ def build_execution_plan(
             ),
         )
 
+    resource_working_bytes = {}
+    for key in resources:
+        if key.kind is not ResourceKind.STABLE_KNN:
+            continue
+        bytes_per_row = n_samples * STABLE_KNN_WORK_BYTES_PER_CELL
+        block_rows = max(
+            1,
+            min(n_samples, available_work_bytes // bytes_per_row),
+        )
+        working_bytes = block_rows * bytes_per_row
+        resource_working_bytes[key] = working_bytes
+        peak_working_bytes = max(peak_working_bytes, working_bytes)
+
+    topographic_plan = None
+    if topographic_statistics_key is not None:
+        assert topographic_original_knn_key is not None
+        assert topographic_embedded_knn_key is not None
+        bytes_per_row = (
+            topographic_k
+            * (original_dimension + 5)
+            * TOPOGRAPHIC_WORK_BYTES_PER_SELECTED_DISTANCE
+        )
+        block_rows = max(
+            1,
+            min(n_samples, available_work_bytes // bytes_per_row),
+        )
+        working_bytes = block_rows * bytes_per_row
+        peak_working_bytes = max(peak_working_bytes, working_bytes)
+        topographic_plan = TopographicExecutionPlan(
+            statistics_key=topographic_statistics_key,
+            original_knn_key=topographic_original_knn_key,
+            embedded_knn_key=topographic_embedded_knn_key,
+            k=topographic_k,
+            block_rows=block_rows,
+            work_budget_bytes=available_work_bytes,
+            working_bytes=working_bytes,
+            metric_ids=tuple(
+                metric_plans[index].metric_id for index in sorted(topographic_consumers)
+            ),
+            requested_ks=tuple(
+                sorted(
+                    {
+                        request.k
+                        for request in all_requests
+                        if request.kind is ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS
+                        and request.k is not None
+                    }
+                )
+            ),
+            geodesic=geodesic,
+        )
+
+    planned_peak_bytes = estimated_cache_bytes + peak_working_bytes
+
     return ExecutionPlan(
         resources=tuple(resources),
         metric_plans=tuple(metric_plans),
@@ -324,6 +441,8 @@ def build_execution_plan(
         planned_peak_bytes=planned_peak_bytes,
         memory_budget_bytes=memory_budget,
         pair_plan=pair_plan,
+        topographic_plan=topographic_plan,
+        resource_working_bytes=resource_working_bytes,
     )
 
 
@@ -343,4 +462,10 @@ def _estimate_cache_bytes(resources: list[ResourceKey], n_samples: int) -> int:
         elif key.kind is ResourceKind.KNN:
             assert key.k is not None
             total += n_samples * key.k * np.dtype(np.int64).itemsize
+        elif key.kind is ResourceKind.STABLE_KNN:
+            assert key.k is not None
+            total += n_samples * key.k * np.dtype(np.intp).itemsize
+        elif key.kind is ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS:
+            assert key.k is not None
+            total += key.k * np.dtype(np.float64).itemsize
     return int(total)

@@ -13,6 +13,8 @@ from .engine.resources import (
     KNN_RANKING_INFO,
     ORDERED_PAIR_STATISTICS,
     PAIR_STATISTICS,
+    TOPOGRAPHIC_KNN_INFO,
+    TOPOGRAPHIC_PRODUCT_STATISTICS,
     ResourceRequirement,
 )
 
@@ -167,7 +169,7 @@ METRICS = (
         "topographic_product",
         "topo",
         params=("k",),
-        resources=(DISTANCE_MATRICES, KNN_INFO),
+        resources=(TOPOGRAPHIC_KNN_INFO, TOPOGRAPHIC_PRODUCT_STATISTICS),
         k_rule="neighbor",
     ),
     _metric(

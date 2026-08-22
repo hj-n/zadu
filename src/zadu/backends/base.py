@@ -10,7 +10,7 @@ import numpy.typing as npt
 from zadu.engine.resources import PairOrder, ResourceKey
 
 if TYPE_CHECKING:
-    from zadu.engine.planner import PairExecutionPlan
+    from zadu.engine.planner import PairExecutionPlan, TopographicExecutionPlan
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +32,7 @@ class ExactResourceProvider(Protocol):
         *,
         distance_matrix: npt.NDArray | None,
         condensed_pairs: npt.NDArray | None,
+        working_memory_bytes: int | None,
         geodesic: bool,
     ) -> BuiltResource: ...
 
@@ -55,4 +56,14 @@ class ExactResourceProvider(Protocol):
         *,
         emb_distance_matrix: npt.NDArray | None,
         emb_condensed: npt.NDArray | None,
+    ) -> BuiltResource: ...
+
+    def build_topographic_product_statistics(
+        self,
+        plan: TopographicExecutionPlan,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
+        *,
+        orig_knn: npt.NDArray,
+        emb_knn: npt.NDArray,
     ) -> BuiltResource: ...

@@ -74,6 +74,7 @@ class ZADU:
             self._definitions,
             self.spec_list,
             n_samples=self.orig.shape[0],
+            original_dimension=self.orig.shape[1],
             default_k=self.DEFAULT_K,
             memory_budget=self.max_memory_bytes,
             geodesic=self.geodesic,

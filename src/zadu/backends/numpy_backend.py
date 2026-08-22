@@ -20,6 +20,7 @@ from zadu.engine.resources import (
     PairStrategy,
     ResourceKey,
     ResourceKind,
+    TopographicProductStatistics,
 )
 from zadu.kernels import PairAccumulator
 from zadu.measures.utils import knn
@@ -28,7 +29,7 @@ from zadu.measures.utils import pairwise_dist as pdist
 from .base import BuiltResource
 
 if TYPE_CHECKING:
-    from zadu.engine.planner import PairExecutionPlan
+    from zadu.engine.planner import PairExecutionPlan, TopographicExecutionPlan
 
 
 class NumpyResourceProvider:
@@ -43,6 +44,7 @@ class NumpyResourceProvider:
         *,
         distance_matrix: npt.NDArray | None,
         condensed_pairs: npt.NDArray | None,
+        working_memory_bytes: int | None,
         geodesic: bool,
     ) -> BuiltResource:
         if key.kind is ResourceKind.DISTANCE_MATRIX:
@@ -83,6 +85,26 @@ class NumpyResourceProvider:
                 points, key.k, distance_matrix=distance_matrix
             )
             return BuiltResource(NeighborRanking(indices, ranking), "numpy")
+        if key.kind is ResourceKind.STABLE_KNN:
+            assert key.k is not None
+            if working_memory_bytes is None:
+                raise RuntimeError("Stable kNN requires a working-memory plan")
+            value, block_count, block_rows = self.stable_knn(
+                points,
+                key.k,
+                working_memory_bytes=working_memory_bytes,
+                geodesic=geodesic,
+            )
+            return BuiltResource(
+                value,
+                "scipy",
+                {
+                    "algorithm": "blockwise_stable_argsort",
+                    "block_count": block_count,
+                    "block_rows": block_rows,
+                    "working_bytes": working_memory_bytes,
+                },
+            )
         if key.kind is not ResourceKind.KNN:
             raise RuntimeError(f"Unsupported NumPy resource kind: {key.kind.value}")
         assert key.k is not None
@@ -238,6 +260,182 @@ class NumpyResourceProvider:
                 "ordering_reused": True,
             },
         )
+
+    def build_topographic_product_statistics(
+        self,
+        plan: TopographicExecutionPlan,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
+        *,
+        orig_knn: npt.NDArray,
+        emb_knn: npt.NDArray,
+    ) -> BuiltResource:
+        orig_indices = np.asarray(orig_knn)[:, : plan.k]
+        emb_indices = np.asarray(emb_knn)[:, : plan.k]
+        expected_shape = (orig.shape[0], plan.k)
+        if orig_indices.shape != expected_shape or emb_indices.shape != expected_shape:
+            raise RuntimeError(
+                "Topographic Product requires matching planned neighbor tables"
+            )
+
+        maximum_dimension = max(orig.shape[1], emb.shape[1])
+        bytes_per_row = 16 * plan.k * (maximum_dimension + 5)
+        if plan.work_budget_bytes < bytes_per_row:
+            raise MemoryError(
+                "Topographic Product selected distances exceed the planned "
+                "working-memory budget"
+            )
+        block_rows = min(
+            plan.block_rows,
+            max(1, plan.work_budget_bytes // bytes_per_row),
+        )
+        totals = np.full(plan.k, np.nan, dtype=np.float64)
+        for requested_k in plan.requested_ks:
+            totals[requested_k - 1] = 0.0
+        prefix_lengths = np.arange(1, plan.k + 1, dtype=np.float64)
+        block_count = 0
+        for start in range(0, orig.shape[0], block_rows):
+            stop = min(start + block_rows, orig.shape[0])
+            orig_neighbors = orig_indices[start:stop]
+            emb_neighbors = emb_indices[start:stop]
+
+            orig_to_emb = self.selected_distances(
+                orig,
+                emb_neighbors,
+                start,
+                stop,
+                geodesic=plan.geodesic,
+            )
+            orig_to_orig = self.selected_distances(
+                orig,
+                orig_neighbors,
+                start,
+                stop,
+                geodesic=plan.geodesic,
+            )
+            if np.any(orig_to_orig <= 0):
+                raise ValueError(
+                    "Topographic Product is undefined for zero-distance "
+                    "original-space neighbors"
+                )
+            orig_to_emb /= orig_to_orig
+
+            emb_to_emb = self.selected_distances(
+                emb,
+                emb_neighbors,
+                start,
+                stop,
+                geodesic=False,
+            )
+            emb_to_orig = self.selected_distances(
+                emb,
+                orig_neighbors,
+                start,
+                stop,
+                geodesic=False,
+            )
+            if np.any(emb_to_orig <= 0):
+                raise ValueError(
+                    "Topographic Product is undefined for zero-distance "
+                    "embedded-space neighbors"
+                )
+            emb_to_emb /= emb_to_orig
+            orig_to_emb *= emb_to_emb
+            if np.any(orig_to_emb <= 0) or not np.all(np.isfinite(orig_to_emb)):
+                raise ValueError(
+                    "Topographic Product is undefined for coincident points"
+                )
+
+            np.log(orig_to_emb, out=orig_to_emb)
+            np.cumsum(orig_to_emb, axis=1, out=orig_to_emb)
+            orig_to_emb /= 2 * prefix_lengths
+            for requested_k in plan.requested_ks:
+                totals[requested_k - 1] += float(np.sum(orig_to_emb[:, :requested_k]))
+            block_count += 1
+
+        for requested_k in plan.requested_ks:
+            totals[requested_k - 1] /= orig.shape[0] * requested_k
+        statistics = TopographicProductStatistics(
+            scores=totals,
+            block_count=block_count,
+            block_rows=block_rows,
+        )
+        return BuiltResource(
+            statistics,
+            "numpy",
+            {
+                "algorithm": "blockwise_selected_distances",
+                "k": plan.k,
+                "requested_ks": list(plan.requested_ks),
+                "block_count": block_count,
+                "block_rows": block_rows,
+                "working_bytes": block_rows * bytes_per_row,
+                "fused_metrics": list(plan.metric_ids),
+            },
+        )
+
+    @classmethod
+    def stable_knn(
+        cls,
+        points: npt.NDArray,
+        k: int,
+        *,
+        working_memory_bytes: int,
+        geodesic: bool,
+    ) -> tuple[npt.NDArray, int, int]:
+        n_samples = points.shape[0]
+        bytes_per_row = n_samples * 32
+        if working_memory_bytes < bytes_per_row:
+            raise MemoryError("Stable kNN requires at least one distance row")
+        block_rows = max(
+            1,
+            min(n_samples, working_memory_bytes // bytes_per_row),
+        )
+        result = np.empty((n_samples, k), dtype=np.intp)
+        block_count = 0
+        for start in range(0, n_samples, block_rows):
+            stop = min(start + block_rows, n_samples)
+            distances = (
+                cls.geodesic_distance_block(points[start:stop], points)
+                if geodesic
+                else cdist(points[start:stop], points)
+            )
+            distances[np.arange(stop - start), np.arange(start, stop)] = -np.inf
+            order = np.argsort(distances, axis=1, kind="stable")
+            result[start:stop] = order[:, 1 : k + 1]
+            block_count += 1
+        return result, block_count, block_rows
+
+    @classmethod
+    def selected_distances(
+        cls,
+        points: npt.NDArray,
+        indices: npt.NDArray,
+        start: int,
+        stop: int,
+        *,
+        geodesic: bool,
+    ) -> npt.NDArray:
+        centers = np.asarray(points[start:stop], dtype=np.float64)
+        selected = np.asarray(points[indices], dtype=np.float64)
+        if geodesic:
+            if points.shape[1] < 2:
+                raise ValueError(
+                    "geodesic=True requires orig[:, 0] = longitude and "
+                    "orig[:, 1] = latitude in radians"
+                )
+            center_longitude = centers[:, None, 0]
+            center_latitude = centers[:, None, 1]
+            selected_longitude = selected[:, :, 0]
+            selected_latitude = selected[:, :, 1]
+            cosine = np.sin(center_latitude) * np.sin(selected_latitude) + np.cos(
+                center_latitude
+            ) * np.cos(selected_latitude) * np.cos(
+                np.abs(selected_longitude - center_longitude)
+            )
+            return np.arccos(np.clip(cosine, -1.0, 1.0))
+        selected -= centers[:, None, :]
+        return np.sqrt(np.einsum("ijk,ijk->ij", selected, selected))
 
     @staticmethod
     def _pair_distances(
