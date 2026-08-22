@@ -31,6 +31,7 @@ def build_run_info(
                 "kind": key.kind.value,
                 "space": key.space.value,
                 "k": key.k,
+                "parameter": key.parameter,
                 "provider": record.provider,
                 "dtype": record.dtype,
                 "bytes": record.bytes,
@@ -61,6 +62,16 @@ def build_run_info(
         "topographic_strategy": (
             "blockwise_selected_distances"
             if plan.topographic_plan is not None
+            else None
+        ),
+        "rank_comparison_strategy": (
+            "fused_gathered_ranks_and_membership"
+            if plan.rank_comparison_plan is not None
+            else None
+        ),
+        "neighbor_statistics_strategy": (
+            "fused_neighbor_statistics"
+            if plan.neighbor_statistics_plan is not None
             else None
         ),
         "resource_seconds": float(

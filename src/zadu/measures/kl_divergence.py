@@ -10,6 +10,7 @@ def measure(
     emb: npt.NDArray,
     sigma: float = 0.1,
     distance_matrices: tuple | None = None,
+    densities: tuple | None = None,
 ) -> dict:
     """
     Compute Kullback-Leibler divergence of the embedding
@@ -22,14 +23,16 @@ def measure(
     """
 
     orig, emb = validate_pair(orig, emb)
-    if distance_matrices is None:
-        orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
-        emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
+    if densities is not None:
+        density_orig, density_emb = densities
     else:
-        orig_distance_matrix, emb_distance_matrix = distance_matrices
-
-    density_orig = pdist.distance_matrix_to_density(orig_distance_matrix, sigma)
-    density_emb = pdist.distance_matrix_to_density(emb_distance_matrix, sigma)
+        if distance_matrices is None:
+            orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
+            emb_distance_matrix = pdist.pairwise_distance_matrix(emb)
+        else:
+            orig_distance_matrix, emb_distance_matrix = distance_matrices
+        density_orig = pdist.distance_matrix_to_density(orig_distance_matrix, sigma)
+        density_emb = pdist.distance_matrix_to_density(emb_distance_matrix, sigma)
 
     kl = np.sum(density_orig * np.log(density_orig / density_emb))
     return {"kl_divergence": float(kl)}

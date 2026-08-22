@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
+from zadu.engine.resources import NeighborStatistics
+
 from .utils import knn
 from .utils.validation import validate_pair
 from .utils.vectorized import rowwise_intersection_count
@@ -12,6 +14,7 @@ def measure(
     k: int = 20,
     knn_info: tuple | None = None,
     return_local: bool = False,
+    neighbor_statistics: NeighborStatistics | None = None,
 ) -> tuple | dict:
     """
     Compute the local continuity meta-criteria of the embedding
@@ -24,6 +27,16 @@ def measure(
                   dict: local continuity meta-criteria
     """
     orig, emb = validate_pair(orig, emb)
+    if neighbor_statistics is not None:
+        local_distortion_list = neighbor_statistics.local_lcmc[k]
+        average_distortion = float(np.mean(local_distortion_list))
+        if return_local:
+            return (
+                {"lcmc": average_distortion},
+                {"local_lcmc": local_distortion_list},
+            )
+        return {"lcmc": average_distortion}
+
     if knn_info is None:
         orig_knn_indices = knn.knn(orig, k)
         emb_knn_indices = knn.knn(emb, k)

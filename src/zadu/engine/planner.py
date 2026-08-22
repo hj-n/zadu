@@ -15,6 +15,7 @@ from .resources import (
     ResourceRequest,
     ResourceRequirement,
     Space,
+    compact_index_dtype,
 )
 
 if TYPE_CHECKING:
@@ -25,11 +26,14 @@ DEFAULT_PAIR_CACHE_BYTES = 256 * 1024**2
 DEFAULT_PAIR_WORK_BYTES = 64 * 1024**2
 PAIR_WORK_BYTES_PER_CELL = 64
 CONDENSED_WORK_BYTES_PER_PAIR = 48
-PAIR_ORDER_BYTES_PER_PAIR = np.dtype(np.intp).itemsize + np.dtype(np.float64).itemsize
 ORDERED_WORK_BYTES_PER_PAIR = 64
 DEFAULT_RESOURCE_WORK_BYTES = 64 * 1024**2
 STABLE_KNN_WORK_BYTES_PER_CELL = 32
 TOPOGRAPHIC_WORK_BYTES_PER_SELECTED_DISTANCE = 16
+RANK_WORK_BYTES_PER_COMPARISON = 1
+NEIGHBOR_WORK_BYTES_PER_COMPARISON = 1
+NEIGHBOR_GRAPH_BYTES_PER_EDGE = 16
+NEIGHBOR_PRODUCT_BYTES_PER_CELL = 48
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +78,33 @@ class TopographicExecutionPlan:
     geodesic: bool
 
 
+@dataclass(frozen=True, slots=True)
+class RankComparisonExecutionPlan:
+    statistics_key: ResourceKey
+    original_ranking_key: ResourceKey
+    embedded_ranking_key: ResourceKey
+    k: int
+    membership_ks: tuple[int, ...]
+    requested_ks: tuple[int, ...]
+    work_budget_bytes: int
+    working_bytes: int
+    metric_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NeighborStatisticsExecutionPlan:
+    statistics_key: ResourceKey
+    original_knn_key: ResourceKey
+    embedded_knn_key: ResourceKey
+    k: int
+    lcmc_ks: tuple[int, ...]
+    nd_ks: tuple[int, ...]
+    block_rows: int
+    work_budget_bytes: int
+    working_bytes: int
+    metric_ids: tuple[str, ...]
+
+
 @dataclass(slots=True)
 class ExecutionPlan:
     resources: tuple[ResourceKey, ...]
@@ -85,7 +116,10 @@ class ExecutionPlan:
     memory_budget_bytes: int | None
     pair_plan: PairExecutionPlan | None
     topographic_plan: TopographicExecutionPlan | None
+    rank_comparison_plan: RankComparisonExecutionPlan | None
+    neighbor_statistics_plan: NeighborStatisticsExecutionPlan | None
     resource_working_bytes: dict[ResourceKey, int]
+    release_after_prepare: dict[Space, tuple[ResourceKey, ...]]
 
     def resolve(self, request: ResourceRequest) -> ResourceKey:
         return self.request_to_key[request]
@@ -112,8 +146,16 @@ def build_execution_plan(
         bindings = []
         for requirement in definition.resources:
             k = spec["params"].get("k", default_k) if requirement.uses_k else None
+            parameter = (
+                spec["params"].get(
+                    requirement.parameter_name,
+                    requirement.default_parameter,
+                )
+                if requirement.parameter_name is not None
+                else None
+            )
             requests = tuple(
-                ResourceRequest(requirement.kind, space, k)
+                ResourceRequest(requirement.kind, space, k, parameter)
                 for space in requirement.spaces
             )
             bindings.append(ResourceBinding(requirement, requests))
@@ -127,6 +169,22 @@ def build_execution_plan(
             pair = (request.kind, request.space)
             maxima[pair] = max(maxima.get(pair, -1), request.k)
 
+    rank_comparison_k = maxima.get((ResourceKind.RANK_COMPARISONS, Space.PAIRED), -1)
+    if rank_comparison_k >= 0:
+        for space in (Space.ORIGINAL, Space.EMBEDDED):
+            pair = (ResourceKind.NEIGHBOR_RANKING, space)
+            requested_pairs.add(pair)
+            maxima[pair] = max(maxima.get(pair, -1), rank_comparison_k)
+
+    neighbor_statistics_k = maxima.get(
+        (ResourceKind.NEIGHBOR_STATISTICS, Space.PAIRED), -1
+    )
+    if neighbor_statistics_k >= 0:
+        for space in (Space.ORIGINAL, Space.EMBEDDED):
+            pair = (ResourceKind.KNN, space)
+            requested_pairs.add(pair)
+            maxima[pair] = max(maxima.get(pair, -1), neighbor_statistics_k)
+
     pair_count = n_samples * (n_samples - 1) // 2
     has_pair_statistics = (
         ResourceKind.PAIR_STATISTICS,
@@ -138,13 +196,18 @@ def build_execution_plan(
     ) in requested_pairs
     has_pair_resources = has_pair_statistics or has_ordered_pair_statistics
     has_other_exact_resources = any(
-        request.space is not Space.PAIRED
-        and request.kind
-        in {
-            ResourceKind.DISTANCE_MATRIX,
-            ResourceKind.KNN,
-            ResourceKind.NEIGHBOR_RANKING,
-        }
+        (
+            request.space is not Space.PAIRED
+            and request.kind
+            in {
+                ResourceKind.DISTANCE_MATRIX,
+                ResourceKind.DENSITY,
+                ResourceKind.KNN,
+                ResourceKind.NEIGHBOR_RANKING,
+            }
+        )
+        or request.kind
+        in {ResourceKind.RANK_COMPARISONS, ResourceKind.NEIGHBOR_STATISTICS}
         for request in all_requests
     )
     pair_strategy = None
@@ -171,9 +234,15 @@ def build_execution_plan(
 
     resources = []
     canonical_by_pair: dict[tuple[ResourceKind, Space], ResourceKey] = {}
+    parameterized_keys: dict[ResourceRequest, ResourceKey] = {}
     for space in (Space.ORIGINAL, Space.EMBEDDED):
         distance_pair = (ResourceKind.DISTANCE_MATRIX, space)
-        if distance_pair in requested_pairs or pair_strategy is PairStrategy.DENSE:
+        density_pair = (ResourceKind.DENSITY, space)
+        if (
+            distance_pair in requested_pairs
+            or density_pair in requested_pairs
+            or pair_strategy is PairStrategy.DENSE
+        ):
             key = ResourceKey(ResourceKind.DISTANCE_MATRIX, space)
             resources.append(key)
             canonical_by_pair[distance_pair] = key
@@ -184,6 +253,26 @@ def build_execution_plan(
             key = ResourceKey(ResourceKind.CONDENSED_PAIRS, space)
             resources.append(key)
             canonical_by_pair[condensed_pair] = key
+
+        density_parameters = sorted(
+            {
+                request.parameter
+                for request in all_requests
+                if request.kind is ResourceKind.DENSITY
+                and request.space is space
+                and request.parameter is not None
+            }
+        )
+        for parameter in density_parameters:
+            key = ResourceKey(ResourceKind.DENSITY, space, parameter=parameter)
+            resources.append(key)
+            parameterized_keys[
+                ResourceRequest(
+                    ResourceKind.DENSITY,
+                    space,
+                    parameter=parameter,
+                )
+            ] = key
 
         ranking_pair = (ResourceKind.NEIGHBOR_RANKING, space)
         knn_pair = (ResourceKind.KNN, space)
@@ -246,8 +335,36 @@ def build_execution_plan(
             (ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS, Space.PAIRED)
         ] = topographic_statistics_key
 
+    rank_comparison_statistics_key = None
+    if rank_comparison_k >= 0:
+        rank_comparison_statistics_key = ResourceKey(
+            ResourceKind.RANK_COMPARISONS,
+            Space.PAIRED,
+            rank_comparison_k,
+        )
+        resources.append(rank_comparison_statistics_key)
+        canonical_by_pair[(ResourceKind.RANK_COMPARISONS, Space.PAIRED)] = (
+            rank_comparison_statistics_key
+        )
+
+    neighbor_statistics_key = None
+    if neighbor_statistics_k >= 0:
+        neighbor_statistics_key = ResourceKey(
+            ResourceKind.NEIGHBOR_STATISTICS,
+            Space.PAIRED,
+            neighbor_statistics_k,
+        )
+        resources.append(neighbor_statistics_key)
+        canonical_by_pair[(ResourceKind.NEIGHBOR_STATISTICS, Space.PAIRED)] = (
+            neighbor_statistics_key
+        )
+
     request_to_key = {
-        request: canonical_by_pair[(request.kind, request.space)]
+        request: (
+            parameterized_keys[request]
+            if request.kind is ResourceKind.DENSITY
+            else canonical_by_pair[(request.kind, request.space)]
+        )
         for request in all_requests
     }
     consumer_sets: dict[ResourceKey, set[int]] = {key: set() for key in resources}
@@ -302,6 +419,43 @@ def build_execution_plan(
         consumer_sets[topographic_original_knn_key].update(topographic_consumers)
         consumer_sets[topographic_embedded_knn_key].update(topographic_consumers)
 
+    for density_key in parameterized_keys.values():
+        density_consumers = consumer_sets[density_key]
+        distance_key = canonical_by_pair[
+            (ResourceKind.DISTANCE_MATRIX, density_key.space)
+        ]
+        consumer_sets[distance_key].update(density_consumers)
+
+    rank_comparison_consumers = (
+        set()
+        if rank_comparison_statistics_key is None
+        else consumer_sets[rank_comparison_statistics_key]
+    )
+    rank_original_key = None
+    rank_embedded_key = None
+    if rank_comparison_statistics_key is not None:
+        rank_original_key = canonical_by_pair[
+            (ResourceKind.NEIGHBOR_RANKING, Space.ORIGINAL)
+        ]
+        rank_embedded_key = canonical_by_pair[
+            (ResourceKind.NEIGHBOR_RANKING, Space.EMBEDDED)
+        ]
+        consumer_sets[rank_original_key].update(rank_comparison_consumers)
+        consumer_sets[rank_embedded_key].update(rank_comparison_consumers)
+
+    neighbor_statistics_consumers = (
+        set()
+        if neighbor_statistics_key is None
+        else consumer_sets[neighbor_statistics_key]
+    )
+    neighbor_original_key = None
+    neighbor_embedded_key = None
+    if neighbor_statistics_key is not None:
+        neighbor_original_key = canonical_by_pair[(ResourceKind.KNN, Space.ORIGINAL)]
+        neighbor_embedded_key = canonical_by_pair[(ResourceKind.KNN, Space.EMBEDDED)]
+        consumer_sets[neighbor_original_key].update(neighbor_statistics_consumers)
+        consumer_sets[neighbor_embedded_key].update(neighbor_statistics_consumers)
+
     if pair_strategy is PairStrategy.DENSE:
         for metric_index, metric_plan in enumerate(metric_plans):
             for binding in metric_plan.bindings:
@@ -317,9 +471,91 @@ def build_execution_plan(
                     consumer_sets[distance_key].add(metric_index)
     consumers = {key: tuple(sorted(indices)) for key, indices in consumer_sets.items()}
 
-    estimated_cache_bytes = _estimate_cache_bytes(resources, n_samples)
+    rank_requested_ks = tuple(
+        sorted(
+            {
+                request.k
+                for request in all_requests
+                if request.kind is ResourceKind.RANK_COMPARISONS
+                and request.k is not None
+            }
+        )
+    )
+    rank_membership_ks = tuple(
+        sorted(
+            {
+                spec["params"].get("k", default_k)
+                for definition, spec in zip(definitions, specs, strict=True)
+                if definition.id
+                in {
+                    "trustworthiness_continuity",
+                    "class_aware_trustworthiness_continuity",
+                }
+            }
+        )
+    )
+    lcmc_ks = tuple(
+        sorted(
+            {
+                spec["params"].get("k", default_k)
+                for definition, spec in zip(definitions, specs, strict=True)
+                if definition.id == "local_continuity_meta_criteria"
+            }
+        )
+    )
+    nd_ks = tuple(
+        sorted(
+            {
+                spec["params"].get("k", default_k)
+                for definition, spec in zip(definitions, specs, strict=True)
+                if definition.id == "neighbor_dissimilarity"
+            }
+        )
+    )
+    explicitly_requested_distance_spaces = {
+        request.space
+        for request in all_requests
+        if request.kind is ResourceKind.DISTANCE_MATRIX
+    }
+    release_after_prepare: dict[Space, tuple[ResourceKey, ...]] = {}
+    for space in (Space.ORIGINAL, Space.EMBEDDED):
+        if (
+            (ResourceKind.DENSITY, space) in requested_pairs
+            and space not in explicitly_requested_distance_spaces
+            and pair_strategy is not PairStrategy.DENSE
+        ):
+            release_after_prepare[space] = (
+                canonical_by_pair[(ResourceKind.DISTANCE_MATRIX, space)],
+            )
+    transient_keys = {key for keys in release_after_prepare.values() for key in keys}
+    estimated_cache_bytes = _estimate_cache_bytes(
+        resources,
+        n_samples,
+        rank_membership_ks=rank_membership_ks,
+        lcmc_ks=lcmc_ks,
+        nd_ks=nd_ks,
+        excluded_keys=transient_keys,
+    )
+    transient_resource_bytes = max(
+        (
+            _estimate_cache_bytes(
+                [key],
+                n_samples,
+                rank_membership_ks=(),
+                lcmc_ks=(),
+                nd_ks=(),
+            )
+            for key in transient_keys
+        ),
+        default=0,
+    )
     pair_plan = None
-    peak_working_bytes = 0
+    density_working_bytes = (
+        n_samples * n_samples * np.dtype(np.float64).itemsize
+        if any(key.kind is ResourceKind.DENSITY for key in resources)
+        else 0
+    )
+    peak_working_bytes = transient_resource_bytes + density_working_bytes
     available_work_bytes = (
         DEFAULT_RESOURCE_WORK_BYTES
         if memory_budget is None
@@ -430,6 +666,81 @@ def build_execution_plan(
             geodesic=geodesic,
         )
 
+    rank_comparison_plan = None
+    if rank_comparison_statistics_key is not None:
+        assert rank_original_key is not None
+        assert rank_embedded_key is not None
+        largest_membership_k = max(rank_membership_ks, default=0)
+        bytes_per_row = max(
+            1,
+            2 * rank_comparison_k * compact_index_dtype(n_samples).itemsize,
+            largest_membership_k**2 * RANK_WORK_BYTES_PER_COMPARISON,
+        )
+        block_rows = max(
+            1,
+            min(n_samples, available_work_bytes // bytes_per_row),
+        )
+        working_bytes = block_rows * bytes_per_row
+        peak_working_bytes = max(peak_working_bytes, working_bytes)
+        rank_comparison_plan = RankComparisonExecutionPlan(
+            statistics_key=rank_comparison_statistics_key,
+            original_ranking_key=rank_original_key,
+            embedded_ranking_key=rank_embedded_key,
+            k=rank_comparison_k,
+            membership_ks=rank_membership_ks,
+            requested_ks=rank_requested_ks,
+            work_budget_bytes=available_work_bytes,
+            working_bytes=working_bytes,
+            metric_ids=tuple(
+                metric_plans[index].metric_id
+                for index in sorted(rank_comparison_consumers)
+            ),
+        )
+
+    neighbor_statistics_plan = None
+    if neighbor_statistics_key is not None:
+        assert neighbor_original_key is not None
+        assert neighbor_embedded_key is not None
+        largest_lcmc_k = max(lcmc_ks, default=0)
+        lcmc_bytes_per_row = max(
+            1,
+            largest_lcmc_k**2 * NEIGHBOR_WORK_BYTES_PER_COMPARISON,
+        )
+        lcmc_block_rows = max(
+            1,
+            min(n_samples, available_work_bytes // lcmc_bytes_per_row),
+        )
+        lcmc_working_bytes = lcmc_block_rows * lcmc_bytes_per_row
+        graph_bytes = (
+            4 * n_samples * max(nd_ks, default=0) * NEIGHBOR_GRAPH_BYTES_PER_EDGE
+        )
+        product_bytes_per_row = n_samples * NEIGHBOR_PRODUCT_BYTES_PER_CELL
+        product_budget = max(0, available_work_bytes - graph_bytes)
+        product_block_rows = max(
+            1,
+            min(n_samples, product_budget // product_bytes_per_row),
+        )
+        nd_working_bytes = (
+            graph_bytes + product_block_rows * product_bytes_per_row if nd_ks else 0
+        )
+        working_bytes = max(lcmc_working_bytes, nd_working_bytes)
+        peak_working_bytes = max(peak_working_bytes, working_bytes)
+        neighbor_statistics_plan = NeighborStatisticsExecutionPlan(
+            statistics_key=neighbor_statistics_key,
+            original_knn_key=neighbor_original_key,
+            embedded_knn_key=neighbor_embedded_key,
+            k=neighbor_statistics_k,
+            lcmc_ks=lcmc_ks,
+            nd_ks=nd_ks,
+            block_rows=product_block_rows,
+            work_budget_bytes=available_work_bytes,
+            working_bytes=working_bytes,
+            metric_ids=tuple(
+                metric_plans[index].metric_id
+                for index in sorted(neighbor_statistics_consumers)
+            ),
+        )
+
     planned_peak_bytes = estimated_cache_bytes + peak_working_bytes
 
     return ExecutionPlan(
@@ -442,30 +753,52 @@ def build_execution_plan(
         memory_budget_bytes=memory_budget,
         pair_plan=pair_plan,
         topographic_plan=topographic_plan,
+        rank_comparison_plan=rank_comparison_plan,
+        neighbor_statistics_plan=neighbor_statistics_plan,
         resource_working_bytes=resource_working_bytes,
+        release_after_prepare=release_after_prepare,
     )
 
 
-def _estimate_cache_bytes(resources: list[ResourceKey], n_samples: int) -> int:
+def _estimate_cache_bytes(
+    resources: list[ResourceKey],
+    n_samples: int,
+    *,
+    rank_membership_ks: tuple[int, ...] = (),
+    lcmc_ks: tuple[int, ...] = (),
+    nd_ks: tuple[int, ...] = (),
+    excluded_keys: set[ResourceKey] | None = None,
+) -> int:
+    index_bytes = compact_index_dtype(n_samples).itemsize
     total = 0
     for key in resources:
+        if excluded_keys is not None and key in excluded_keys:
+            continue
         if key.kind is ResourceKind.DISTANCE_MATRIX:
             total += n_samples * n_samples * np.dtype(np.float64).itemsize
+        elif key.kind is ResourceKind.DENSITY:
+            total += n_samples * np.dtype(np.float64).itemsize
         elif key.kind is ResourceKind.CONDENSED_PAIRS:
             total += n_samples * (n_samples - 1) // 2 * np.dtype(np.float64).itemsize
         elif key.kind is ResourceKind.PAIR_ORDER:
-            total += n_samples * (n_samples - 1) // 2 * PAIR_ORDER_BYTES_PER_PAIR
+            pair_count = n_samples * (n_samples - 1) // 2
+            pair_index_bytes = compact_index_dtype(pair_count).itemsize
+            total += pair_count * (pair_index_bytes + np.dtype(np.float64).itemsize)
         elif key.kind is ResourceKind.NEIGHBOR_RANKING:
             assert key.k is not None
-            total += n_samples * n_samples * np.dtype(np.intp).itemsize
-            total += n_samples * key.k * np.dtype(np.int64).itemsize
-        elif key.kind is ResourceKind.KNN:
+            total += n_samples * n_samples * index_bytes
+            total += n_samples * key.k * index_bytes
+        elif key.kind in {ResourceKind.KNN, ResourceKind.STABLE_KNN}:
             assert key.k is not None
-            total += n_samples * key.k * np.dtype(np.int64).itemsize
-        elif key.kind is ResourceKind.STABLE_KNN:
-            assert key.k is not None
-            total += n_samples * key.k * np.dtype(np.intp).itemsize
+            total += n_samples * key.k * index_bytes
         elif key.kind is ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS:
             assert key.k is not None
             total += key.k * np.dtype(np.float64).itemsize
+        elif key.kind is ResourceKind.RANK_COMPARISONS:
+            assert key.k is not None
+            total += 2 * n_samples * key.k * index_bytes
+            total += 2 * n_samples * sum(rank_membership_ks)
+        elif key.kind is ResourceKind.NEIGHBOR_STATISTICS:
+            total += n_samples * len(lcmc_ks) * np.dtype(np.float64).itemsize
+            total += len(nd_ks) * np.dtype(np.float64).itemsize
     return int(total)

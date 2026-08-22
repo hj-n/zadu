@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
+from zadu.engine.resources import RankComparisons
+
 from .utils import knn
 from .utils.validation import validate_pair, validate_trustworthiness_k
 from .utils.vectorized import gather_ranks, rowwise_membership
@@ -12,6 +14,7 @@ def measure(
     k: int = 20,
     knn_ranking_info: tuple | None = None,
     return_local: bool = False,
+    rank_comparisons: RankComparisons | None = None,
 ) -> tuple | dict:
     """
     Compute the trustworthiness and continuity of the embedding
@@ -25,6 +28,36 @@ def measure(
     """
     orig, emb = validate_pair(orig, emb)
     k = validate_trustworthiness_k(orig.shape[0], k)
+
+    if rank_comparisons is not None:
+        trust_result = _tnc_from_comparison(
+            rank_comparisons.orig_ranks_of_emb[:, :k],
+            ~rank_comparisons.emb_in_orig[k],
+            k,
+            orig.shape[0],
+            return_local,
+        )
+        continuity_result = _tnc_from_comparison(
+            rank_comparisons.emb_ranks_of_orig[:, :k],
+            ~rank_comparisons.orig_in_emb[k],
+            k,
+            orig.shape[0],
+            return_local,
+        )
+        if return_local:
+            trust, local_trust = trust_result
+            cont, local_cont = continuity_result
+            return (
+                {"trustworthiness": trust, "continuity": cont},
+                {
+                    "local_trustworthiness": local_trust,
+                    "local_continuity": local_cont,
+                },
+            )
+        return {
+            "trustworthiness": trust_result,
+            "continuity": continuity_result,
+        }
 
     if knn_ranking_info is None:
         orig_knn_indices, orig_ranking = knn.knn_with_ranking(orig, k)
@@ -77,3 +110,16 @@ def tnc_computation(
         return average_distortion, local_distortion_list
     else:
         return average_distortion
+
+
+def _tnc_from_comparison(
+    target_ranks: npt.NDArray,
+    missing_mask: npt.NDArray,
+    k: int,
+    points_num: int,
+    return_local: bool,
+) -> float | tuple[float, npt.NDArray]:
+    local = np.sum((target_ranks - k) * missing_mask, axis=1)
+    local = 1 - local * (2 / (k * (2 * points_num - 3 * k - 1)))
+    average = float(np.mean(local))
+    return (average, local) if return_local else average
