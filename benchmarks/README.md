@@ -168,6 +168,19 @@ sorting because `torch.topk` does not promise
 stable indices for ties; this preserves ZADU's duplicate-distance contract at
 the cost of `O(n log n)` work even for a small neighbor prefix.
 
+Compare sequential and provider-native repeated-embedding execution with:
+
+```bash
+python benchmarks/benchmark_torch_measure_many.py \
+  --samples 2000 --dimension 20 --embeddings 8 --batch-size 4 --k 20 \
+  --device mps --dtype float32 --repeat 3
+```
+
+The benchmark reports cold and warm collection timings, score deltas, the
+effective native width, and the conservative planned peak. Run CPU, MPS, and
+CUDA separately: batching can amortize accelerator overhead while providing no
+benefit on a CPU workload.
+
 ## Optional MLX neighbor resources
 
 Benchmark the stable full/inverse ranking, ordinary exact kNN, or stable-kNN

@@ -80,16 +80,6 @@ def test_execution_config_normalizes_exact_numpy_options():
             ValueError,
             "MPS.*float32",
         ),
-        (
-            {
-                "backend": "torch",
-                "device": "cpu",
-                "dtype": "float64",
-                "embedding_workers": 2,
-            },
-            ValueError,
-            "embedding_workers=1",
-        ),
         ({"memory_budget": True}, TypeError, "memory_budget"),
         ({"memory_budget": 0}, ValueError, "greater than zero"),
         ({"memory_budget": "many"}, ValueError, "4GiB"),
@@ -133,6 +123,14 @@ def test_execution_config_normalizes_explicit_torch_options():
     assert config.resolved_backend == "torch"
     assert config.resolved_device == "cuda"
     assert config.resolved_dtype == "float32"
+
+    batched = ExecutionConfig(
+        backend="torch",
+        device="cpu",
+        dtype="float64",
+        embedding_workers=3,
+    )
+    assert batched.embedding_workers == 3
 
 
 def test_legacy_and_config_memory_budgets_are_mutually_exclusive():
