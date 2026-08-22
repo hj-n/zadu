@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Slow-reference parity tests and isolated microbenchmarks for exact NumPy metric
+  kernels.
+
+### Changed
+
+- Vectorized T&C, class-aware T&C, MRRE, LCMC, and Neighborhood Hit kernels.
+- Reduced Topographic Product to gathered ratios and cumulative logs, and batched
+  local Procrustes alignment with bounded temporary memory.
+
 ## 0.5.0
 
 ### Added
