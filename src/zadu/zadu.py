@@ -16,7 +16,7 @@ from .backends import NumpyResourceProvider
 from .engine.config import ExecutionConfig
 from .engine.planner import build_execution_plan
 from .engine.resources import ResourceCache, ResourceKind, Space
-from .engine.result import build_run_info
+from .engine.result import build_many_run_info, build_run_info
 from .measures.utils.validation import (
     as_finite_2d,
     validate_labels,
@@ -28,7 +28,7 @@ from .registry import METRIC_BY_ALIAS, METRIC_BY_ID, MetricDefinition
 
 
 class ZADU:
-    """Evaluate one embedding with one or more registered metrics."""
+    """Evaluate one or more embeddings with registered exact metrics."""
 
     ABBREVIATIONS: ClassVar[dict[str, str]] = {
         alias: metric.id for alias, metric in METRIC_BY_ALIAS.items()
@@ -116,28 +116,84 @@ class ZADU:
     def measure(self, emb, label=None):
         """Compute every configured metric for *emb* in specification order."""
 
-        emb_array = as_finite_2d(emb, "emb")
+        emb_array = self._validate_embedding(emb, "emb")
+        label_array = self._validate_measure_label(label)
+        self.last_run_info = None
+        result, run_info = self._measure_validated(emb_array, label_array)
+        self.last_run_info = run_info
+        return result
+
+    def measure_many(self, embeddings, labels=None):
+        """Compute every metric for an ordered collection of embeddings.
+
+        The embeddings are evaluated sequentially so each run has the same
+        package-managed peak-memory bound as :meth:`measure`. Immutable
+        original-space resources are shared across every embedding. ``labels``
+        is one optional label vector shared by the collection.
+        """
+
+        if isinstance(embeddings, (str, bytes)):
+            raise TypeError("embeddings must be an iterable of 2D arrays")
+        if isinstance(embeddings, np.ndarray) and embeddings.ndim == 2:
+            raise ValueError(
+                "embeddings must contain multiple 2D arrays; "
+                "use measure() for one embedding"
+            )
+        try:
+            raw_embeddings = list(embeddings)
+        except TypeError as exc:
+            raise TypeError("embeddings must be an iterable of 2D arrays") from exc
+
+        embedding_arrays = [
+            self._validate_embedding(embedding, f"embeddings[{index}]")
+            for index, embedding in enumerate(raw_embeddings)
+        ]
+        label_array = self._validate_measure_label(labels)
+        self.last_run_info = None
+        batch_started = perf_counter()
+        results = []
+        run_infos = []
+        for embedding in embedding_arrays:
+            result, run_info = self._measure_validated(embedding, label_array)
+            results.append(result)
+            run_infos.append(run_info)
+
+        self.last_run_info = build_many_run_info(
+            plan=self._execution_plan,
+            cache=self._resource_cache,
+            backend=self.execution.resolved_backend,
+            device=self.execution.resolved_device,
+            run_infos=run_infos,
+            total_seconds=perf_counter() - batch_started,
+        )
+        return results
+
+    def _validate_embedding(self, emb, name: str) -> np.ndarray:
+        emb_array = as_finite_2d(emb, name)
         if self.orig.shape[0] != emb_array.shape[0]:
             raise ValueError(
                 "orig and emb must have the same number of rows "
                 f"(orig={self.orig.shape[0]}, emb={emb_array.shape[0]})"
             )
+        return emb_array
 
-        if any(definition.needs_label for definition in self._definitions):
-            if label is None:
-                names = [
-                    definition.id
-                    for definition in self._definitions
-                    if definition.needs_label
-                ]
-                raise ValueError(
-                    f"Label is required for measure(s): {', '.join(names)}"
-                )
-            label = validate_labels(label, emb_array.shape[0])
+    def _validate_measure_label(self, label):
+        if not any(definition.needs_label for definition in self._definitions):
+            return label
+        if label is None:
+            names = [
+                definition.id
+                for definition in self._definitions
+                if definition.needs_label
+            ]
+            raise ValueError(f"Label is required for measure(s): {', '.join(names)}")
+        return validate_labels(label, self.orig.shape[0])
 
-        self.last_run_info = None
+    def _measure_validated(self, emb_array, label_array):
+        """Measure one validated embedding and return its result and diagnostics."""
+
         self.emb = emb_array
-        self.label = label
+        self.label = label_array
         self._resource_cache.begin_run()
         run_started = perf_counter()
         self._prepare_embedded_space()
@@ -185,7 +241,7 @@ class ZADU:
                     local_results.append(None)
             self._resource_cache.release_after(index)
 
-        self.last_run_info = build_run_info(
+        run_info = build_run_info(
             plan=self._execution_plan,
             cache=self._resource_cache,
             backend=self.execution.resolved_backend,
@@ -194,8 +250,8 @@ class ZADU:
             total_seconds=perf_counter() - run_started,
         )
         if self.return_local:
-            return score_results, local_results
-        return score_results
+            return (score_results, local_results), run_info
+        return score_results, run_info
 
     @staticmethod
     def _resolve_execution(

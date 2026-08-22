@@ -20,6 +20,8 @@
   with compact exact index/rank storage and explicit resource lifetimes.
 - Deterministic optional `n_jobs` execution and memory-budget-aware worker
   planning for Steadiness & Cohesiveness.
+- Ordered `ZADU.measure_many()` execution with shared original-space resources,
+  per-embedding results, and aggregate JSON-compatible diagnostics.
 
 ### Changed
 
@@ -41,6 +43,8 @@
 - Steadiness & Cohesiveness reuses planned kNN tables, keeps its full weighted-SNN
   graphs sparse, batches cluster-pair reductions, and preserves fixed-seed
   single/multi-worker global and local results.
+- Repeated embeddings now use one exact maximum-`k` plan and are prevalidated as
+  a collection before sequential memory-bounded execution begins.
 
 ## 0.5.0
 
