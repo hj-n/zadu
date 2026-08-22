@@ -248,7 +248,7 @@ Each dictionary must contain the following keys:
 > 
 > | Measure | ID | Parameters | Range | Optimum |
 > |---------|----|------------|-------|---------|
-> | Steadiness & Cohesiveness | snc | `iteration=150, walk_num_ratio=0.3, alpha=0.1, k=None, clustering_strategy="dbscan", random_state=None` | [0, 1] | 1 |
+> | Steadiness & Cohesiveness | snc | `iteration=150, walk_num_ratio=0.3, alpha=0.1, k=None, clustering_strategy="dbscan", random_state=None, n_jobs=1` | [0, 1] | 1 |
 > | Distance Consistency | dsc | | [0, 1] | 1 |
 > | Internal Validation Measures | ivm | `measure="silhouette"` | Depends on IVM | Depends on IVM |
 > | Clustering + External Clustering Validation Measures | c_evm | `measure="arand", clustering="kmeans", clustering_args=None` | Depends on EVM | Depends on EVM |
@@ -335,7 +335,9 @@ nh  = neighborhood_hit.measure(ld, label, k=20)
 
 ### Optimizing the Execution
 
-ZADU automatically optimizes the execution of multiple distortion measures. Its explicit metric registry shares exact pair statistics, pairwise distances, rankings, and nearest-neighbor indices while retaining the largest requested `k`, so mixed-`k` specifications remain equivalent to direct metric calls. Pair-only Stress, Scale-Normalized Stress, and Pearson runs use condensed or memory-bounded streaming resources; metrics requiring full ranks or global distance ordering still need O(n²) storage. `ZADU(...).estimated_cache_bytes` exposes the persistent-cache estimate, while `last_run_info["planned_peak_bytes"]` includes package-managed pair working memory. Pass `max_memory_bytes=` or `ExecutionConfig(memory_budget=...)` to select a bounded strategy or fail before an oversized package-managed allocation.
+ZADU automatically optimizes the execution of multiple distortion measures. Its explicit metric registry shares exact pair statistics, densities, rankings, and nearest-neighbor indices while retaining the largest requested `k`, so mixed-`k` specifications remain equivalent to direct metric calls. Pair-only Stress, Scale-Normalized Stress, and Pearson runs use condensed or memory-bounded streaming resources; metrics requiring full ranks or global distance ordering still need O(n²) storage. `ZADU(...).estimated_cache_bytes` exposes the persistent-cache estimate, while `last_run_info["planned_peak_bytes"]` includes package-managed working memory. Pass `max_memory_bytes=` or `ExecutionConfig(memory_budget=...)` to select a bounded strategy or fail before an oversized package-managed allocation.
+
+S&C (`snc`) reuses the planner's exact kNN tables, keeps full weighted-SNN graphs sparse, and batches cluster-pair reductions. Set `n_jobs` above 1 to opt into deterministic thread-level iteration evaluation; the default remains 1 because parallel overhead can outweigh the benefit on smaller workloads. With a memory budget, ZADU may reduce the effective worker count. The requested/effective counts and conservative working-set estimate are recorded in `last_run_info["snc_strategy"]`.
 
 For spherical coordinates, pass `geodesic=True` to `ZADU`. In that mode `orig[:, 0]` is longitude, `orig[:, 1]` is latitude, and both must be expressed in radians. Geodesic distance is used only for the registered original space; embedded-space distances remain Euclidean.
 

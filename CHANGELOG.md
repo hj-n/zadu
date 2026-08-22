@@ -16,6 +16,10 @@
   Non-Metric Stress, with repeated-embedding reuse and preallocation guards.
 - Exact blockwise stable-kNN and selected-distance resources for Topographic
   Product, including shared multi-`k` prefix results.
+- Parameterized density, gathered-rank, and fused neighbor-statistics resources,
+  with compact exact index/rank storage and explicit resource lifetimes.
+- Deterministic optional `n_jobs` execution and memory-budget-aware worker
+  planning for Steadiness & Cohesiveness.
 
 ### Changed
 
@@ -34,6 +38,9 @@
 - Topographic Product now retains only `O(nk)` neighbor tables and computes its
   selected distances in bounded row blocks instead of caching two `n x n`
   distance matrices.
+- Steadiness & Cohesiveness reuses planned kNN tables, keeps its full weighted-SNN
+  graphs sparse, batches cluster-pair reductions, and preserves fixed-seed
+  single/multi-worker global and local results.
 
 ## 0.5.0
 
