@@ -154,6 +154,20 @@ input/output transfer and execution time, block bounds, and maximum absolute
 distance delta. Results are hardware-specific; support in common code is not a
 substitute for a benchmark on a real CUDA machine.
 
+Benchmark stable full/inverse ranking or an exact stable neighbor prefix with:
+
+```bash
+python benchmarks/benchmark_torch_neighbors.py \
+  --samples 2000 --dimension 20 --k 20 --kind ranking \
+  --device mps --dtype float32 --repeat 3
+```
+
+The report includes index mismatches against the float64 NumPy baseline;
+float32 can reorder nearly equal non-tied distances. PyTorch uses stable full
+sorting because `torch.topk` does not promise
+stable indices for ties; this preserves ZADU's duplicate-distance contract at
+the cost of `O(n log n)` work even for a small neighbor prefix.
+
 ## Optional MLX neighbor resources
 
 Benchmark the stable full/inverse ranking, ordinary exact kNN, or stable-kNN

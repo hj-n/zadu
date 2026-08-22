@@ -30,7 +30,8 @@
 - Provider-native MLX tensor batching for equal-shaped `measure_many()` inputs,
   including memory-capped batch width and indexed batch failures.
 - An optional, lazily imported PyTorch provider for exact, memory-planned
-  Euclidean distance matrices and condensed pairs on CPU, MPS, and CUDA.
+  Euclidean distance matrices, condensed pairs, stable full/inverse rankings,
+  and exact stable neighbor prefixes on CPU, MPS, and CUDA.
 
 ### Changed
 

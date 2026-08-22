@@ -295,12 +295,19 @@ runner = ZADU(
 scores = runner.measure(ld)
 ```
 
-The initial PyTorch preview accelerates exact Euclidean distance matrices and
-condensed pair distances with memory-planned `torch.cdist` blocks. Unsupported
-neighbor/derived resources and geodesic requests fall back individually and are
-identified in `last_run_info`. MPS supports float32 in this backend; CPU and
-CUDA accept float32 or float64. No PyTorch import occurs on the base/default
-path, and `backend="auto"` remains NumPy/FAISS.
+The PyTorch preview accelerates exact Euclidean distance matrices, condensed
+pair distances, stable full/inverse rankings, and exact stable neighbor prefixes
+with memory-planned row blocks. Unsupported derived resources and geodesic
+requests fall back individually and are identified in `last_run_info`. MPS
+supports float32 in this backend; CPU and CUDA accept float32 or float64. No
+PyTorch import occurs on the base/default path, and `backend="auto"` remains
+NumPy/FAISS.
+
+Ranking uses `torch.argsort(..., stable=True)`, forces self to rank zero, then
+removes self from the returned neighbor prefix. It deliberately does not use
+bare `torch.topk`, whose tied indices are not stable. This preserves original
+column order for duplicate-distance ties and means even a small exact prefix
+performs a full row sort.
 
 CPU and Apple MPS are covered by the maintained parity tests. CUDA uses the same
 implementation but should be treated as unvalidated until the test suite and
