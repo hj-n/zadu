@@ -217,6 +217,22 @@ each resource's first and last consumer. MLX and PyTorch providers will be added
 in later acceleration PRs; unsupported backend or device requests currently
 raise an explicit `ValueError`.
 
+Evaluate an ordered collection of embeddings with the same exact plan and one
+shared set of immutable original-space resources:
+
+```python
+results = runner.measure_many([umap_embedding, tsne_embedding, pca_embedding])
+batch_info = runner.last_run_info
+```
+
+`measure_many()` returns one normal `measure()` result per input embedding, in
+input order. If a configured metric requires labels, pass one shared label
+vector as `labels=`. PR 5-A executes the embeddings sequentially, so the planned
+peak-memory bound is per embedding rather than multiplied by the collection
+size. Batch diagnostics include aggregate timings, original-resource reuse, and
+the full diagnostics for each embedding under `last_run_info["runs"]`. A `ZADU`
+instance is mutable and should not be called concurrently from multiple threads.
+
 ### Parameters:
 
 #### `spec` 

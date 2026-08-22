@@ -98,3 +98,19 @@ The three modes run in isolated processes and report execution time, peak RSS,
 cache/planned-peak bytes, effective workers, and score deltas. Parallel timing
 is reported separately because the single-worker path can be faster when native
 library calls are short relative to thread scheduling overhead.
+
+## Repeated embeddings
+
+Compare rebuilding a runner for every embedding with manual runner reuse and the
+ordered `measure_many()` API:
+
+```bash
+python benchmarks/benchmark_measure_many.py \
+  --samples 2000 --dimension 20 --embeddings 8 --repeat 3
+```
+
+The three modes run in isolated processes. Construction is included so the
+report separates the benefit of sharing original-space pair orders, rankings,
+and maximum-`k` neighbor resources from the small API overhead relative to an
+already-correct manual `measure()` loop. It also reports exact score deltas,
+process peak RSS, planned per-embedding peak bytes, and reuse-event counts.
