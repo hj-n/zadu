@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from .resources import ResourceCache, Space
 
 if TYPE_CHECKING:
+    from .batching import BatchExecutionPlan
     from .planner import ExecutionPlan
 
 
@@ -15,8 +16,30 @@ def _plan_info(
     *,
     backend: str,
     device: str,
+    snc_effective_workers: dict[int, int] | None = None,
 ) -> dict[str, Any]:
     """Return diagnostics shared by single- and repeated-embedding runs."""
+
+    snc_strategy = None
+    if plan.snc_plan is not None:
+        effective_workers = (
+            plan.snc_plan.effective_workers
+            if snc_effective_workers is None
+            else snc_effective_workers
+        )
+        working_by_metric = {
+            metric_index: (
+                plan.snc_plan.graph_bytes[metric_index]
+                + workers * plan.snc_plan.iteration_bytes[metric_index]
+            )
+            for metric_index, workers in effective_workers.items()
+        }
+        snc_strategy = {
+            "algorithm": "sparse_batched_iterations",
+            "requested_workers": plan.snc_plan.requested_workers,
+            "effective_workers": effective_workers,
+            "working_bytes": max(working_by_metric.values()),
+        }
 
     return {
         "exact": True,
@@ -43,16 +66,7 @@ def _plan_info(
             if plan.neighbor_statistics_plan is not None
             else None
         ),
-        "snc_strategy": (
-            {
-                "algorithm": "sparse_batched_iterations",
-                "requested_workers": plan.snc_plan.requested_workers,
-                "effective_workers": plan.snc_plan.effective_workers,
-                "working_bytes": plan.snc_plan.working_bytes,
-            }
-            if plan.snc_plan is not None
-            else None
-        ),
+        "snc_strategy": snc_strategy,
     }
 
 
@@ -64,6 +78,7 @@ def build_run_info(
     device: str,
     metric_timings: list[tuple[str, float]],
     total_seconds: float,
+    snc_effective_workers: dict[int, int] | None = None,
 ) -> dict[str, Any]:
     """Create JSON-compatible diagnostics for the most recent measurement."""
 
@@ -96,7 +111,12 @@ def build_run_info(
         )
 
     return {
-        **_plan_info(plan, backend=backend, device=device),
+        **_plan_info(
+            plan,
+            backend=backend,
+            device=device,
+            snc_effective_workers=snc_effective_workers,
+        ),
         "resource_seconds": float(
             sum(
                 record.build_seconds
@@ -120,8 +140,10 @@ def build_many_run_info(
     cache: ResourceCache,
     backend: str,
     device: str,
+    batch_plan: BatchExecutionPlan,
     run_infos: list[dict[str, Any]],
     total_seconds: float,
+    snc_effective_workers: dict[int, int] | None = None,
 ) -> dict[str, Any]:
     """Create JSON-compatible diagnostics for ordered repeated embeddings."""
 
@@ -155,10 +177,24 @@ def build_many_run_info(
         )
 
     return {
-        **_plan_info(plan, backend=backend, device=device),
+        **_plan_info(
+            plan,
+            backend=backend,
+            device=device,
+            snc_effective_workers=snc_effective_workers,
+        ),
         "mode": "many",
-        "batch_strategy": "sequential_shared_original",
+        "batch_strategy": batch_plan.strategy,
+        "requested_workers": batch_plan.requested_workers,
+        "effective_workers": batch_plan.effective_workers,
+        "worker_limit_reason": batch_plan.limit_reason,
+        "native_threads_per_worker": batch_plan.native_threads_per_worker,
+        "provider_batching": batch_plan.provider_batching,
         "embedding_count": len(run_infos),
+        "per_embedding_planned_peak_bytes": plan.planned_peak_bytes,
+        "shared_original_bytes": batch_plan.shared_original_bytes,
+        "per_embedding_peak_bytes": batch_plan.per_embedding_peak_bytes,
+        "planned_peak_bytes": batch_plan.planned_peak_bytes,
         "original_resource_count": len(original_records),
         "original_resource_bytes": int(
             sum(record.bytes for record in original_records)

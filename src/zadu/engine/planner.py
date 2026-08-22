@@ -111,6 +111,8 @@ class NeighborStatisticsExecutionPlan:
 class SNCExecutionPlan:
     requested_workers: dict[int, int]
     effective_workers: dict[int, int]
+    graph_bytes: dict[int, int]
+    iteration_bytes: dict[int, int]
     metric_working_bytes: dict[int, int]
     working_bytes: int
 
@@ -122,6 +124,8 @@ class ExecutionPlan:
     request_to_key: dict[ResourceRequest, ResourceKey]
     consumers: dict[ResourceKey, tuple[int, ...]]
     estimated_cache_bytes: int
+    original_cache_bytes: int
+    per_embedding_peak_bytes: int
     planned_peak_bytes: int
     memory_budget_bytes: int | None
     pair_plan: PairExecutionPlan | None
@@ -555,6 +559,14 @@ def build_execution_plan(
         nd_ks=nd_ks,
         excluded_keys=transient_keys,
     )
+    original_cache_bytes = _estimate_cache_bytes(
+        [key for key in resources if key.space is Space.ORIGINAL],
+        n_samples,
+        rank_membership_ks=rank_membership_ks,
+        lcmc_ks=lcmc_ks,
+        nd_ks=nd_ks,
+        excluded_keys=transient_keys,
+    )
     transient_resource_bytes = max(
         (
             _estimate_cache_bytes(
@@ -769,6 +781,8 @@ def build_execution_plan(
     if snc_metric_indices:
         requested_workers = {}
         effective_workers = {}
+        metric_graph_bytes = {}
+        metric_iteration_bytes = {}
         metric_working_bytes = {}
         for metric_index in snc_metric_indices:
             params = specs[metric_index]["params"]
@@ -797,16 +811,21 @@ def build_execution_plan(
             working_bytes = graph_bytes + planned_workers * iteration_bytes
             requested_workers[metric_index] = workers
             effective_workers[metric_index] = planned_workers
+            metric_graph_bytes[metric_index] = graph_bytes
+            metric_iteration_bytes[metric_index] = iteration_bytes
             metric_working_bytes[metric_index] = working_bytes
             peak_working_bytes = max(peak_working_bytes, working_bytes)
         snc_plan = SNCExecutionPlan(
             requested_workers=requested_workers,
             effective_workers=effective_workers,
+            graph_bytes=metric_graph_bytes,
+            iteration_bytes=metric_iteration_bytes,
             metric_working_bytes=metric_working_bytes,
             working_bytes=max(metric_working_bytes.values()),
         )
 
     planned_peak_bytes = estimated_cache_bytes + peak_working_bytes
+    per_embedding_peak_bytes = planned_peak_bytes - original_cache_bytes
 
     return ExecutionPlan(
         resources=tuple(resources),
@@ -814,6 +833,8 @@ def build_execution_plan(
         request_to_key=request_to_key,
         consumers=consumers,
         estimated_cache_bytes=estimated_cache_bytes,
+        original_cache_bytes=original_cache_bytes,
+        per_embedding_peak_bytes=per_embedding_peak_bytes,
         planned_peak_bytes=planned_peak_bytes,
         memory_budget_bytes=memory_budget,
         pair_plan=pair_plan,

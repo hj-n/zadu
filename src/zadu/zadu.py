@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import replace
 from numbers import Integral
@@ -11,9 +12,12 @@ from time import perf_counter
 from typing import Any, ClassVar
 
 import numpy as np
+from threadpoolctl import threadpool_limits
 
 from .backends import NumpyResourceProvider
+from .engine.batching import BatchExecutionPlan, build_batch_execution_plan
 from .engine.config import ExecutionConfig
+from .engine.errors import EmbeddingExecutionError
 from .engine.planner import build_execution_plan
 from .engine.resources import ResourceCache, ResourceKind, Space
 from .engine.result import build_many_run_info, build_run_info
@@ -126,10 +130,10 @@ class ZADU:
     def measure_many(self, embeddings, labels=None):
         """Compute every metric for an ordered collection of embeddings.
 
-        The embeddings are evaluated sequentially so each run has the same
-        package-managed peak-memory bound as :meth:`measure`. Immutable
-        original-space resources are shared across every embedding. ``labels``
-        is one optional label vector shared by the collection.
+        Immutable original-space resources are shared across every embedding.
+        Collection concurrency is opt-in through ``embedding_workers`` and is
+        capped by the configured memory budget. ``labels`` is one optional
+        label vector shared by the collection.
         """
 
         if isinstance(embeddings, (str, bytes)):
@@ -149,24 +153,125 @@ class ZADU:
             for index, embedding in enumerate(raw_embeddings)
         ]
         label_array = self._validate_measure_label(labels)
+        batch_plan = build_batch_execution_plan(
+            self._execution_plan,
+            embedding_count=len(embedding_arrays),
+            requested_workers=self.execution.embedding_workers,
+            parallel_fallback_reason=self._parallel_fallback_reason(),
+        )
+        snc_effective_workers = self._snc_workers_for_collection(
+            batch_plan.effective_workers
+        )
         self.last_run_info = None
         batch_started = perf_counter()
         results = []
         run_infos = []
-        for embedding in embedding_arrays:
-            result, run_info = self._measure_validated(embedding, label_array)
-            results.append(result)
-            run_infos.append(run_info)
+        final_cache = self._resource_cache
+        if batch_plan.effective_workers <= 1:
+            for index, embedding in enumerate(embedding_arrays):
+                try:
+                    result, run_info = self._execute_embedding(
+                        embedding,
+                        label_array,
+                        self._resource_cache,
+                        snc_effective_workers,
+                    )
+                except Exception as exc:
+                    raise EmbeddingExecutionError(index) from exc
+                results.append(result)
+                run_infos.append(run_info)
+        else:
+            results, run_infos, final_cache = self._execute_embedding_batches(
+                embedding_arrays,
+                label_array,
+                batch_plan,
+                snc_effective_workers,
+            )
+
+        if embedding_arrays:
+            self._adopt_execution_state(
+                embedding_arrays[-1],
+                label_array,
+                final_cache,
+            )
 
         self.last_run_info = build_many_run_info(
             plan=self._execution_plan,
             cache=self._resource_cache,
             backend=self.execution.resolved_backend,
             device=self.execution.resolved_device,
+            batch_plan=batch_plan,
             run_infos=run_infos,
             total_seconds=perf_counter() - batch_started,
+            snc_effective_workers=snc_effective_workers,
         )
         return results
+
+    def _execute_embedding_batches(
+        self,
+        embedding_arrays,
+        label_array,
+        batch_plan: BatchExecutionPlan,
+        snc_effective_workers: dict[int, int] | None,
+    ):
+        """Run worker-sized batches so completed caches cannot accumulate."""
+
+        results = []
+        run_infos = []
+        final_cache = self._resource_cache
+        label_view = _readonly_view(label_array)
+        base_cache = self._resource_cache
+        base_cache.freeze_original()
+        worker_count = batch_plan.effective_workers
+        with (
+            threadpool_limits(limits=1),
+            ThreadPoolExecutor(
+                max_workers=worker_count,
+                thread_name_prefix="zadu-embedding",
+            ) as executor,
+        ):
+            for batch_start in range(0, len(embedding_arrays), worker_count):
+                batch = embedding_arrays[batch_start : batch_start + worker_count]
+                futures = [
+                    executor.submit(
+                        self._execute_isolated_embedding,
+                        _readonly_view(embedding),
+                        label_view,
+                        base_cache,
+                        snc_effective_workers,
+                    )
+                    for embedding in batch
+                ]
+                for offset, future in enumerate(futures):
+                    embedding_index = batch_start + offset
+                    try:
+                        result, run_info, cache = future.result()
+                    except Exception as exc:
+                        for pending in futures[offset + 1 :]:
+                            pending.cancel()
+                        raise EmbeddingExecutionError(embedding_index) from exc
+                    results.append(result)
+                    run_infos.append(run_info)
+                    if embedding_index == len(embedding_arrays) - 1:
+                        final_cache = cache
+                del futures
+        return results, run_infos, final_cache
+
+    def _execute_isolated_embedding(
+        self,
+        embedding,
+        label,
+        base_cache: ResourceCache,
+        snc_effective_workers: dict[int, int] | None,
+    ):
+        cache = base_cache.fork_original(base_cache.provider.fork())
+        result, run_info = self._execute_embedding(
+            embedding,
+            label,
+            cache,
+            snc_effective_workers,
+        )
+        return result, run_info, cache
 
     def _validate_embedding(self, emb, name: str) -> np.ndarray:
         emb_array = as_finite_2d(emb, name)
@@ -192,12 +297,29 @@ class ZADU:
     def _measure_validated(self, emb_array, label_array):
         """Measure one validated embedding and return its result and diagnostics."""
 
-        self.emb = emb_array
-        self.label = label_array
-        self._resource_cache.begin_run()
+        snc_effective_workers = self._snc_workers_for_collection(1)
+        result, run_info = self._execute_embedding(
+            emb_array,
+            label_array,
+            self._resource_cache,
+            snc_effective_workers,
+        )
+        self._adopt_execution_state(emb_array, label_array, self._resource_cache)
+        return result, run_info
+
+    def _execute_embedding(
+        self,
+        emb_array,
+        label_array,
+        cache: ResourceCache,
+        snc_effective_workers: dict[int, int] | None,
+    ):
+        """Execute one embedding without mutating collection-level state."""
+
+        cache.begin_run()
         run_started = perf_counter()
-        self._prepare_embedded_space()
-        self._prepare_paired_resources()
+        cache.prepare_embedded(emb_array)
+        cache.prepare_paired(self.orig, emb_array)
 
         score_results = []
         local_results = []
@@ -209,20 +331,20 @@ class ZADU:
             if "orig" in definition.inputs:
                 exec_params["orig"] = self.orig
             if "emb" in definition.inputs:
-                exec_params["emb"] = self.emb
+                exec_params["emb"] = emb_array
             if definition.needs_label:
-                exec_params["label"] = self.label
+                exec_params["label"] = label_array
             exec_params.update(
-                self._resource_cache.arguments_for(
-                    self._execution_plan.metric_plans[index]
-                )
+                cache.arguments_for(self._execution_plan.metric_plans[index])
             )
             snc_plan = self._execution_plan.snc_plan
             if snc_plan is not None and index in snc_plan.effective_workers:
-                exec_params["n_jobs"] = snc_plan.effective_workers[index]
-                exec_params["working_memory_bytes"] = snc_plan.metric_working_bytes[
-                    index
-                ]
+                workers = snc_effective_workers[index]
+                exec_params["n_jobs"] = workers
+                exec_params["working_memory_bytes"] = (
+                    snc_plan.graph_bytes[index]
+                    + workers * snc_plan.iteration_bytes[index]
+                )
             if definition.supports_local:
                 exec_params["return_local"] = self.return_local
 
@@ -239,19 +361,73 @@ class ZADU:
                 score_results.append(_python_scalars(result))
                 if self.return_local:
                     local_results.append(None)
-            self._resource_cache.release_after(index)
+            cache.release_after(index)
 
         run_info = build_run_info(
             plan=self._execution_plan,
-            cache=self._resource_cache,
+            cache=cache,
             backend=self.execution.resolved_backend,
             device=self.execution.resolved_device,
             metric_timings=metric_timings,
             total_seconds=perf_counter() - run_started,
+            snc_effective_workers=snc_effective_workers,
         )
         if self.return_local:
             return (score_results, local_results), run_info
         return score_results, run_info
+
+    def _snc_workers_for_collection(
+        self,
+        collection_workers: int,
+    ) -> dict[int, int] | None:
+        snc_plan = self._execution_plan.snc_plan
+        if snc_plan is None:
+            return None
+        if collection_workers > 1:
+            return {index: 1 for index in snc_plan.effective_workers}
+        return dict(snc_plan.effective_workers)
+
+    def _parallel_fallback_reason(self) -> str | None:
+        for spec, definition in zip(
+            self.spec_list,
+            self._definitions,
+            strict=True,
+        ):
+            params = spec["params"]
+            if _contains_mutable_random_state(params):
+                return "mutable_random_state"
+            if (
+                definition.id == "steadiness_cohesiveness"
+                and params.get("random_state") is None
+            ):
+                return "unseeded_snc"
+            if (
+                definition.id == "label_trustworthiness_and_continuity"
+                and str(params.get("cvm", "dsc")).lower() == "ch_btw"
+            ):
+                return "global_random_state"
+            if definition.id == "clustering_and_external_validation_measure":
+                clustering = str(params.get("clustering", "kmeans")).lower()
+                clustering_args = params.get("clustering_args")
+                if (
+                    clustering == "kmeans"
+                    and isinstance(clustering_args, dict)
+                    and clustering_args.get("random_state", 0) is None
+                ):
+                    return "unseeded_kmeans"
+        return None
+
+    def _adopt_execution_state(
+        self,
+        emb_array,
+        label_array,
+        cache: ResourceCache,
+    ) -> None:
+        self.emb = emb_array
+        self.label = label_array
+        self._resource_cache = cache
+        self._provider = cache.provider
+        self._sync_resource_views()
 
     @staticmethod
     def _resolve_execution(
@@ -428,3 +604,21 @@ def _python_scalars(value):
     if isinstance(value, tuple):
         return tuple(_python_scalars(item) for item in value)
     return value
+
+
+def _readonly_view(value):
+    if value is None:
+        return None
+    view = np.asarray(value).view()
+    view.flags.writeable = False
+    return view
+
+
+def _contains_mutable_random_state(value) -> bool:
+    if isinstance(value, (np.random.Generator, np.random.RandomState)):
+        return True
+    if isinstance(value, dict):
+        return any(_contains_mutable_random_state(item) for item in value.values())
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return any(_contains_mutable_random_state(item) for item in value)
+    return False

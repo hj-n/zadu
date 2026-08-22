@@ -55,6 +55,7 @@ class ExecutionConfig:
     backend: str = "auto"
     device: str = "auto"
     memory_budget: int | str | None = None
+    embedding_workers: int = 1
     _memory_budget_bytes: int | None = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -62,6 +63,12 @@ class ExecutionConfig:
             raise TypeError("backend must be a string")
         if not isinstance(self.device, str):
             raise TypeError("device must be a string")
+        if isinstance(self.embedding_workers, bool) or not isinstance(
+            self.embedding_workers, Integral
+        ):
+            raise TypeError("embedding_workers must be an integer")
+        if self.embedding_workers < 1:
+            raise ValueError("embedding_workers must be at least 1")
         backend = self.backend.lower()
         device = self.device.lower()
         if backend not in {"auto", "numpy"}:
@@ -70,6 +77,7 @@ class ExecutionConfig:
             raise ValueError("device must be 'auto' or 'cpu' for the NumPy backend")
         object.__setattr__(self, "backend", backend)
         object.__setattr__(self, "device", device)
+        object.__setattr__(self, "embedding_workers", int(self.embedding_workers))
         object.__setattr__(
             self, "_memory_budget_bytes", parse_memory_budget(self.memory_budget)
         )
