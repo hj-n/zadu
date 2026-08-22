@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy.typing as npt
 
-from zadu.engine.resources import ResourceKey
+from zadu.engine.resources import PairOrder, ResourceKey
 
 if TYPE_CHECKING:
     from zadu.engine.planner import PairExecutionPlan
@@ -31,6 +31,7 @@ class ExactResourceProvider(Protocol):
         points: npt.NDArray,
         *,
         distance_matrix: npt.NDArray | None,
+        condensed_pairs: npt.NDArray | None,
         geodesic: bool,
     ) -> BuiltResource: ...
 
@@ -45,4 +46,13 @@ class ExactResourceProvider(Protocol):
         orig_condensed: npt.NDArray | None,
         emb_condensed: npt.NDArray | None,
         geodesic: bool,
+    ) -> BuiltResource: ...
+
+    def build_ordered_pair_statistics(
+        self,
+        plan: PairExecutionPlan,
+        pair_order: PairOrder,
+        *,
+        emb_distance_matrix: npt.NDArray | None,
+        emb_condensed: npt.NDArray | None,
     ) -> BuiltResource: ...

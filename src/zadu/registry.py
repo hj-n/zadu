@@ -11,6 +11,7 @@ from .engine.resources import (
     KNN_EMB_INFO,
     KNN_INFO,
     KNN_RANKING_INFO,
+    ORDERED_PAIR_STATISTICS,
     PAIR_STATISTICS,
     ResourceRequirement,
 )
@@ -133,7 +134,7 @@ METRICS = (
     ),
     _metric("distance_consistency", "dsc", inputs=("emb",), label=True),
     _metric("pearson_r", "pr", resources=(PAIR_STATISTICS,)),
-    _metric("spearman_rho", "srho", resources=(DISTANCE_MATRICES,)),
+    _metric("spearman_rho", "srho", resources=(ORDERED_PAIR_STATISTICS,)),
     _metric(
         "internal_validation_measure",
         "ivm",
@@ -182,7 +183,11 @@ METRICS = (
         "sn_stress",
         resources=(PAIR_STATISTICS,),
     ),
-    _metric("non_metric_stress", "nm_stress", resources=(DISTANCE_MATRICES,)),
+    _metric(
+        "non_metric_stress",
+        "nm_stress",
+        resources=(ORDERED_PAIR_STATISTICS,),
+    ),
     _metric(
         "class_angular_distortion_index",
         "cadi",

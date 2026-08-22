@@ -2,12 +2,17 @@ import numpy as np
 import numpy.typing as npt
 from sklearn.isotonic import IsotonicRegression
 
+from zadu.engine.resources import OrderedPairStatistics
+
 from .utils import pairwise_dist as pdist
 from .utils.validation import require_nonzero_distances, validate_pair
 
 
 def measure(
-    orig: npt.NDArray, emb: npt.NDArray, distance_matrices: tuple | None = None
+    orig: npt.NDArray,
+    emb: npt.NDArray,
+    distance_matrices: tuple | None = None,
+    ordered_pair_statistics: OrderedPairStatistics | None = None,
 ) -> dict:
     """
     Compute the non-metric stress of the embedding, described in:
@@ -24,6 +29,13 @@ def measure(
         dict: non_metric_stress
     """
     orig, emb = validate_pair(orig, emb)
+    if ordered_pair_statistics is not None:
+        value = ordered_pair_statistics.non_metric_stress
+        if value is None:
+            raise RuntimeError(
+                "Ordered pair statistics do not contain non-metric stress"
+            )
+        return {"non_metric_stress": float(value)}
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)

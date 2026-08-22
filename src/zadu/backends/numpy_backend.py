@@ -10,9 +10,13 @@ import numpy as np
 import numpy.typing as npt
 from scipy.spatial.distance import cdist
 from scipy.spatial.distance import pdist as scipy_pdist
+from scipy.stats import rankdata
+from sklearn.isotonic import IsotonicRegression
 
 from zadu.engine.resources import (
     NeighborRanking,
+    OrderedPairStatistics,
+    PairOrder,
     PairStrategy,
     ResourceKey,
     ResourceKind,
@@ -38,6 +42,7 @@ class NumpyResourceProvider:
         points: npt.NDArray,
         *,
         distance_matrix: npt.NDArray | None,
+        condensed_pairs: npt.NDArray | None,
         geodesic: bool,
     ) -> BuiltResource:
         if key.kind is ResourceKind.DISTANCE_MATRIX:
@@ -50,6 +55,28 @@ class NumpyResourceProvider:
         if key.kind is ResourceKind.CONDENSED_PAIRS:
             value = self.condensed_distances(points, geodesic=geodesic)
             return BuiltResource(value, "scipy")
+        if key.kind is ResourceKind.PAIR_ORDER:
+            distances = (
+                self.condensed_distances(points, geodesic=geodesic)
+                if distance_matrix is None and condensed_pairs is None
+                else self._pair_distances(distance_matrix, condensed_pairs)
+            )
+            indices = np.argsort(distances)
+            value = PairOrder(
+                indices=indices,
+                sorted_ranks=rankdata(distances)[indices],
+                min_distance=float(np.min(distances)),
+                max_distance=float(np.max(distances)),
+            )
+            return BuiltResource(
+                value,
+                "numpy",
+                {
+                    "pair_count": distances.size,
+                    "ordering": "numpy.argsort",
+                    "ranks": "scipy.stats.rankdata",
+                },
+            )
         if key.kind is ResourceKind.NEIGHBOR_RANKING:
             assert key.k is not None
             indices, ranking = knn.knn_with_ranking(
@@ -138,6 +165,93 @@ class NumpyResourceProvider:
                 "fused_metrics": list(plan.metric_ids),
             },
         )
+
+    def build_ordered_pair_statistics(
+        self,
+        plan: PairExecutionPlan,
+        pair_order: PairOrder,
+        *,
+        emb_distance_matrix: npt.NDArray | None,
+        emb_condensed: npt.NDArray | None,
+    ) -> BuiltResource:
+        emb_distances = self._pair_distances(
+            emb_distance_matrix,
+            emb_condensed,
+        )
+        if (
+            emb_distances.size != plan.pair_count
+            or pair_order.indices.size != plan.pair_count
+            or pair_order.sorted_ranks.size != plan.pair_count
+        ):
+            raise RuntimeError(
+                "Ordered pair provider produced an unexpected number of distances"
+            )
+
+        spearman_rho = None
+        if "spearman_rho" in plan.ordered_metric_ids:
+            if pair_order.min_distance == pair_order.max_distance or float(
+                np.min(emb_distances)
+            ) == float(np.max(emb_distances)):
+                raise ValueError(
+                    "Spearman correlation is undefined for constant distances"
+                )
+            embedded_ranks = rankdata(emb_distances)
+            spearman_rho = float(
+                np.corrcoef(
+                    pair_order.sorted_ranks,
+                    embedded_ranks[pair_order.indices],
+                )[0, 1]
+            )
+
+        non_metric_stress = None
+        if "non_metric_stress" in plan.ordered_metric_ids:
+            if pair_order.max_distance <= 0 or float(np.max(emb_distances)) <= 0:
+                raise ValueError(
+                    "Non-metric stress is undefined when all pairwise distances "
+                    "are zero"
+                )
+            emb_sorted = emb_distances[pair_order.indices]
+            isotonic = IsotonicRegression().fit(
+                pair_order.sorted_ranks,
+                emb_sorted,
+            )
+            d_hat = isotonic.predict(pair_order.sorted_ranks)
+            residual = emb_sorted - d_hat
+            raw_stress = float(np.vdot(residual, residual))
+            normalization_factor = float(np.vdot(emb_sorted, emb_sorted))
+            non_metric_stress = math.sqrt(raw_stress / normalization_factor)
+
+        statistics = OrderedPairStatistics(
+            spearman_rho=spearman_rho,
+            non_metric_stress=non_metric_stress,
+            strategy=plan.strategy,
+            pair_count=plan.pair_count,
+        )
+        return BuiltResource(
+            statistics,
+            "numpy",
+            {
+                "strategy": plan.strategy.value,
+                "pair_count": plan.pair_count,
+                "working_bytes": plan.working_bytes,
+                "fused_metrics": list(plan.ordered_metric_ids),
+                "ordering_reused": True,
+            },
+        )
+
+    @staticmethod
+    def _pair_distances(
+        distance_matrix: npt.NDArray | None,
+        condensed_pairs: npt.NDArray | None,
+    ) -> npt.NDArray:
+        if condensed_pairs is not None:
+            return np.asarray(condensed_pairs)
+        if distance_matrix is None:
+            raise RuntimeError(
+                "Ordered pair resources require a dense or condensed distance source"
+            )
+        matrix = np.asarray(distance_matrix)
+        return matrix[np.triu_indices(matrix.shape[0], k=1)]
 
     @staticmethod
     def _matrix_pair_blocks(
