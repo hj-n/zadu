@@ -106,11 +106,14 @@ ordered `measure_many()` API:
 
 ```bash
 python benchmarks/benchmark_measure_many.py \
-  --samples 2000 --dimension 20 --embeddings 8 --repeat 3
+  --samples 2000 --dimension 20 --embeddings 8 --workers 2 --repeat 3
 ```
 
-The three modes run in isolated processes. Construction is included so the
+The four modes run in isolated processes: independent runners, a manual reused
+runner, sequential `measure_many()`, and bounded parallel `measure_many()`.
+Construction is included so the
 report separates the benefit of sharing original-space pair orders, rankings,
 and maximum-`k` neighbor resources from the small API overhead relative to an
 already-correct manual `measure()` loop. It also reports exact score deltas,
-process peak RSS, planned per-embedding peak bytes, and reuse-event counts.
+process peak RSS, planned collection peak bytes, effective workers, and
+reuse-event counts.

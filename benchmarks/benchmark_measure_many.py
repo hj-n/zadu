@@ -13,7 +13,7 @@ from time import perf_counter
 
 import numpy as np
 
-from zadu import ZADU
+from zadu import ZADU, ExecutionConfig
 
 try:
     import resource
@@ -37,12 +37,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--dimension", type=int, default=20)
     parser.add_argument("--embedding-dimension", type=int, default=2)
     parser.add_argument("--embeddings", type=int, default=8)
+    parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--json", type=Path)
     parser.add_argument(
         "--worker",
-        choices=("independent", "manual-reuse", "measure-many"),
+        choices=("independent", "manual-reuse", "measure-many", "parallel"),
         help=argparse.SUPPRESS,
     )
     return parser
@@ -70,7 +71,7 @@ def _dataset(args):
     return orig, embeddings
 
 
-def _execute(mode, orig, embeddings):
+def _execute(mode, orig, embeddings, workers):
     if mode == "independent":
         results = []
         last_info = None
@@ -81,9 +82,18 @@ def _execute(mode, orig, embeddings):
         return results, {
             "planned_peak_bytes": last_info["planned_peak_bytes"],
             "original_resource_reuse_events": 0,
+            "requested_workers": 1,
+            "effective_workers": 1,
+            "batch_strategy": "independent",
         }
 
-    runner = ZADU(SPECS, orig)
+    runner = ZADU(
+        SPECS,
+        orig,
+        execution=ExecutionConfig(
+            embedding_workers=workers if mode == "parallel" else 1
+        ),
+    )
     if mode == "manual-reuse":
         results = [runner.measure(embedding) for embedding in embeddings]
         original_count = sum(
@@ -93,6 +103,9 @@ def _execute(mode, orig, embeddings):
         diagnostics = {
             "planned_peak_bytes": runner.last_run_info["planned_peak_bytes"],
             "original_resource_reuse_events": original_count * len(embeddings),
+            "requested_workers": 1,
+            "effective_workers": 1,
+            "batch_strategy": "manual-reuse",
         }
         return results, diagnostics
 
@@ -102,6 +115,9 @@ def _execute(mode, orig, embeddings):
         "original_resource_reuse_events": runner.last_run_info[
             "original_resource_reuse_events"
         ],
+        "requested_workers": runner.last_run_info["requested_workers"],
+        "effective_workers": runner.last_run_info["effective_workers"],
+        "batch_strategy": runner.last_run_info["batch_strategy"],
     }
     return results, diagnostics
 
@@ -113,6 +129,7 @@ def _worker(args):
         args.worker,
         orig[:warm_n],
         [embedding[:warm_n] for embedding in embeddings[:2]],
+        args.workers,
     )
 
     durations = []
@@ -121,7 +138,12 @@ def _worker(args):
     for _ in range(args.repeat):
         gc.collect()
         started = perf_counter()
-        scores, diagnostics = _execute(args.worker, orig, embeddings)
+        scores, diagnostics = _execute(
+            args.worker,
+            orig,
+            embeddings,
+            args.workers,
+        )
         durations.append(perf_counter() - started)
 
     return {
@@ -130,6 +152,9 @@ def _worker(args):
         "peak_rss_mib": _peak_rss_mib(),
         "planned_peak_bytes": diagnostics["planned_peak_bytes"],
         "original_resource_reuse_events": diagnostics["original_resource_reuse_events"],
+        "requested_workers": diagnostics["requested_workers"],
+        "effective_workers": diagnostics["effective_workers"],
+        "batch_strategy": diagnostics["batch_strategy"],
         "scores": scores,
     }
 
@@ -146,6 +171,8 @@ def _run_worker(args, mode):
         str(args.embedding_dimension),
         "--embeddings",
         str(args.embeddings),
+        "--workers",
+        str(args.workers),
         "--repeat",
         str(args.repeat),
         "--seed",
@@ -176,8 +203,8 @@ def main() -> None:
         raise ValueError("--samples must be greater than 40 for the benchmark specs")
     if args.dimension < 1 or args.embedding_dimension < 1:
         raise ValueError("dimensions must be positive")
-    if args.embeddings < 1 or args.repeat < 1:
-        raise ValueError("--embeddings and --repeat must be positive")
+    if args.embeddings < 1 or args.workers < 1 or args.repeat < 1:
+        raise ValueError("--embeddings, --workers, and --repeat must be positive")
     if args.worker is not None:
         print(json.dumps(_worker(args)))
         return
@@ -185,12 +212,14 @@ def main() -> None:
     independent = _run_worker(args, "independent")
     manual = _run_worker(args, "manual-reuse")
     many = _run_worker(args, "measure-many")
+    parallel = _run_worker(args, "parallel")
     payload = {
         "metadata": {
             "samples": args.samples,
             "dimension": args.dimension,
             "embedding_dimension": args.embedding_dimension,
             "embeddings": args.embeddings,
+            "workers": args.workers,
             "repeat": args.repeat,
             "python": platform.python_version(),
             "numpy": np.__version__,
@@ -200,15 +229,25 @@ def main() -> None:
         "independent": independent,
         "manual_reuse": manual,
         "measure_many": many,
+        "parallel": parallel,
         "measure_many_speedup_over_independent": (
             independent["seconds"] / many["seconds"]
         ),
         "measure_many_speedup_over_manual_reuse": (manual["seconds"] / many["seconds"]),
+        "parallel_speedup_over_independent": (
+            independent["seconds"] / parallel["seconds"]
+        ),
+        "parallel_speedup_over_sequential_measure_many": (
+            many["seconds"] / parallel["seconds"]
+        ),
         "maximum_score_delta_vs_independent": _maximum_score_delta(
             independent["scores"], many["scores"]
         ),
         "maximum_score_delta_vs_manual_reuse": _maximum_score_delta(
             manual["scores"], many["scores"]
+        ),
+        "maximum_parallel_score_delta": _maximum_score_delta(
+            many["scores"], parallel["scores"]
         ),
     }
     print(json.dumps(payload, indent=2))

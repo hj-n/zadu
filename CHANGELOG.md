@@ -22,6 +22,8 @@
   planning for Steadiness & Cohesiveness.
 - Ordered `ZADU.measure_many()` execution with shared original-space resources,
   per-embedding results, and aggregate JSON-compatible diagnostics.
+- Opt-in, memory-bounded `embedding_workers` for exact repeated-embedding
+  execution and indexed `EmbeddingExecutionError` failures.
 
 ### Changed
 
@@ -45,6 +47,9 @@
   single/multi-worker global and local results.
 - Repeated embeddings now use one exact maximum-`k` plan and are prevalidated as
   a collection before sequential memory-bounded execution begins.
+- Parallel repeated-embedding runs share frozen original resources, isolate
+  mutable per-embedding caches, limit native inner threads, and automatically
+  fall back for unsafe random-state configurations.
 
 ## 0.5.0
 
