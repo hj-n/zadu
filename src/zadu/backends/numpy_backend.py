@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
+from scipy.sparse import csr_matrix
 from scipy.spatial.distance import cdist
 from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.stats import rankdata
@@ -15,21 +16,34 @@ from sklearn.isotonic import IsotonicRegression
 
 from zadu.engine.resources import (
     NeighborRanking,
+    NeighborStatistics,
     OrderedPairStatistics,
     PairOrder,
     PairStrategy,
+    RankComparisons,
     ResourceKey,
     ResourceKind,
     TopographicProductStatistics,
+    compact_index_dtype,
 )
 from zadu.kernels import PairAccumulator
 from zadu.measures.utils import knn
 from zadu.measures.utils import pairwise_dist as pdist
+from zadu.measures.utils.vectorized import (
+    gather_ranks,
+    rowwise_intersection_count,
+    rowwise_membership,
+)
 
 from .base import BuiltResource
 
 if TYPE_CHECKING:
-    from zadu.engine.planner import PairExecutionPlan, TopographicExecutionPlan
+    from zadu.engine.planner import (
+        NeighborStatisticsExecutionPlan,
+        PairExecutionPlan,
+        RankComparisonExecutionPlan,
+        TopographicExecutionPlan,
+    )
 
 
 class NumpyResourceProvider:
@@ -54,6 +68,18 @@ class NumpyResourceProvider:
                 else pdist.pairwise_distance_matrix(points)
             )
             return BuiltResource(value, "numpy")
+        if key.kind is ResourceKind.DENSITY:
+            if distance_matrix is None or key.parameter is None:
+                raise RuntimeError("Density requires a distance matrix and sigma")
+            value = pdist.distance_matrix_to_density(
+                distance_matrix,
+                key.parameter,
+            )
+            return BuiltResource(
+                value,
+                "numpy",
+                {"sigma": key.parameter, "source": "distance_matrix"},
+            )
         if key.kind is ResourceKind.CONDENSED_PAIRS:
             value = self.condensed_distances(points, geodesic=geodesic)
             return BuiltResource(value, "scipy")
@@ -63,7 +89,8 @@ class NumpyResourceProvider:
                 if distance_matrix is None and condensed_pairs is None
                 else self._pair_distances(distance_matrix, condensed_pairs)
             )
-            indices = np.argsort(distances)
+            index_dtype = compact_index_dtype(distances.size)
+            indices = np.argsort(distances).astype(index_dtype, copy=False)
             value = PairOrder(
                 indices=indices,
                 sorted_ranks=rankdata(distances)[indices],
@@ -84,7 +111,16 @@ class NumpyResourceProvider:
             indices, ranking = knn.knn_with_ranking(
                 points, key.k, distance_matrix=distance_matrix
             )
-            return BuiltResource(NeighborRanking(indices, ranking), "numpy")
+            index_dtype = compact_index_dtype(points.shape[0])
+            value = NeighborRanking(
+                indices.astype(index_dtype, copy=False),
+                ranking.astype(index_dtype, copy=False),
+            )
+            return BuiltResource(
+                value,
+                "numpy",
+                {"index_dtype": index_dtype.name},
+            )
         if key.kind is ResourceKind.STABLE_KNN:
             assert key.k is not None
             if working_memory_bytes is None:
@@ -109,10 +145,16 @@ class NumpyResourceProvider:
             raise RuntimeError(f"Unsupported NumPy resource kind: {key.kind.value}")
         assert key.k is not None
         if distance_matrix is not None:
+            value = knn.knn_from_distance_matrix(distance_matrix, key.k)
             return BuiltResource(
-                knn.knn_from_distance_matrix(distance_matrix, key.k), "numpy"
+                value.astype(compact_index_dtype(points.shape[0]), copy=False),
+                "numpy",
             )
-        return BuiltResource(knn.knn(points, key.k), "faiss")
+        value = knn.knn(points, key.k)
+        return BuiltResource(
+            value.astype(compact_index_dtype(points.shape[0]), copy=False),
+            "faiss",
+        )
 
     def build_pair_statistics(
         self,
@@ -374,6 +416,143 @@ class NumpyResourceProvider:
             },
         )
 
+    def build_rank_comparisons(
+        self,
+        plan: RankComparisonExecutionPlan,
+        *,
+        orig_ranking: NeighborRanking,
+        emb_ranking: NeighborRanking,
+    ) -> BuiltResource:
+        """Gather cross-space ranks once and share exact membership masks."""
+
+        orig_indices = orig_ranking.indices[:, : plan.k]
+        emb_indices = emb_ranking.indices[:, : plan.k]
+        orig_ranks_of_emb = gather_ranks(orig_ranking.ranking, emb_indices)
+        emb_ranks_of_orig = gather_ranks(emb_ranking.ranking, orig_indices)
+        emb_in_orig = {}
+        orig_in_emb = {}
+        for k in plan.membership_ks:
+            emb_in_orig[k] = rowwise_membership(
+                emb_indices[:, :k],
+                orig_indices[:, :k],
+                max_block_bytes=plan.work_budget_bytes,
+            )
+            orig_in_emb[k] = rowwise_membership(
+                orig_indices[:, :k],
+                emb_indices[:, :k],
+                max_block_bytes=plan.work_budget_bytes,
+            )
+        value = RankComparisons(
+            orig_ranks_of_emb=orig_ranks_of_emb,
+            emb_ranks_of_orig=emb_ranks_of_orig,
+            orig_indices=orig_indices,
+            emb_indices=emb_indices,
+            emb_in_orig=emb_in_orig,
+            orig_in_emb=orig_in_emb,
+        )
+        return BuiltResource(
+            value,
+            "numpy",
+            {
+                "algorithm": "fused_gathered_ranks_and_membership",
+                "k": plan.k,
+                "requested_ks": list(plan.requested_ks),
+                "membership_ks": list(plan.membership_ks),
+                "working_bytes": plan.working_bytes,
+                "fused_metrics": list(plan.metric_ids),
+            },
+        )
+
+    def build_neighbor_statistics(
+        self,
+        plan: NeighborStatisticsExecutionPlan,
+        *,
+        orig_knn: npt.NDArray,
+        emb_knn: npt.NDArray,
+    ) -> BuiltResource:
+        """Compute shared exact LCMC and neighbor-dissimilarity statistics."""
+
+        original_value = (
+            orig_knn.indices if isinstance(orig_knn, NeighborRanking) else orig_knn
+        )
+        embedded_value = (
+            emb_knn.indices if isinstance(emb_knn, NeighborRanking) else emb_knn
+        )
+        original = np.asarray(original_value)[:, : plan.k]
+        embedded = np.asarray(embedded_value)[:, : plan.k]
+        n_samples = original.shape[0]
+        local_lcmc = {}
+        for k in plan.lcmc_ks:
+            intersections = rowwise_intersection_count(
+                original[:, :k],
+                embedded[:, :k],
+                max_block_bytes=plan.work_budget_bytes,
+            )
+            local_lcmc[k] = (intersections - (k * k) / (n_samples - 1)) / k
+
+        neighbor_dissimilarity = {}
+        nd_block_count = 0
+        for k in plan.nd_ks:
+            orig_graph = self._symmetric_neighbor_graph(original[:, :k])
+            emb_graph = self._symmetric_neighbor_graph(embedded[:, :k])
+            orig_transpose = orig_graph.T.tocsr()
+            emb_transpose = emb_graph.T.tocsr()
+            positive_squared = 0.0
+            negative_squared = 0.0
+            for start in range(0, n_samples, plan.block_rows):
+                stop = min(start + plan.block_rows, n_samples)
+                difference = (
+                    orig_graph[start:stop] @ orig_transpose
+                    - emb_graph[start:stop] @ emb_transpose
+                ).tocsr()
+                row_indices = np.repeat(
+                    np.arange(stop - start),
+                    np.diff(difference.indptr),
+                )
+                off_diagonal = difference.indices != start + row_indices
+                values = difference.data[off_diagonal].astype(np.float64) / k
+                positive_values = values[values > 0]
+                negative_values = values[values < 0]
+                positive_squared += float(np.vdot(positive_values, positive_values))
+                negative_squared += float(np.vdot(negative_values, negative_values))
+                nd_block_count += 1
+            neighbor_dissimilarity[k] = max(
+                math.sqrt(positive_squared),
+                math.sqrt(negative_squared),
+            )
+
+        value = NeighborStatistics(
+            local_lcmc=local_lcmc,
+            neighbor_dissimilarity=neighbor_dissimilarity,
+        )
+        return BuiltResource(
+            value,
+            "scipy",
+            {
+                "algorithm": "fused_neighbor_statistics",
+                "k": plan.k,
+                "lcmc_ks": list(plan.lcmc_ks),
+                "neighbor_dissimilarity_ks": list(plan.nd_ks),
+                "block_count": nd_block_count,
+                "block_rows": plan.block_rows,
+                "working_bytes": plan.working_bytes,
+                "fused_metrics": list(plan.metric_ids),
+            },
+        )
+
+    @staticmethod
+    def _symmetric_neighbor_graph(indices: npt.NDArray) -> csr_matrix:
+        n_samples, k = indices.shape
+        rows = np.repeat(np.arange(n_samples), k)
+        directed = csr_matrix(
+            (
+                np.ones(rows.size, dtype=np.int32),
+                (rows, indices.reshape(-1)),
+            ),
+            shape=(n_samples, n_samples),
+        )
+        return ((directed + directed.T) > 0).astype(np.int32).tocsr()
+
     @classmethod
     def stable_knn(
         cls,
@@ -391,7 +570,10 @@ class NumpyResourceProvider:
             1,
             min(n_samples, working_memory_bytes // bytes_per_row),
         )
-        result = np.empty((n_samples, k), dtype=np.intp)
+        result = np.empty(
+            (n_samples, k),
+            dtype=compact_index_dtype(n_samples),
+        )
         block_count = 0
         for start in range(0, n_samples, block_rows):
             stop = min(start + block_rows, n_samples)

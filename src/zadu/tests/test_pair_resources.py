@@ -148,6 +148,7 @@ def test_mixed_neighbor_resources_keep_dense_legacy_provider_path():
     } == {
         ("distance_matrix", "numpy"),
         ("knn", "numpy"),
+        ("neighbor_statistics", "scipy"),
         ("pair_statistics", "numpy"),
     }
     assert all(np.isfinite(value) for score in scores for value in score.values())

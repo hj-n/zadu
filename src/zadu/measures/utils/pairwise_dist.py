@@ -64,7 +64,11 @@ def distance_matrix_to_density(
             "Density-based measures are undefined when all pairwise distances are zero"
         )
 
-    normalized_distance_matrix = matrix / maximum
-    density = np.sum(np.exp(-(normalized_distance_matrix**2) / sigma), axis=-1)
+    kernel = np.array(matrix, dtype=float, copy=True)
+    kernel /= maximum
+    np.square(kernel, out=kernel)
+    kernel /= -sigma
+    np.exp(kernel, out=kernel)
+    density = np.sum(kernel, axis=-1)
     density = density / np.sum(density)
     return density

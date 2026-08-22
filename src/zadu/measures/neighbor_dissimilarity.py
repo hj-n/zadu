@@ -2,6 +2,8 @@ import numpy as np
 import numpy.typing as npt
 from scipy.sparse import issparse
 
+from zadu.engine.resources import NeighborStatistics
+
 from .utils import knn
 from .utils.validation import validate_pair
 
@@ -12,6 +14,7 @@ def measure(
     k: int = 20,
     snn_info: tuple | None = None,
     knn_info: tuple | None = None,
+    neighbor_statistics: NeighborStatistics | None = None,
 ) -> dict:
     """
     Compute neighbor dissimilarity (ND) of the embedding
@@ -25,6 +28,9 @@ def measure(
     """
 
     orig, emb = validate_pair(orig, emb)
+    if neighbor_statistics is not None:
+        return {"neighbor_dissimilarity": neighbor_statistics.neighbor_dissimilarity[k]}
+
     if snn_info is None:
         if knn_info is None:
             orig_SNN_graph = knn.snn(orig, k, directed=False)

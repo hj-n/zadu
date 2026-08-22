@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
+from zadu.engine.resources import RankComparisons
+
 from .utils import knn
 from .utils.validation import validate_labels, validate_pair, validate_trustworthiness_k
 from .utils.vectorized import gather_ranks, rowwise_membership
@@ -13,6 +15,7 @@ def measure(
     k: int = 20,
     knn_ranking_info: tuple | None = None,
     return_local: bool = False,
+    rank_comparisons: RankComparisons | None = None,
 ) -> tuple | dict:
     """
     Compute class-aware trustworthiness and continuity of the embedding
@@ -29,6 +32,43 @@ def measure(
     orig, emb = validate_pair(orig, emb)
     label = validate_labels(label, orig.shape[0], min_classes=2)
     k = validate_trustworthiness_k(orig.shape[0], k)
+
+    if rank_comparisons is not None:
+        trust_result = _ca_tnc_from_comparison(
+            rank_comparisons.orig_ranks_of_emb[:, :k],
+            ~rank_comparisons.emb_in_orig[k],
+            rank_comparisons.emb_indices[:, :k],
+            label,
+            k,
+            "false",
+            return_local,
+        )
+        continuity_result = _ca_tnc_from_comparison(
+            rank_comparisons.emb_ranks_of_orig[:, :k],
+            ~rank_comparisons.orig_in_emb[k],
+            rank_comparisons.orig_indices[:, :k],
+            label,
+            k,
+            "missing",
+            return_local,
+        )
+        if return_local:
+            trust, local_trust = trust_result
+            continuity, local_continuity = continuity_result
+            return (
+                {
+                    "ca_trustworthiness": trust,
+                    "ca_continuity": continuity,
+                },
+                {
+                    "local_ca_trustworthiness": local_trust,
+                    "local_ca_continuity": local_continuity,
+                },
+            )
+        return {
+            "ca_trustworthiness": trust_result,
+            "ca_continuity": continuity_result,
+        }
 
     if knn_ranking_info is None:
         orig_knn_indices, orig_ranking = knn.knn_with_ranking(orig, k)
@@ -122,3 +162,25 @@ def ca_tnc_computation(
         return average_distortion, local_distortion_list
     else:
         return average_distortion
+
+
+def _ca_tnc_from_comparison(
+    target_ranks: npt.NDArray,
+    missing_mask: npt.NDArray,
+    target_indices: npt.NDArray,
+    label: npt.NDArray,
+    k: int,
+    type_description: str,
+    return_local: bool,
+) -> float | tuple[float, npt.NDArray]:
+    target_labels = label[target_indices]
+    class_mask = (
+        target_labels != label[:, None]
+        if type_description == "false"
+        else target_labels == label[:, None]
+    )
+    local = np.sum((target_ranks - k) * missing_mask * class_mask, axis=1)
+    points_num = target_indices.shape[0]
+    local = 1 - local * (2 / (k * (2 * points_num - 3 * k - 1)))
+    average = float(np.mean(local))
+    return (average, local) if return_local else average

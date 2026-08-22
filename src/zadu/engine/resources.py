@@ -23,6 +23,7 @@ class Space(str, Enum):
 
 class ResourceKind(str, Enum):
     DISTANCE_MATRIX = "distance_matrix"
+    DENSITY = "density"
     CONDENSED_PAIRS = "condensed_pairs"
     PAIR_ORDER = "pair_order"
     KNN = "knn"
@@ -31,12 +32,24 @@ class ResourceKind(str, Enum):
     PAIR_STATISTICS = "pair_statistics"
     ORDERED_PAIR_STATISTICS = "ordered_pair_statistics"
     TOPOGRAPHIC_PRODUCT_STATISTICS = "topographic_product_statistics"
+    RANK_COMPARISONS = "rank_comparisons"
+    NEIGHBOR_STATISTICS = "neighbor_statistics"
 
 
 class PairStrategy(str, Enum):
     DENSE = "dense"
     CONDENSED = "condensed"
     STREAMING = "streaming"
+
+
+def compact_index_dtype(n_samples: int) -> np.dtype:
+    """Return the smallest signed dtype that safely represents sample indices."""
+
+    if n_samples < 0:
+        raise ValueError("n_samples must be zero or greater")
+    if n_samples <= np.iinfo(np.int32).max + 1:
+        return np.dtype(np.int32)
+    return np.dtype(np.int64)
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,12 +60,21 @@ class ResourceRequirement:
     kind: ResourceKind
     spaces: tuple[Space, ...]
     uses_k: bool = False
+    parameter_name: str | None = None
+    default_parameter: float | None = None
 
 
 DISTANCE_MATRICES = ResourceRequirement(
     "distance_matrices",
     ResourceKind.DISTANCE_MATRIX,
     (Space.ORIGINAL, Space.EMBEDDED),
+)
+DENSITIES = ResourceRequirement(
+    "densities",
+    ResourceKind.DENSITY,
+    (Space.ORIGINAL, Space.EMBEDDED),
+    parameter_name="sigma",
+    default_parameter=0.1,
 )
 KNN_INFO = ResourceRequirement(
     "knn_info",
@@ -94,6 +116,18 @@ TOPOGRAPHIC_PRODUCT_STATISTICS = ResourceRequirement(
     (Space.PAIRED,),
     uses_k=True,
 )
+RANK_COMPARISONS = ResourceRequirement(
+    "rank_comparisons",
+    ResourceKind.RANK_COMPARISONS,
+    (Space.PAIRED,),
+    uses_k=True,
+)
+NEIGHBOR_STATISTICS = ResourceRequirement(
+    "neighbor_statistics",
+    ResourceKind.NEIGHBOR_STATISTICS,
+    (Space.PAIRED,),
+    uses_k=True,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +135,7 @@ class ResourceRequest:
     kind: ResourceKind
     space: Space
     k: int | None = None
+    parameter: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +145,7 @@ class ResourceKey:
     kind: ResourceKind
     space: Space
     k: int | None = None
+    parameter: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +207,26 @@ class TopographicProductStatistics:
     block_rows: int
 
 
+@dataclass(frozen=True, slots=True)
+class RankComparisons:
+    """Cross-space ranks and exact per-k neighborhood membership masks."""
+
+    orig_ranks_of_emb: npt.NDArray
+    emb_ranks_of_orig: npt.NDArray
+    orig_indices: npt.NDArray
+    emb_indices: npt.NDArray
+    emb_in_orig: dict[int, npt.NDArray]
+    orig_in_emb: dict[int, npt.NDArray]
+
+
+@dataclass(frozen=True, slots=True)
+class NeighborStatistics:
+    """Exact neighbor-derived results shared by LCMC and ND metrics."""
+
+    local_lcmc: dict[int, npt.NDArray]
+    neighbor_dissimilarity: dict[int, float]
+
+
 @dataclass(slots=True)
 class ResourceRecord:
     key: ResourceKey
@@ -190,6 +246,19 @@ def resource_nbytes(value: Any) -> int:
         return int(value.indices.nbytes + value.sorted_ranks.nbytes)
     if isinstance(value, TopographicProductStatistics):
         return int(value.scores.nbytes)
+    if isinstance(value, RankComparisons):
+        arrays = (
+            value.orig_ranks_of_emb,
+            value.emb_ranks_of_orig,
+            *value.emb_in_orig.values(),
+            *value.orig_in_emb.values(),
+        )
+        return int(sum(array.nbytes for array in arrays))
+    if isinstance(value, NeighborStatistics):
+        return int(
+            sum(array.nbytes for array in value.local_lcmc.values())
+            + len(value.neighbor_dissimilarity) * np.dtype(np.float64).itemsize
+        )
     if isinstance(value, np.ndarray):
         return int(value.nbytes)
     return 0
@@ -212,6 +281,13 @@ def resource_dtype(value: Any) -> str | dict[str, str] | None:
         return "float64"
     if isinstance(value, TopographicProductStatistics):
         return value.scores.dtype.name
+    if isinstance(value, RankComparisons):
+        return {
+            "ranks": value.orig_ranks_of_emb.dtype.name,
+            "membership": "bool",
+        }
+    if isinstance(value, NeighborStatistics):
+        return "float64"
     return None
 
 
@@ -305,6 +381,26 @@ class ResourceCache:
                 perf_counter() - start,
             )
 
+        rank_plan = self.plan.rank_comparison_plan
+        if rank_plan is not None:
+            start = perf_counter()
+            built = self.provider.build_rank_comparisons(
+                rank_plan,
+                orig_ranking=self._values[rank_plan.original_ranking_key],
+                emb_ranking=self._values[rank_plan.embedded_ranking_key],
+            )
+            self._store(rank_plan.statistics_key, built, perf_counter() - start)
+
+        neighbor_plan = self.plan.neighbor_statistics_plan
+        if neighbor_plan is not None:
+            start = perf_counter()
+            built = self.provider.build_neighbor_statistics(
+                neighbor_plan,
+                orig_knn=self._values[neighbor_plan.original_knn_key],
+                emb_knn=self._values[neighbor_plan.embedded_knn_key],
+            )
+            self._store(neighbor_plan.statistics_key, built, perf_counter() - start)
+
     def _invalidate(self, space: Space) -> None:
         for key in tuple(self._records):
             if key.space is space:
@@ -326,6 +422,8 @@ class ResourceCache:
                 geodesic=self.geodesic and space is Space.ORIGINAL,
             )
             self._store(key, built, perf_counter() - start)
+        for key in self.plan.release_after_prepare.get(space, ()):
+            self._release(key)
 
     def _store(self, key, built, elapsed: float) -> None:
         self._values[key] = built.value
@@ -355,6 +453,8 @@ class ResourceCache:
                 ResourceKind.PAIR_STATISTICS,
                 ResourceKind.ORDERED_PAIR_STATISTICS,
                 ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS,
+                ResourceKind.RANK_COMPARISONS,
+                ResourceKind.NEIGHBOR_STATISTICS,
             }:
                 self._release(key)
 
@@ -367,6 +467,9 @@ class ResourceCache:
             ResourceKind.PAIR_STATISTICS,
             ResourceKind.ORDERED_PAIR_STATISTICS,
             ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS,
+            ResourceKind.DENSITY,
+            ResourceKind.RANK_COMPARISONS,
+            ResourceKind.NEIGHBOR_STATISTICS,
         }:
             return value
         if request.kind in {ResourceKind.KNN, ResourceKind.STABLE_KNN}:

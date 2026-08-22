@@ -20,6 +20,7 @@ from .measures.utils.validation import (
     as_finite_2d,
     validate_labels,
     validate_neighbor_k,
+    validate_positive_real,
     validate_trustworthiness_k,
 )
 from .registry import METRIC_BY_ALIAS, METRIC_BY_ID, MetricDefinition
@@ -248,6 +249,11 @@ class ZADU:
 
             spec["id"] = definition.id
             spec["params"] = params
+            if definition.id in {"distance_to_measure", "kl_divergence"}:
+                params["sigma"] = validate_positive_real(
+                    params.get("sigma", 0.1),
+                    "sigma",
+                )
             self._validate_k(definition, params)
             self._definitions.append(definition)
 
@@ -270,11 +276,17 @@ class ZADU:
             for requirement in definition.resources:
                 if requirement.argument == "distance_matrices":
                     self.distance_matrices_flag = True
-                elif requirement.argument == "knn_ranking_info":
+                elif (
+                    requirement.argument == "knn_ranking_info"
+                    or requirement.argument == "rank_comparisons"
+                ):
                     self.ranking_k = max(
                         self.ranking_k, params.get("k", self.DEFAULT_K)
                     )
-                elif requirement.argument == "knn_info":
+                elif (
+                    requirement.argument == "knn_info"
+                    or requirement.argument == "neighbor_statistics"
+                ):
                     self.knn_both_k = max(
                         self.knn_both_k, params.get("k", self.DEFAULT_K)
                     )

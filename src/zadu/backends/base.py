@@ -7,10 +7,15 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy.typing as npt
 
-from zadu.engine.resources import PairOrder, ResourceKey
+from zadu.engine.resources import NeighborRanking, PairOrder, ResourceKey
 
 if TYPE_CHECKING:
-    from zadu.engine.planner import PairExecutionPlan, TopographicExecutionPlan
+    from zadu.engine.planner import (
+        NeighborStatisticsExecutionPlan,
+        PairExecutionPlan,
+        RankComparisonExecutionPlan,
+        TopographicExecutionPlan,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +68,22 @@ class ExactResourceProvider(Protocol):
         plan: TopographicExecutionPlan,
         orig: npt.NDArray,
         emb: npt.NDArray,
+        *,
+        orig_knn: npt.NDArray,
+        emb_knn: npt.NDArray,
+    ) -> BuiltResource: ...
+
+    def build_rank_comparisons(
+        self,
+        plan: RankComparisonExecutionPlan,
+        *,
+        orig_ranking: NeighborRanking,
+        emb_ranking: NeighborRanking,
+    ) -> BuiltResource: ...
+
+    def build_neighbor_statistics(
+        self,
+        plan: NeighborStatisticsExecutionPlan,
         *,
         orig_knn: npt.NDArray,
         emb_knn: npt.NDArray,

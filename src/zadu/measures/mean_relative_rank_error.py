@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
+from zadu.engine.resources import RankComparisons
+
 from .utils import knn
 from .utils.validation import validate_pair
 from .utils.vectorized import gather_ranks
@@ -12,6 +14,7 @@ def measure(
     k: int = 20,
     knn_ranking_info: tuple | None = None,
     return_local: bool = False,
+    rank_comparisons: RankComparisons | None = None,
 ) -> tuple | dict:
     """
     Compute Mean Relative Rank Error (MRRE) of the embedding
@@ -24,6 +27,33 @@ def measure(
             dict: MRRE_false and MRRE_missing
     """
     orig, emb = validate_pair(orig, emb)
+    if rank_comparisons is not None:
+        target_ranks = np.arange(1, k + 1)
+        false_result = _mrre_from_ranks(
+            rank_comparisons.orig_ranks_of_emb[:, :k],
+            target_ranks,
+            orig.shape[0],
+            k,
+            return_local,
+        )
+        missing_result = _mrre_from_ranks(
+            rank_comparisons.emb_ranks_of_orig[:, :k],
+            target_ranks,
+            orig.shape[0],
+            k,
+            return_local,
+        )
+        if return_local:
+            mrre_false, local_false = false_result
+            mrre_missing, local_missing = missing_result
+            return (
+                {"mrre_false": mrre_false, "mrre_missing": mrre_missing},
+                {
+                    "local_mrre_false": local_false,
+                    "local_mrre_missing": local_missing,
+                },
+            )
+        return {"mrre_false": false_result, "mrre_missing": missing_result}
     if knn_ranking_info is None:
         orig_knn_indices, orig_ranking = knn.knn_with_ranking(orig, k)
         emb_knn_indices, emb_ranking = knn.knn_with_ranking(emb, k)
@@ -84,3 +114,19 @@ def mrre_computation(
         return average_distortion, local_distortion_list
     else:
         return average_distortion
+
+
+def _mrre_from_ranks(
+    base_ranks: npt.NDArray,
+    target_ranks: npt.NDArray,
+    points_num: int,
+    k: int,
+    return_local: bool,
+) -> float | tuple[float, npt.NDArray]:
+    local = np.sum(np.abs(base_ranks - target_ranks) / target_ranks, axis=1)
+    normalization = sum(
+        abs(points_num - 2 * rank + 1) / rank for rank in range(1, k + 1)
+    )
+    local = 1 - local / normalization
+    average = float(np.mean(local))
+    return (average, local) if return_local else average

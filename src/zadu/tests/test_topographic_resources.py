@@ -11,6 +11,7 @@ from zadu.engine.resources import (
     ResourceKind,
     Space,
     TopographicProductStatistics,
+    compact_index_dtype,
 )
 from zadu.measures import stress, topographic_product
 from zadu.measures.utils.knn import knn_from_distance_matrix
@@ -59,7 +60,7 @@ def test_topographic_product_uses_exact_selected_distances(dtype, k):
     assert runner.emb_distance_matrix is None
     assert runner.orig_knn_indices.shape == (len(orig), k)
     assert runner.emb_knn_indices.shape == (len(orig), k)
-    expected_cache = 2 * len(orig) * k * np.dtype(np.intp).itemsize + k * 8
+    expected_cache = 2 * len(orig) * k * compact_index_dtype(len(orig)).itemsize + k * 8
     assert runner.estimated_cache_bytes == expected_cache
     assert runner.last_run_info["topographic_strategy"] == (
         "blockwise_selected_distances"
