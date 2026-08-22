@@ -30,10 +30,33 @@ jobs:
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e . pytest
+          python -m pip install -e . pytest build
 
       - name: Run tests
         run: python -m pytest -q
 
       - name: Compile Python sources
         run: python -m compileall -q src test scalability_eval
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Verify Gap Index license is packaged
+        run: |
+          python - <<'PY'
+          import tarfile
+          import zipfile
+          from pathlib import Path
+
+          artifacts = list(Path("dist").iterdir())
+          wheel = next(path for path in artifacts if path.suffix == ".whl")
+          sdist = next(path for path in artifacts if path.name.endswith(".tar.gz"))
+
+          with zipfile.ZipFile(wheel) as archive:
+              assert any(name.endswith("gap-index-MIT.txt") for name in archive.namelist())
+              assert any(name.endswith("THIRD_PARTY_NOTICES.md") for name in archive.namelist())
+
+          with tarfile.open(sdist) as archive:
+              assert any(name.endswith("gap-index-MIT.txt") for name in archive.getnames())
+              assert any(name.endswith("THIRD_PARTY_NOTICES.md") for name in archive.getnames())
+          PY

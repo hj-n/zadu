@@ -65,13 +65,14 @@ Always use Context7 MCP when I need library/API documentation, code generation, 
 
 ## Supported Distortion Measures
 
-ZADU currently supports a total of 21 distortion measures, including:
+ZADU currently supports a total of 22 distortion measures, including:
 
 - 7 local measures
 - 6 cluster-level measures
 - 8 global measures
+- 1 gap-based regional measure
 
-For a complete list of supported measures, refer to [measures](/src/zadu/measures). The library initially provided 17 measures when it was first introduced by our academic paper. We later added label trustworthiness & continuity, non-metric stress, scale-normalized stress, and the class angular distortion index.
+For a complete list of supported measures, refer to [measures](/src/zadu/measures). The library initially provided 17 measures when it was first introduced by our academic paper. We later added label trustworthiness & continuity, non-metric stress, scale-normalized stress, the class angular distortion index, and the gap index.
 
 ## How To Use ZADU
 
@@ -140,7 +141,8 @@ scores = ZADU(spec, hd).measure(ld)
 | `MEASURE.STRESS` | `stress` | Stress |
 | `MEASURE.SN_STRESS` | `sn_stress` | Scale-Normalized Stress |
 | `MEASURE.NM_STRESS` | `nm_stress` | Non-Metric Stress |
-| `MEASURE.CADI` | `cadi` | Class Angular Distortion Index
+| `MEASURE.CADI` | `cadi` | Class Angular Distortion Index |
+| `MEASURE.GI` | `gi` | Gap Index |
 
 ## ZADU Class
 
@@ -216,6 +218,14 @@ The original transformation was intended to map the DSC score into the \[0,1\] r
 > | Pearson’s correlation coefficient | pr | | [-1, 1] | 1
 > | Spearman’s rank correlation coefficient | srho | | [-1, 1] | 1 | 
 
+> ##### Gap-based Regional Measures
+>
+> | Measure | ID | Parameters | Range | Optimum |
+> |---------|----|------------|-------|---------|
+> | Gap Index | gi | `metric="euclidean"` | [0, 1] | 0 |
+
+The Gap Index operates on empty triangular regions of a 2D projection rather than fitting cleanly into the local, cluster-level, or global categories above. It supports a SciPy distance function or function name, and `metric="precomputed"` when `hd` is a square distance matrix.
+
 #### String Option Values
 
 - `ivm` (`internal_validation_measure`): `silhouette`, `calinski_harabasz`, `davies_bouldin`
@@ -234,10 +244,40 @@ If an invalid option string is passed, ZADU raises a `ValueError` with allowed v
 - `l_tnc` -> `label_trustworthiness`, `label_continuity`
 - `snc` -> `steadiness`, `cohesiveness`
 - `cadi` -> `class_angular_distortion_index`
+- `gi` -> `gap_index`
 - `ivm` -> key is the selected measure name (e.g., `silhouette`)
 - `c_evm` -> key is `{clustering}_{measure}` (e.g., `kmeans_arand`)
 
 For `return_local=True`, local keys are returned in a second list entry per metric where supported.
+
+#### Gap Index Attribution and Citation
+
+The Gap Index was introduced by Jaume Ros, Alessio Arleo, and Fernando Paulovich in *Measuring Distortion in the Empty Regions of Dimensionality Reduction Scatterplots with the Gap Index*. ZADU's implementation is adapted from the authors' [MIT-licensed reference implementation](https://codeberg.org/jros/gap-index) at revision `0a11e4887864fe5d41526d8487eea33685b8f0b4`. The original license is retained in [`LICENSES/gap-index-MIT.txt`](/LICENSES/gap-index-MIT.txt), with additional provenance in [`THIRD_PARTY_NOTICES.md`](/THIRD_PARTY_NOTICES.md).
+
+If you use the Gap Index through ZADU, please cite the original paper:
+
+```python
+from zadu import ZADU
+from zadu.measures import gap_index
+
+score = ZADU([{"id": "gi", "params": {}}], hd).measure(ld)[0]["gap_index"]
+
+# Access the Delaunay triangles and their signed regional deformations.
+details = gap_index.compute(hd, ld)
+print(details.score, details.triangles, details.deformations)
+```
+
+```bibtex
+@misc{ros2026measuringdistortionregionsdimensionality,
+  title={Measuring Distortion in the Empty Regions of Dimensionality Reduction Scatterplots with the Gap Index},
+  author={Jaume Ros and Alessio Arleo and Fernando Paulovich},
+  year={2026},
+  eprint={2607.28324},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2607.28324}
+}
+```
 
 
 ##### `hd`
