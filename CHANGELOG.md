@@ -14,6 +14,8 @@
   dense-versus-planned benchmark.
 - Shared exact pair ordering and tie-aware rank resources for Spearman and
   Non-Metric Stress, with repeated-embedding reuse and preallocation guards.
+- Exact blockwise stable-kNN and selected-distance resources for Topographic
+  Product, including shared multi-`k` prefix results.
 
 ### Changed
 
@@ -28,6 +30,9 @@
   temporaries after their final consumer.
 - Spearman and Non-Metric Stress now share compact condensed distances and one
   reusable original-space pair order instead of requiring two persistent dense
+  distance matrices.
+- Topographic Product now retains only `O(nk)` neighbor tables and computes its
+  selected distances in bounded row blocks instead of caching two `n x n`
   distance matrices.
 
 ## 0.5.0

@@ -186,6 +186,11 @@ Metrics that require a global pair order cannot use block streaming. For those
 metrics, an explicit memory budget that cannot hold the exact condensed/order
 plan raises `MemoryError` before distance allocation begins.
 
+Topographic Product keeps exact stable neighbor ordering without persistent
+`n x n` matrices. Its neighbor search uses bounded distance-row blocks, the
+metric evaluates only the `O(nk)` distances selected by the two neighbor tables,
+and multiple requested `k` values share one maximum-`k` prefix calculation.
+
 The optional execution configuration currently exposes the exact NumPy/FAISS
 CPU path and a human-readable memory budget:
 

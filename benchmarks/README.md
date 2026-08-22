@@ -56,3 +56,16 @@ python benchmarks/benchmark_ordered_pair_resources.py \
 
 The isolated JSON report separates cold construction from a warm repeated
 embedding, process peak RSS, planned cache/peak bytes, and maximum score delta.
+
+## Topographic Product resources
+
+Compare the legacy dense distance/neighbor cache with exact blockwise stable-kNN
+and selected-distance execution:
+
+```bash
+python benchmarks/benchmark_topographic_resources.py \
+  --samples 3000 --dimension 20 --neighbors 20 --repeat 5
+```
+
+The report separates cold and repeated-embedding timing, isolated process peak
+RSS, persistent cache and bounded-work estimates, and score delta.
