@@ -239,17 +239,29 @@ runner = ZADU(
 scores = runner.measure(ld)
 ```
 
-PR 6-A accelerates Euclidean distance matrices and condensed pair distances.
-Other resources, and geodesic distances, fall back individually to the existing
-NumPy/SciPy/FAISS providers; each choice and fallback reason is recorded per
-resource. Importing or using the default package does not import MLX.
+The MLX preview accelerates Euclidean distance matrices, condensed pair
+distances, stable full/inverse rankings, exact stable neighbor prefixes, and
+Topographic Product's stable-kNN tables. A distance matrix already produced by
+MLX is shared with dependent ranking work through unified memory instead of
+being copied back to the device. Unsupported derived statistics and geodesic
+resources fall back individually to NumPy/SciPy/FAISS; each choice and fallback
+reason is recorded per resource. Importing or using the default package does not
+import MLX.
 
 MLX GPU execution requires an explicit `dtype="float32"`. ZADU never silently
 casts to lower precision: use `device="cpu", dtype="float64"` for the MLX CPU
 path. Float32 uses the same exact algorithms but has dtype-specific numerical
-tolerances. Diagnostics separate input/output transfer, first compile/execution,
-and warm execution time. The MLX preview currently requires
-`embedding_workers=1`; native repeated-embedding batching belongs to PR 6-C.
+tolerances. Stable sorting preserves self exclusion and uses the original column
+index to break duplicate-distance ties. Diagnostics record unified-memory reuse,
+the distance source, block bounds, input/output boundaries, first
+compile/execution, and warm execution separately.
+
+FAISS remains faster for a standalone ordinary kNN table on the current Apple
+M4 benchmark, while MLX is substantially faster for full rankings and stable
+kNN. `backend="auto"` therefore remains on the existing NumPy/FAISS path; select
+MLX explicitly for a workload that benefits from its supported resources. The
+MLX preview currently requires `embedding_workers=1`; native repeated-embedding
+batching belongs to PR 6-C.
 
 Evaluate an ordered collection of embeddings with the same exact plan and one
 shared set of immutable original-space resources:
