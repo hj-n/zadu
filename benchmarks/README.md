@@ -137,6 +137,23 @@ dimensions, the warm distance-matrix path measured 3.35x faster than SciPy
 versus `7.27 ms`). Both paths had a maximum absolute float32 delta of `1.70e-6`.
 Cold MLX times were about 31 ms, so cold and warm results must not be conflated.
 
+## Optional PyTorch pairwise provider
+
+Install `zadu[torch]`, then compare the exact PyTorch `cdist` resource with the
+NumPy/SciPy baseline. Apple Silicon uses `--device mps --dtype float32`; CUDA
+and CPU use the same benchmark but must be measured on their target hardware.
+
+```bash
+python benchmarks/benchmark_torch_pairwise.py \
+  --samples 2000 --dimension 20 --kind distance-matrix \
+  --device mps --dtype float32 --repeat 3
+```
+
+The JSON separates cold and warm end-to-end construction, provider-reported
+input/output transfer and execution time, block bounds, and maximum absolute
+distance delta. Results are hardware-specific; support in common code is not a
+substitute for a benchmark on a real CUDA machine.
+
 ## Optional MLX neighbor resources
 
 Benchmark the stable full/inverse ranking, ordinary exact kNN, or stable-kNN

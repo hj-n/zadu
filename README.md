@@ -191,8 +191,8 @@ Topographic Product keeps exact stable neighbor ordering without persistent
 metric evaluates only the `O(nk)` distances selected by the two neighbor tables,
 and multiple requested `k` values share one maximum-`k` prefix calculation.
 
-The execution configuration exposes the default exact NumPy/FAISS CPU path, an
-optional MLX preview, and a human-readable memory budget:
+The execution configuration exposes the default exact NumPy/FAISS CPU path,
+optional MLX and PyTorch previews, and a human-readable memory budget:
 
 ```python
 from zadu import ExecutionConfig, ZADU
@@ -201,8 +201,8 @@ runner = ZADU(
     spec,
     hd,
     execution=ExecutionConfig(
-        backend="auto",       # "auto", "numpy", or explicit "mlx"
-        device="auto",        # "auto", "cpu", or explicit MLX "gpu"
+        backend="auto",       # "auto", "numpy", "mlx", or "torch"
+        device="auto",        # backend-specific CPU/GPU selection
         dtype=None,            # NumPy preserves the float64 execution baseline
         memory_budget="4GiB",
         embedding_workers=1,   # opt-in measure_many() workers
@@ -272,6 +272,41 @@ plan without an MLX-batchable embedded resource, fall back to ordered sequential
 execution and record the reason in `last_run_info`. Diagnostics expose
 `provider_batching`, `native_batch_size`, per-resource batch indices, aggregate
 batch timings, and the memory-bounded planned peak.
+
+### Optional PyTorch preview
+
+Install PyTorch through the focused extra and select it explicitly:
+
+```bash
+pip install "zadu[torch]"
+```
+
+```python
+runner = ZADU(
+    spec,
+    hd,
+    execution=ExecutionConfig(
+        backend="torch",
+        device="mps",       # "cpu", "mps", "cuda", or "auto"
+        dtype="float32",    # use float64 on CPU/CUDA when required
+        memory_budget="4GiB",
+    ),
+)
+scores = runner.measure(ld)
+```
+
+The initial PyTorch preview accelerates exact Euclidean distance matrices and
+condensed pair distances with memory-planned `torch.cdist` blocks. Unsupported
+neighbor/derived resources and geodesic requests fall back individually and are
+identified in `last_run_info`. MPS supports float32 in this backend; CPU and
+CUDA accept float32 or float64. No PyTorch import occurs on the base/default
+path, and `backend="auto"` remains NumPy/FAISS.
+
+CPU and Apple MPS are covered by the maintained parity tests. CUDA uses the same
+implementation but should be treated as unvalidated until the test suite and
+benchmark are run on real CUDA hardware. Device support does not imply a
+speedup: cold setup, transfers, and warm execution are reported separately, and
+the best backend depends on the workload and hardware.
 
 Evaluate an ordered collection of embeddings with the same exact plan and one
 shared set of immutable original-space resources:

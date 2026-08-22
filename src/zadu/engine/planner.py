@@ -652,7 +652,7 @@ def build_execution_plan(
         )
 
     resource_working_bytes = {}
-    if backend == "mlx":
+    if backend in {"mlx", "torch"}:
         for key in resources:
             if key.kind in {
                 ResourceKind.DISTANCE_MATRIX,
@@ -661,13 +661,16 @@ def build_execution_plan(
                 bytes_per_row = (
                     n_samples * resource_dtype_bytes * MLX_PAIRWISE_WORK_ARRAYS
                 )
-            elif key.kind in {ResourceKind.KNN, ResourceKind.STABLE_KNN}:
+            elif backend == "mlx" and key.kind in {
+                ResourceKind.KNN,
+                ResourceKind.STABLE_KNN,
+            }:
                 bytes_per_row = n_samples * (
                     resource_dtype_bytes * MLX_NEIGHBOR_FLOAT_WORK_ARRAYS
                     + compact_index_dtype(n_samples).itemsize
                     * MLX_KNN_INDEX_WORK_ARRAYS
                 )
-            elif key.kind is ResourceKind.NEIGHBOR_RANKING:
+            elif backend == "mlx" and key.kind is ResourceKind.NEIGHBOR_RANKING:
                 bytes_per_row = n_samples * (
                     resource_dtype_bytes * MLX_NEIGHBOR_FLOAT_WORK_ARRAYS
                     + compact_index_dtype(n_samples).itemsize

@@ -8,9 +8,16 @@ def create_resource_provider(execution):
 
     if execution.resolved_backend == "numpy":
         return NumpyResourceProvider()
-    from .mlx_backend import MlxResourceProvider
+    if execution.resolved_backend == "mlx":
+        from .mlx_backend import MlxResourceProvider
 
-    return MlxResourceProvider(
+        return MlxResourceProvider(
+            device=execution.device,
+            dtype=execution.resolved_dtype,
+        )
+    from .torch_backend import TorchResourceProvider
+
+    return TorchResourceProvider(
         device=execution.device,
         dtype=execution.resolved_dtype,
     )

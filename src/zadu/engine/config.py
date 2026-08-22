@@ -75,8 +75,8 @@ class ExecutionConfig:
         backend = self.backend.lower()
         device = self.device.lower()
         dtype = self.dtype.lower() if self.dtype is not None else None
-        if backend not in {"auto", "numpy", "mlx"}:
-            raise ValueError("backend must be 'auto', 'numpy', or 'mlx'")
+        if backend not in {"auto", "numpy", "mlx", "torch"}:
+            raise ValueError("backend must be 'auto', 'numpy', 'mlx', or 'torch'")
         if backend in {"auto", "numpy"}:
             if device not in {"auto", "cpu"}:
                 raise ValueError("device must be 'auto' or 'cpu' for the NumPy backend")
@@ -84,7 +84,7 @@ class ExecutionConfig:
                 raise ValueError(
                     "dtype must be None or 'float64' for the NumPy backend"
                 )
-        else:
+        elif backend == "mlx":
             if device not in {"auto", "cpu", "gpu"}:
                 raise ValueError(
                     "device must be 'auto', 'cpu', or 'gpu' for the MLX backend"
@@ -96,6 +96,24 @@ class ExecutionConfig:
                 )
             if device == "gpu" and dtype != "float32":
                 raise ValueError("The MLX GPU requires dtype='float32'")
+        else:
+            if device not in {"auto", "cpu", "mps", "cuda"}:
+                raise ValueError(
+                    "device must be 'auto', 'cpu', 'mps', or 'cuda' for the "
+                    "PyTorch backend"
+                )
+            if dtype not in {"float32", "float64"}:
+                raise ValueError(
+                    "The PyTorch backend requires an explicit 'float32' or "
+                    "'float64' dtype"
+                )
+            if device == "mps" and dtype != "float32":
+                raise ValueError("PyTorch MPS requires dtype='float32'")
+            if self.embedding_workers != 1:
+                raise ValueError(
+                    "The PyTorch preview requires embedding_workers=1; "
+                    "native repeated-embedding batching is planned for PR 7-C"
+                )
         object.__setattr__(self, "backend", backend)
         object.__setattr__(self, "device", device)
         object.__setattr__(self, "dtype", dtype)
@@ -112,13 +130,17 @@ class ExecutionConfig:
 
     @property
     def resolved_backend(self) -> str:
-        return "mlx" if self.backend == "mlx" else "numpy"
+        return self.backend if self.backend in {"mlx", "torch"} else "numpy"
 
     @property
     def resolved_device(self) -> str:
         if self.resolved_backend == "numpy":
             return "cpu"
-        if self.device == "auto" and self.dtype == "float64":
+        if (
+            self.resolved_backend == "mlx"
+            and self.device == "auto"
+            and self.dtype == "float64"
+        ):
             return "cpu"
         return self.device
 
