@@ -201,6 +201,7 @@ def build_many_run_info(
         "worker_limit_reason": batch_plan.limit_reason,
         "native_threads_per_worker": batch_plan.native_threads_per_worker,
         "provider_batching": batch_plan.provider_batching,
+        "native_batch_size": batch_plan.native_batch_size,
         "embedding_count": len(run_infos),
         "per_embedding_planned_peak_bytes": plan.planned_peak_bytes,
         "shared_original_bytes": batch_plan.shared_original_bytes,

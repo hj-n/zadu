@@ -155,11 +155,27 @@ class ZADU:
             for index, embedding in enumerate(raw_embeddings)
         ]
         label_array = self._validate_measure_label(labels)
+        provider_batching, provider_batching_reason = self._provider_batching_mode(
+            embedding_arrays
+        )
+        parallel_fallback_reason = self._parallel_fallback_reason()
+        if (
+            self._provider.supports_embedding_batching
+            and self.execution.embedding_workers > 1
+            and not provider_batching
+        ):
+            parallel_fallback_reason = provider_batching_reason
         batch_plan = build_batch_execution_plan(
             self._execution_plan,
             embedding_count=len(embedding_arrays),
             requested_workers=self.execution.embedding_workers,
-            parallel_fallback_reason=self._parallel_fallback_reason(),
+            parallel_fallback_reason=parallel_fallback_reason,
+            provider_batching=provider_batching,
+            provider_batch_input_bytes=(
+                embedding_arrays[0].size * np.dtype(self._provider.dtype).itemsize
+                if provider_batching
+                else 0
+            ),
         )
         snc_effective_workers = self._snc_workers_for_collection(
             batch_plan.effective_workers
@@ -169,7 +185,14 @@ class ZADU:
         results = []
         run_infos = []
         final_cache = self._resource_cache
-        if batch_plan.effective_workers <= 1:
+        if batch_plan.provider_batching:
+            results, run_infos, final_cache = self._execute_provider_batches(
+                embedding_arrays,
+                label_array,
+                batch_plan,
+                snc_effective_workers,
+            )
+        elif batch_plan.effective_workers <= 1:
             for index, embedding in enumerate(embedding_arrays):
                 try:
                     result, run_info = self._execute_embedding(
@@ -209,6 +232,47 @@ class ZADU:
             snc_effective_workers=snc_effective_workers,
         )
         return results
+
+    def _execute_provider_batches(
+        self,
+        embedding_arrays,
+        label_array,
+        batch_plan: BatchExecutionPlan,
+        snc_effective_workers: dict[int, int] | None,
+    ):
+        """Build embedded resources in native batches, then score in order."""
+
+        results = []
+        run_infos = []
+        final_cache = self._resource_cache
+        batch_size = batch_plan.native_batch_size
+        for batch_start in range(0, len(embedding_arrays), batch_size):
+            batch = embedding_arrays[batch_start : batch_start + batch_size]
+            preparation_started = perf_counter()
+            try:
+                caches = final_cache.prepare_embedded_batch(batch)
+            except Exception as exc:
+                failed_index = batch_start + getattr(exc, "batch_index", 0)
+                raise EmbeddingExecutionError(failed_index) from exc
+            preparation_seconds = (perf_counter() - preparation_started) / len(batch)
+            for offset, (embedding, cache) in enumerate(
+                zip(batch, caches, strict=True)
+            ):
+                embedding_index = batch_start + offset
+                try:
+                    result, run_info = self._execute_prepared_embedding(
+                        embedding,
+                        label_array,
+                        cache,
+                        snc_effective_workers,
+                        preparation_seconds=preparation_seconds,
+                    )
+                except Exception as exc:
+                    raise EmbeddingExecutionError(embedding_index) from exc
+                results.append(result)
+                run_infos.append(run_info)
+                final_cache = cache
+        return results, run_infos, final_cache
 
     def _execute_embedding_batches(
         self,
@@ -319,9 +383,29 @@ class ZADU:
     ):
         """Execute one embedding without mutating collection-level state."""
 
+        preparation_started = perf_counter()
         cache.begin_run()
-        run_started = perf_counter()
         cache.prepare_embedded(emb_array)
+        return self._execute_prepared_embedding(
+            emb_array,
+            label_array,
+            cache,
+            snc_effective_workers,
+            preparation_seconds=perf_counter() - preparation_started,
+        )
+
+    def _execute_prepared_embedding(
+        self,
+        emb_array,
+        label_array,
+        cache: ResourceCache,
+        snc_effective_workers: dict[int, int] | None,
+        *,
+        preparation_seconds: float = 0.0,
+    ):
+        """Finish paired resources and metrics after embedded preparation."""
+
+        run_started = perf_counter()
         cache.prepare_paired(self.orig, emb_array)
 
         score_results = []
@@ -373,12 +457,34 @@ class ZADU:
             device=cache.provider.device,
             dtype=cache.provider.dtype,
             metric_timings=metric_timings,
-            total_seconds=perf_counter() - run_started,
+            total_seconds=preparation_seconds + perf_counter() - run_started,
             snc_effective_workers=snc_effective_workers,
         )
         if self.return_local:
             return (score_results, local_results), run_info
         return score_results, run_info
+
+    def _provider_batching_mode(
+        self,
+        embedding_arrays: list[np.ndarray],
+    ) -> tuple[bool, str | None]:
+        """Select native batching without enabling unsafe provider threads."""
+
+        if not self._provider.supports_embedding_batching:
+            return False, None
+        if self.execution.embedding_workers <= 1:
+            return False, None
+        if len(embedding_arrays) <= 1:
+            return False, "embedding_count"
+        dimensions = {embedding.shape[1] for embedding in embedding_arrays}
+        if len(dimensions) != 1:
+            return False, "embedding_shape_mismatch"
+        if not any(
+            self._provider.can_batch(key)
+            for key in self._execution_plan.resources_for(Space.EMBEDDED)
+        ):
+            return False, "no_batchable_embedded_resources"
+        return True, None
 
     def _snc_workers_for_collection(
         self,

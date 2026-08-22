@@ -96,11 +96,6 @@ class ExecutionConfig:
                 )
             if device == "gpu" and dtype != "float32":
                 raise ValueError("The MLX GPU requires dtype='float32'")
-            if self.embedding_workers != 1:
-                raise ValueError(
-                    "The MLX preview requires embedding_workers=1; "
-                    "batched MLX execution is planned for PR 6-C"
-                )
         object.__setattr__(self, "backend", backend)
         object.__setattr__(self, "device", device)
         object.__setattr__(self, "dtype", dtype)

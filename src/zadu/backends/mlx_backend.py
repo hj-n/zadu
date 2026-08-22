@@ -19,7 +19,7 @@ from zadu.engine.resources import (
     compact_index_dtype,
 )
 
-from .base import BuiltResource
+from .base import BatchResourceError, BuiltResource
 from .numpy_backend import NumpyResourceProvider
 
 
@@ -35,11 +35,23 @@ class _MlxWorkspace:
     mlx_copy: bool
 
 
+@dataclass(slots=True)
+class _MlxBatchWorkspace:
+    """One stacked MLX tensor reused across resources for an embedding batch."""
+
+    sources: tuple[npt.NDArray, ...]
+    cast_points: npt.NDArray
+    mlx_points: Any
+    input_seconds: float
+    mlx_copy: bool
+
+
 class MlxResourceProvider(NumpyResourceProvider):
     """Route supported pairwise resources to MLX and fall back resource-wise."""
 
     name = "mlx"
     exact = True
+    supports_embedding_batching = True
 
     def __init__(self, *, device: str, dtype: str) -> None:
         try:
@@ -78,6 +90,7 @@ class MlxResourceProvider(NumpyResourceProvider):
         self._numpy_dtype = np.dtype(dtype)
         self._compiled_ready: set[str] = set()
         self._workspaces: dict[Space, _MlxWorkspace] = {}
+        self._batch_workspaces: dict[Space, _MlxBatchWorkspace] = {}
 
         def pairwise(left, right):
             left_squared = mx.sum(left * left, axis=1, keepdims=True)
@@ -119,6 +132,50 @@ class MlxResourceProvider(NumpyResourceProvider):
             order = stable_order(pairwise(left, right), self_indices)
             return order, ranking_from_order(order)
 
+        def batched_pairwise(left, right):
+            left_squared = mx.sum(left * left, axis=2, keepdims=True)
+            right_squared = mx.sum(right * right, axis=2, keepdims=True)
+            squared = (
+                left_squared
+                + mx.swapaxes(right_squared, 1, 2)
+                - 2.0 * (left @ mx.swapaxes(right, 1, 2))
+            )
+            return mx.sqrt(mx.maximum(squared, 0.0))
+
+        def batched_stable_order(distances, self_indices):
+            columns = mx.arange(distances.shape[2], dtype=self_indices.dtype)
+            sortable = mx.where(
+                columns[None, None, :] == self_indices[None, :, None],
+                -float("inf"),
+                distances,
+            )
+            return mx.argsort(sortable, axis=2)
+
+        def batched_ranking_from_order(order):
+            positions = mx.zeros_like(order) + mx.arange(
+                order.shape[2], dtype=order.dtype
+            )
+            return mx.put_along_axis(
+                mx.zeros_like(order),
+                order,
+                positions,
+                axis=2,
+            )
+
+        def batched_order_from_distances(distances, self_indices):
+            return batched_stable_order(distances, self_indices)
+
+        def batched_ranking_from_distances(distances, self_indices):
+            order = batched_stable_order(distances, self_indices)
+            return order, batched_ranking_from_order(order)
+
+        def batched_order_from_points(left, right, self_indices):
+            return batched_stable_order(batched_pairwise(left, right), self_indices)
+
+        def batched_ranking_from_points(left, right, self_indices):
+            order = batched_stable_order(batched_pairwise(left, right), self_indices)
+            return order, batched_ranking_from_order(order)
+
         self._compiled_pairwise = mx.compile(pairwise, shapeless=True)
         self._compiled_order_from_distances = mx.compile(
             order_from_distances,
@@ -136,12 +193,84 @@ class MlxResourceProvider(NumpyResourceProvider):
             ranking_from_points,
             shapeless=True,
         )
+        self._compiled_batched_pairwise = mx.compile(
+            batched_pairwise,
+            shapeless=True,
+        )
+        self._compiled_batched_order_from_distances = mx.compile(
+            batched_order_from_distances,
+            shapeless=True,
+        )
+        self._compiled_batched_ranking_from_distances = mx.compile(
+            batched_ranking_from_distances,
+            shapeless=True,
+        )
+        self._compiled_batched_order_from_points = mx.compile(
+            batched_order_from_points,
+            shapeless=True,
+        )
+        self._compiled_batched_ranking_from_points = mx.compile(
+            batched_ranking_from_points,
+            shapeless=True,
+        )
 
     def fork(self) -> MlxResourceProvider:
         return type(self)(device=self.device, dtype=self.dtype)
 
     def invalidate(self, space: Space) -> None:
         self._workspaces.pop(space, None)
+        self._batch_workspaces.pop(space, None)
+
+    def can_batch(self, key: ResourceKey) -> bool:
+        return key.space is Space.EMBEDDED and key.kind in {
+            ResourceKind.DISTANCE_MATRIX,
+            ResourceKind.CONDENSED_PAIRS,
+            ResourceKind.KNN,
+            ResourceKind.STABLE_KNN,
+            ResourceKind.NEIGHBOR_RANKING,
+        }
+
+    def build_batch(
+        self,
+        key: ResourceKey,
+        points_batch: list[npt.NDArray],
+        *,
+        distance_matrices: list[npt.NDArray | None],
+        condensed_pairs: list[npt.NDArray | None],
+        working_memory_bytes: int | None,
+        geodesic: bool,
+    ) -> list[BuiltResource]:
+        if not points_batch:
+            return []
+        if not geodesic and self.can_batch(key):
+            if working_memory_bytes is None:
+                raise RuntimeError("MLX batched resources require a memory plan")
+            if key.kind in {
+                ResourceKind.DISTANCE_MATRIX,
+                ResourceKind.CONDENSED_PAIRS,
+            }:
+                return self._build_euclidean_batch(
+                    key,
+                    points_batch,
+                    working_memory_bytes=working_memory_bytes,
+                )
+            return self._build_neighbors_batch(
+                key,
+                points_batch,
+                distance_matrices=distance_matrices,
+                working_memory_bytes=working_memory_bytes,
+            )
+
+        built_batch = super().build_batch(
+            key,
+            points_batch,
+            distance_matrices=distance_matrices,
+            condensed_pairs=condensed_pairs,
+            working_memory_bytes=working_memory_bytes,
+            geodesic=geodesic,
+        )
+        reason = "geodesic_not_supported" if geodesic else "unsupported_resource"
+        return [self._fallback(built, reason) for built in built_batch]
 
     def build(
         self,
@@ -470,6 +599,363 @@ class MlxResourceProvider(NumpyResourceProvider):
             },
         }
         return BuiltResource(value, "mlx", details)
+
+    def _build_euclidean_batch(
+        self,
+        key: ResourceKey,
+        points_batch: list[npt.NDArray],
+        *,
+        working_memory_bytes: int,
+    ) -> list[BuiltResource]:
+        """Build exact pairwise resources with an explicit batch dimension."""
+
+        workspace, input_reused = self._batch_workspace(key.space, points_batch)
+        batch_size = len(points_batch)
+        n_samples = points_batch[0].shape[0]
+        bytes_per_row = n_samples * self._numpy_dtype.itemsize * 4
+        if working_memory_bytes < bytes_per_row:
+            raise MemoryError(
+                "MLX pairwise execution needs enough memory for one distance row"
+            )
+        block_rows = max(
+            1,
+            min(n_samples, working_memory_bytes // bytes_per_row),
+        )
+
+        if key.kind is ResourceKind.DISTANCE_MATRIX:
+            values = [
+                np.empty((n_samples, n_samples), dtype=self._numpy_dtype)
+                for _ in points_batch
+            ]
+        else:
+            pair_count = n_samples * (n_samples - 1) // 2
+            values = [
+                np.empty(pair_count, dtype=self._numpy_dtype) for _ in points_batch
+            ]
+
+        compile_seconds = 0.0
+        execution_seconds = 0.0
+        output_transfer_seconds = 0.0
+        block_count = 0
+        condensed_offset = 0
+        for start in range(0, n_samples, block_rows):
+            stop = min(start + block_rows, n_samples)
+            distances, cold_seconds, warm_seconds = self._execute_compiled(
+                "batched_pairwise",
+                self._compiled_batched_pairwise,
+                workspace.mlx_points[:, start:stop],
+                workspace.mlx_points,
+            )
+            compile_seconds += cold_seconds
+            execution_seconds += warm_seconds
+
+            output_started = perf_counter()
+            block = np.array(distances, dtype=self._numpy_dtype, copy=False)
+            if key.kind is ResourceKind.DISTANCE_MATRIX:
+                for batch_index, value in enumerate(values):
+                    value[start:stop] = block[batch_index]
+            else:
+                for local_row, row in enumerate(range(start, stop)):
+                    count = n_samples - row - 1
+                    if count:
+                        for batch_index, value in enumerate(values):
+                            value[condensed_offset : condensed_offset + count] = block[
+                                batch_index, local_row, row + 1 :
+                            ]
+                        condensed_offset += count
+            output_transfer_seconds += perf_counter() - output_started
+            block_count += 1
+
+        if key.kind is ResourceKind.DISTANCE_MATRIX:
+            for value in values:
+                for row in range(n_samples):
+                    value[row + 1 :, row] = value[row, row + 1 :]
+                np.fill_diagonal(value, 0)
+
+        timings = {
+            "input_transfer_seconds": float(
+                0.0 if input_reused else workspace.input_seconds
+            ),
+            "compile_and_first_execution_seconds": float(compile_seconds),
+            "warm_execution_seconds": float(execution_seconds),
+            "output_transfer_seconds": float(output_transfer_seconds),
+        }
+        base_details: dict[str, Any] = {
+            "algorithm": "compiled_batched_blockwise_squared_euclidean",
+            "device": self.device,
+            "compute_dtype": self.dtype,
+            "block_rows": block_rows,
+            "block_count": block_count,
+            "working_bytes": block_rows * bytes_per_row,
+            "batch_working_bytes": batch_size * block_rows * bytes_per_row,
+            "mlx_version": self._mlx_version(),
+            "unified_memory": True,
+            "input_zero_copy": not workspace.mlx_copy,
+            "input_cast_copy": True,
+            "input_reused": input_reused,
+            "provider_fallback": False,
+        }
+        return self._batched_resources(values, base_details, timings)
+
+    def _build_neighbors_batch(
+        self,
+        key: ResourceKey,
+        points_batch: list[npt.NDArray],
+        *,
+        distance_matrices: list[npt.NDArray | None],
+        working_memory_bytes: int,
+    ) -> list[BuiltResource]:
+        """Build stable exact neighbors for a native embedding batch."""
+
+        assert key.k is not None
+        mx = self._mx
+        batch_size = len(points_batch)
+        n_samples = points_batch[0].shape[0]
+        index_dtype = compact_index_dtype(n_samples)
+        ranking_requested = key.kind is ResourceKind.NEIGHBOR_RANKING
+        index_arrays = 4 if ranking_requested else 2
+        bytes_per_row = n_samples * (
+            4 * self._numpy_dtype.itemsize + index_arrays * index_dtype.itemsize
+        )
+        if working_memory_bytes < bytes_per_row:
+            raise MemoryError(
+                "MLX neighbor execution needs enough memory for one distance row"
+            )
+        block_rows = max(
+            1,
+            min(n_samples, working_memory_bytes // bytes_per_row),
+        )
+        mlx_index_dtype = mx.int32 if index_dtype.itemsize == 4 else mx.int64
+
+        has_distances = [matrix is not None for matrix in distance_matrices]
+        if any(has_distances) and not all(has_distances):
+            raise RuntimeError("MLX batches require uniform distance resources")
+        workspace = None
+        input_reused = False
+        input_seconds = 0.0
+        input_zero_copy = False
+        if not any(has_distances):
+            workspace, input_reused = self._batch_workspace(key.space, points_batch)
+            input_seconds = 0.0 if input_reused else workspace.input_seconds
+            input_zero_copy = not workspace.mlx_copy
+            distance_source = "fused_batched_blockwise_pairwise"
+        else:
+            distance_source = "shared_distance_matrix_batch"
+
+        indices_results = [
+            np.empty((n_samples, key.k), dtype=index_dtype) for _ in points_batch
+        ]
+        ranking_results = (
+            [np.empty((n_samples, n_samples), dtype=index_dtype) for _ in points_batch]
+            if ranking_requested
+            else None
+        )
+        compile_seconds = 0.0
+        execution_seconds = 0.0
+        output_transfer_seconds = 0.0
+        block_count = 0
+        for start in range(0, n_samples, block_rows):
+            stop = min(start + block_rows, n_samples)
+            self_indices = mx.arange(start, stop, dtype=mx.uint32)
+            if workspace is not None:
+                arguments = (
+                    workspace.mlx_points[:, start:stop],
+                    workspace.mlx_points,
+                    self_indices,
+                )
+                if ranking_requested:
+                    compiled_name = "batched_ranking_from_points"
+                    compiled = self._compiled_batched_ranking_from_points
+                else:
+                    compiled_name = "batched_order_from_points"
+                    compiled = self._compiled_batched_order_from_points
+            else:
+                input_started = perf_counter()
+                distance_block = np.ascontiguousarray(
+                    np.stack(
+                        [np.asarray(matrix)[start:stop] for matrix in distance_matrices]
+                    ),
+                    dtype=self._numpy_dtype,
+                )
+                try:
+                    mlx_distances = mx.asarray(
+                        distance_block,
+                        dtype=self._mlx_dtype,
+                        copy=False,
+                    )
+                except ValueError:
+                    mlx_distances = mx.array(
+                        distance_block,
+                        dtype=self._mlx_dtype,
+                    )
+                with mx.stream(self._device):
+                    mx.eval(mlx_distances)
+                    mx.synchronize(self._device)
+                input_seconds += perf_counter() - input_started
+                arguments = (mlx_distances, self_indices)
+                if ranking_requested:
+                    compiled_name = "batched_ranking_from_distances"
+                    compiled = self._compiled_batched_ranking_from_distances
+                else:
+                    compiled_name = "batched_order_from_distances"
+                    compiled = self._compiled_batched_order_from_distances
+
+            output, cold_seconds, warm_seconds = self._execute_compiled(
+                compiled_name,
+                compiled,
+                *arguments,
+            )
+            compile_seconds += cold_seconds
+            execution_seconds += warm_seconds
+            if ranking_requested:
+                order, inverse = output
+            else:
+                order = output
+                inverse = None
+
+            output_started = perf_counter()
+            mlx_indices = order[:, :, 1 : key.k + 1].astype(mlx_index_dtype)
+            outputs = [mlx_indices]
+            if inverse is not None:
+                mlx_ranking = inverse.astype(mlx_index_dtype)
+                outputs.append(mlx_ranking)
+            with mx.stream(self._device):
+                mx.eval(*outputs)
+                mx.synchronize(self._device)
+            indices_block = np.array(mlx_indices, dtype=index_dtype, copy=False)
+            ranking_block = (
+                None
+                if inverse is None
+                else np.array(mlx_ranking, dtype=index_dtype, copy=False)
+            )
+            for batch_index in range(batch_size):
+                indices_results[batch_index][start:stop] = indices_block[batch_index]
+                if ranking_results is not None and ranking_block is not None:
+                    ranking_results[batch_index][start:stop] = ranking_block[
+                        batch_index
+                    ]
+            output_transfer_seconds += perf_counter() - output_started
+            block_count += 1
+
+        if ranking_results is None:
+            values: list[npt.NDArray | NeighborRanking] = indices_results
+            algorithm = "compiled_batched_blockwise_stable_exact_topk"
+        else:
+            values = [
+                NeighborRanking(indices, ranking)
+                for indices, ranking in zip(
+                    indices_results,
+                    ranking_results,
+                    strict=True,
+                )
+            ]
+            algorithm = "compiled_batched_blockwise_stable_full_ranking"
+
+        timings = {
+            "input_transfer_seconds": float(input_seconds),
+            "compile_and_first_execution_seconds": float(compile_seconds),
+            "warm_execution_seconds": float(execution_seconds),
+            "output_transfer_seconds": float(output_transfer_seconds),
+        }
+        base_details: dict[str, Any] = {
+            "algorithm": algorithm,
+            "device": self.device,
+            "compute_dtype": self.dtype,
+            "index_dtype": index_dtype.name,
+            "k": key.k,
+            "block_rows": block_rows,
+            "block_count": block_count,
+            "working_bytes": block_rows * bytes_per_row,
+            "batch_working_bytes": batch_size * block_rows * bytes_per_row,
+            "mlx_version": self._mlx_version(),
+            "distance_source": distance_source,
+            "distance_zero_copy": False,
+            "unified_memory": True,
+            "input_zero_copy": input_zero_copy,
+            "input_cast_copy": True,
+            "input_reused": input_reused,
+            "output_zero_copy": False,
+            "self_exclusion": "forced_rank_zero_then_removed",
+            "tie_break": "stable_column_index",
+            "top_k_algorithm": "stable_full_order_prefix",
+            "provider_fallback": False,
+        }
+        return self._batched_resources(values, base_details, timings)
+
+    def _batch_workspace(
+        self,
+        space: Space,
+        points_batch: list[npt.NDArray],
+    ) -> tuple[_MlxBatchWorkspace, bool]:
+        sources = tuple(points_batch)
+        existing = self._batch_workspaces.get(space)
+        if (
+            existing is not None
+            and len(existing.sources) == len(sources)
+            and all(
+                previous is current
+                for previous, current in zip(existing.sources, sources, strict=True)
+            )
+        ):
+            return existing, True
+
+        stacked_points = np.empty(
+            (len(points_batch), *points_batch[0].shape),
+            dtype=self._numpy_dtype,
+        )
+        with np.errstate(over="ignore", invalid="ignore"):
+            for batch_index, points in enumerate(points_batch):
+                np.copyto(stacked_points[batch_index], points, casting="unsafe")
+                if not np.all(np.isfinite(stacked_points[batch_index])):
+                    raise BatchResourceError(
+                        batch_index,
+                        f"Input values cannot be represented safely as MLX {self.dtype}",
+                    )
+        started = perf_counter()
+        mlx_copy = False
+        try:
+            mlx_points = self._mx.asarray(
+                stacked_points,
+                dtype=self._mlx_dtype,
+                copy=False,
+            )
+        except ValueError:
+            mlx_points = self._mx.array(stacked_points, dtype=self._mlx_dtype)
+            mlx_copy = True
+        with self._mx.stream(self._device):
+            self._mx.eval(mlx_points)
+            self._mx.synchronize(self._device)
+        workspace = _MlxBatchWorkspace(
+            sources=sources,
+            cast_points=stacked_points,
+            mlx_points=mlx_points,
+            input_seconds=perf_counter() - started,
+            mlx_copy=mlx_copy,
+        )
+        self._batch_workspaces[space] = workspace
+        return workspace, False
+
+    @staticmethod
+    def _batched_resources(values, details, timings) -> list[BuiltResource]:
+        batch_size = len(values)
+        timing_share = {
+            name: float(seconds / batch_size) for name, seconds in timings.items()
+        }
+        return [
+            BuiltResource(
+                value,
+                "mlx",
+                {
+                    **details,
+                    "provider_batching": True,
+                    "batch_size": batch_size,
+                    "batch_index": batch_index,
+                    "timings": timing_share,
+                    "batch_timings": dict(timings),
+                },
+            )
+            for batch_index, value in enumerate(values)
+        ]
 
     def _workspace(
         self,

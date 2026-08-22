@@ -52,6 +52,7 @@ class NumpyResourceProvider:
     device = "cpu"
     dtype = "float64"
     exact = True
+    supports_embedding_batching = False
 
     def fork(self) -> NumpyResourceProvider:
         """Return a stateless provider context for one embedding worker."""
@@ -62,6 +63,39 @@ class NumpyResourceProvider:
         """The stateless NumPy provider has no private resources to release."""
 
         del space
+
+    def can_batch(self, key: ResourceKey) -> bool:
+        del key
+        return False
+
+    def build_batch(
+        self,
+        key: ResourceKey,
+        points_batch: list[npt.NDArray],
+        *,
+        distance_matrices: list[npt.NDArray | None],
+        condensed_pairs: list[npt.NDArray | None],
+        working_memory_bytes: int | None,
+        geodesic: bool,
+    ) -> list[BuiltResource]:
+        """Default batch adapter used by providers for unsupported resources."""
+
+        return [
+            self.build(
+                key,
+                points,
+                distance_matrix=distance_matrix,
+                condensed_pairs=condensed,
+                working_memory_bytes=working_memory_bytes,
+                geodesic=geodesic,
+            )
+            for points, distance_matrix, condensed in zip(
+                points_batch,
+                distance_matrices,
+                condensed_pairs,
+                strict=True,
+            )
+        ]
 
     def build(
         self,

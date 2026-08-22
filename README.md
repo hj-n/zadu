@@ -202,7 +202,7 @@ runner = ZADU(
     hd,
     execution=ExecutionConfig(
         backend="auto",       # "auto", "numpy", or explicit "mlx"
-        device="auto",        # "auto" or "cpu"
+        device="auto",        # "auto", "cpu", or explicit MLX "gpu"
         dtype=None,            # NumPy preserves the float64 execution baseline
         memory_budget="4GiB",
         embedding_workers=1,   # opt-in measure_many() workers
@@ -234,6 +234,7 @@ runner = ZADU(
         device="gpu",
         dtype="float32",
         memory_budget="4GiB",
+        embedding_workers=4,  # native MLX batch width for measure_many()
     ),
 )
 scores = runner.measure(ld)
@@ -259,9 +260,18 @@ compile/execution, and warm execution separately.
 FAISS remains faster for a standalone ordinary kNN table on the current Apple
 M4 benchmark, while MLX is substantially faster for full rankings and stable
 kNN. `backend="auto"` therefore remains on the existing NumPy/FAISS path; select
-MLX explicitly for a workload that benefits from its supported resources. The
-MLX preview currently requires `embedding_workers=1`; native repeated-embedding
-batching belongs to PR 6-C.
+MLX explicitly for a workload that benefits from its supported resources.
+
+For `measure_many()`, setting `embedding_workers` above one selects native MLX
+tensor batching rather than Python worker threads. Equal-shaped embeddings are
+stacked up to that batch width; the memory budget may lower the effective width
+or select ordinary sequential execution when even a two-item batch would exceed
+the bound.
+Results and failures retain input order. Different embedding dimensions, or a
+plan without an MLX-batchable embedded resource, fall back to ordered sequential
+execution and record the reason in `last_run_info`. Diagnostics expose
+`provider_batching`, `native_batch_size`, per-resource batch indices, aggregate
+batch timings, and the memory-bounded planned peak.
 
 Evaluate an ordered collection of embeddings with the same exact plan and one
 shared set of immutable original-space resources:
@@ -274,7 +284,8 @@ batch_info = runner.last_run_info
 `measure_many()` returns one normal `measure()` result per input embedding, in
 input order. If a configured metric requires labels, pass one shared label
 vector as `labels=`. The default `embedding_workers=1` executes sequentially.
-Set a larger value to opt into exact thread-level collection execution:
+Set a larger value to opt into exact thread-level collection execution on the
+NumPy backend, or provider-native tensor batching on MLX:
 
 ```python
 runner = ZADU(

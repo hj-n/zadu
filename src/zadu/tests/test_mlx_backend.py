@@ -6,8 +6,9 @@ import numpy as np
 import pytest
 from scipy.spatial.distance import cdist, pdist
 
-from zadu import ZADU, ExecutionConfig
+from zadu import ZADU, EmbeddingExecutionError, ExecutionConfig
 from zadu.backends import mlx_backend
+from zadu.backends.base import BatchResourceError
 from zadu.engine.resources import NeighborRanking, ResourceKey, ResourceKind, Space
 from zadu.measures.utils import knn
 
@@ -37,6 +38,27 @@ def _build(
         condensed_pairs=None,
         working_memory_bytes=working_memory_bytes,
         geodesic=geodesic,
+    )
+
+
+def _build_batch(
+    provider,
+    kind,
+    points_batch,
+    *,
+    working_memory_bytes,
+    k=None,
+    distance_matrices=None,
+):
+    if distance_matrices is None:
+        distance_matrices = [None] * len(points_batch)
+    return provider.build_batch(
+        ResourceKey(kind, Space.EMBEDDED, k),
+        points_batch,
+        distance_matrices=distance_matrices,
+        condensed_pairs=[None] * len(points_batch),
+        working_memory_bytes=working_memory_bytes,
+        geodesic=False,
     )
 
 
@@ -629,3 +651,253 @@ def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
                 ),
             ),
         )
+
+
+def test_mlx_native_batch_pairwise_and_ranking_match_independent_results():
+    rng = np.random.default_rng(20)
+    points_batch = [rng.normal(size=(37, 5)).astype(np.float32) for _ in range(3)]
+    points_batch[0][1] = points_batch[0][0]
+    provider = _mlx_provider()
+    pairwise_bytes = points_batch[0].shape[0] ** 2 * 4 * 4
+
+    matrices = _build_batch(
+        provider,
+        ResourceKind.DISTANCE_MATRIX,
+        points_batch,
+        working_memory_bytes=pairwise_bytes,
+    )
+
+    assert len(matrices) == len(points_batch)
+    for batch_index, (built, points) in enumerate(
+        zip(matrices, points_batch, strict=True)
+    ):
+        np.testing.assert_allclose(
+            built.value,
+            cdist(points, points).astype(np.float32),
+            rtol=2e-6,
+            atol=2e-6,
+        )
+        assert built.details["provider_batching"] is True
+        assert built.details["batch_size"] == 3
+        assert built.details["batch_index"] == batch_index
+        assert built.details["batch_working_bytes"] == (
+            3 * built.details["working_bytes"]
+        )
+
+    ranking_bytes = points_batch[0].shape[0] ** 2 * (4 * 4 + 4 * 4)
+    rankings = _build_batch(
+        provider,
+        ResourceKind.NEIGHBOR_RANKING,
+        points_batch,
+        k=6,
+        distance_matrices=[built.value for built in matrices],
+        working_memory_bytes=ranking_bytes,
+    )
+    for built, points, matrix in zip(
+        rankings,
+        points_batch,
+        [item.value for item in matrices],
+        strict=True,
+    ):
+        expected_indices, expected_ranking = knn.knn_with_ranking(
+            points,
+            6,
+            distance_matrix=matrix,
+        )
+        np.testing.assert_array_equal(built.value.indices, expected_indices)
+        np.testing.assert_array_equal(built.value.ranking, expected_ranking)
+        assert built.details["distance_source"] == "shared_distance_matrix_batch"
+        assert built.details["timings"]["warm_execution_seconds"] > 0
+        json.dumps(built.details)
+
+    warm = _build_batch(
+        provider,
+        ResourceKind.DISTANCE_MATRIX,
+        points_batch[:2],
+        working_memory_bytes=pairwise_bytes,
+    )
+    assert all(
+        built.details["timings"]["compile_and_first_execution_seconds"] == 0
+        for built in warm
+    )
+
+
+def test_zadu_mlx_measure_many_uses_native_batches_and_preserves_scores():
+    _mlx_provider()
+    rng = np.random.default_rng(21)
+    orig = rng.normal(size=(64, 7))
+    embeddings = [
+        orig @ rng.normal(size=(7, 2)) + rng.normal(scale=0.02, size=(64, 2))
+        for _ in range(5)
+    ]
+    specs = [
+        {"id": "stress"},
+        {"id": "tnc", "params": {"k": 5}},
+        {"id": "lcmc", "params": {"k": 7}},
+        {"id": "topo", "params": {"k": 4}},
+    ]
+    sequential_runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+        ),
+    )
+    expected = sequential_runner.measure_many(embeddings)
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+            embedding_workers=3,
+        ),
+    )
+
+    actual = runner.measure_many(embeddings)
+
+    for actual_run, expected_run in zip(actual, expected, strict=True):
+        for actual_score, expected_score in zip(
+            actual_run,
+            expected_run,
+            strict=True,
+        ):
+            assert actual_score.keys() == expected_score.keys()
+            for name in actual_score:
+                assert actual_score[name] == pytest.approx(
+                    expected_score[name], rel=3e-5, abs=3e-6
+                )
+    info = runner.last_run_info
+    assert info["batch_strategy"] == "provider_native_batch"
+    assert info["provider_batching"] is True
+    assert info["requested_workers"] == 3
+    assert info["effective_workers"] == 1
+    assert info["native_batch_size"] == 3
+    assert info["worker_limit_reason"] is None
+    assert [run["embedding_index"] for run in info["runs"]] == list(range(5))
+    embedded_resources = [
+        resource
+        for run in info["runs"]
+        for resource in run["resources"]
+        if resource["space"] == "emb" and resource["provider"] == "mlx"
+    ]
+    assert embedded_resources
+    assert all(
+        resource["details"].get("provider_batching") is True
+        for resource in embedded_resources
+    )
+    assert {resource["details"]["batch_size"] for resource in embedded_resources} == {
+        2,
+        3,
+    }
+    assert info["total_seconds"] >= sum(run["total_seconds"] for run in info["runs"])
+    assert runner.emb is embeddings[-1]
+    json.dumps(info)
+
+
+def test_mlx_native_batch_size_is_capped_by_memory_budget():
+    _mlx_provider()
+    rng = np.random.default_rng(22)
+    orig = rng.normal(size=(56, 6))
+    embeddings = [rng.normal(size=(56, 2)) for _ in range(4)]
+    config = ExecutionConfig(backend="mlx", device="gpu", dtype="float32")
+    baseline = ZADU([{"id": "stress"}], orig, execution=config)
+    plan = baseline._execution_plan
+    batch_input_bytes = embeddings[0].size * np.dtype(np.float32).itemsize
+    budget = plan.original_cache_bytes + 2 * (
+        plan.per_embedding_peak_bytes + batch_input_bytes
+    )
+    runner = ZADU(
+        [{"id": "stress"}],
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+            embedding_workers=4,
+            memory_budget=budget,
+        ),
+    )
+
+    runner.measure_many(embeddings)
+
+    info = runner.last_run_info
+    assert info["provider_batching"] is True
+    assert info["native_batch_size"] == 2
+    assert info["worker_limit_reason"] == "memory_budget"
+    assert info["planned_peak_bytes"] <= budget
+    assert info["per_embedding_peak_bytes"] == (
+        plan.per_embedding_peak_bytes + batch_input_bytes
+    )
+
+    sequential = ZADU(
+        [{"id": "stress"}],
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+            embedding_workers=4,
+            memory_budget=(plan.original_cache_bytes + plan.per_embedding_peak_bytes),
+        ),
+    )
+    sequential.measure_many(embeddings)
+    assert sequential.last_run_info["provider_batching"] is False
+    assert sequential.last_run_info["native_batch_size"] == 1
+    assert sequential.last_run_info["worker_limit_reason"] == "memory_budget"
+    assert sequential.last_run_info["planned_peak_bytes"] <= (
+        plan.original_cache_bytes + plan.per_embedding_peak_bytes
+    )
+
+
+def test_mlx_measure_many_shape_mismatch_falls_back_to_ordered_sequential():
+    _mlx_provider()
+    rng = np.random.default_rng(23)
+    orig = rng.normal(size=(40, 5))
+    embeddings = [rng.normal(size=(40, 2)), rng.normal(size=(40, 3))]
+    runner = ZADU(
+        [{"id": "stress"}],
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+            embedding_workers=3,
+        ),
+    )
+
+    results = runner.measure_many(embeddings)
+
+    assert len(results) == 2
+    assert runner.last_run_info["batch_strategy"] == "sequential_shared_original"
+    assert runner.last_run_info["provider_batching"] is False
+    assert runner.last_run_info["effective_workers"] == 1
+    assert runner.last_run_info["worker_limit_reason"] == "embedding_shape_mismatch"
+
+
+def test_mlx_native_batch_overflow_reports_the_exact_embedding_index():
+    _mlx_provider()
+    rng = np.random.default_rng(24)
+    orig = rng.normal(size=(32, 4))
+    embeddings = [rng.normal(size=(32, 2)) for _ in range(3)]
+    embeddings[1][0, 0] = np.finfo(np.float64).max
+    runner = ZADU(
+        [{"id": "stress"}],
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+            embedding_workers=3,
+        ),
+    )
+
+    with pytest.raises(EmbeddingExecutionError) as error:
+        runner.measure_many(embeddings)
+
+    assert error.value.embedding_index == 1
+    assert isinstance(error.value.__cause__, BatchResourceError)
+    assert "cannot be represented" in str(error.value.__cause__)

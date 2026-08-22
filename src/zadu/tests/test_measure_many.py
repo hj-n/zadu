@@ -125,6 +125,7 @@ def test_measure_many_reports_json_compatible_batch_diagnostics():
     assert info["exact"] is True
     assert info["mode"] == "many"
     assert info["batch_strategy"] == "sequential_shared_original"
+    assert info["native_batch_size"] == 1
     assert info["embedding_count"] == len(embeddings)
     assert info["original_resources_reused"] is True
     assert info["original_resource_reuse_events"] == (
