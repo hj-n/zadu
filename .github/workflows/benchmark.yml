@@ -16,8 +16,8 @@ jobs:
   cpu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -39,7 +39,7 @@ jobs:
           python benchmarks/benchmark_measure_many.py \
             --samples 2000 --dimension 20 --embeddings 8 --workers 2 --repeat 3 \
             --json benchmark-results/measure-many.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cpu-benchmarks-${{ github.run_id }}
           path: benchmark-results
@@ -47,8 +47,8 @@ jobs:
   apple-accelerators:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -84,7 +84,7 @@ jobs:
             --samples 2000 --dimension 20 --embeddings 8 --batch-size 4 --k 20 \
             --device mps --dtype float32 --repeat 3 \
             --json benchmark-results/torch-mps-measure-many.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: apple-accelerator-benchmarks-${{ github.run_id }}
           path: benchmark-results
@@ -94,10 +94,10 @@ jobs:
     env:
       NUMBA_ENABLE_CUDASIM: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.10"
           cache: pip
@@ -117,7 +117,7 @@ jobs:
             --source "current=$GITHUB_WORKSPACE" \
             --samples 500 1000 2000 --dimension 20 --k 20 --repeat 5 \
             --json benchmark-results/release-history.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-history-${{ github.run_id }}
           path: benchmark-results
