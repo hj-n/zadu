@@ -466,6 +466,7 @@ def test_mlx_workspace_invalidation_refreshes_reused_mutable_input():
 
 
 def test_zadu_mlx_routes_all_neighbor_metrics_and_preserves_scores():
+    _mlx_provider()
     rng = np.random.default_rng(18)
     orig = rng.normal(size=(72, 8))
     emb = orig @ rng.normal(size=(8, 2)) + rng.normal(scale=0.05, size=(72, 2))
@@ -515,6 +516,7 @@ def test_zadu_mlx_routes_all_neighbor_metrics_and_preserves_scores():
 
 
 def test_zadu_mlx_dense_pair_plan_shares_distance_storage_with_rankings():
+    _mlx_provider()
     rng = np.random.default_rng(180)
     orig = rng.normal(size=(64, 6))
     emb = orig @ rng.normal(size=(6, 2))
