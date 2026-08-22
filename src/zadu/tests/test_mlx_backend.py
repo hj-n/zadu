@@ -8,7 +8,8 @@ from scipy.spatial.distance import cdist, pdist
 
 from zadu import ZADU, ExecutionConfig
 from zadu.backends import mlx_backend
-from zadu.engine.resources import ResourceKey, ResourceKind, Space
+from zadu.engine.resources import NeighborRanking, ResourceKey, ResourceKind, Space
+from zadu.measures.utils import knn
 
 
 def _mlx_provider(*, device="gpu", dtype="float32"):
@@ -18,11 +19,21 @@ def _mlx_provider(*, device="gpu", dtype="float32"):
     return mlx_backend.MlxResourceProvider(device=device, dtype=dtype)
 
 
-def _build(provider, kind, points, *, working_memory_bytes, geodesic=False):
+def _build(
+    provider,
+    kind,
+    points,
+    *,
+    working_memory_bytes,
+    geodesic=False,
+    k=None,
+    distance_matrix=None,
+    space=Space.ORIGINAL,
+):
     return provider.build(
-        ResourceKey(kind, Space.ORIGINAL),
+        ResourceKey(kind, space, k),
         points,
-        distance_matrix=None,
+        distance_matrix=distance_matrix,
         condensed_pairs=None,
         working_memory_bytes=working_memory_bytes,
         geodesic=geodesic,
@@ -286,6 +297,333 @@ def test_mlx_memory_budget_caps_blocks_and_rejects_less_than_one_row():
                 dtype="float32",
                 memory_budget=(
                     baseline._execution_plan.estimated_cache_bytes + bytes_per_row - 1
+                ),
+            ),
+        )
+
+
+def test_mlx_full_ranking_preserves_self_and_stable_duplicate_ties():
+    points = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+            [2.0, 2.0],
+        ],
+        dtype=np.float32,
+    )
+    provider = _mlx_provider()
+    k = 4
+    bytes_per_row = points.shape[0] * (4 * 4 + 4 * 4)
+    built = _build(
+        provider,
+        ResourceKind.NEIGHBOR_RANKING,
+        points,
+        k=k,
+        working_memory_bytes=3 * bytes_per_row,
+    )
+    expected_indices, expected_ranking = knn.knn_with_ranking(points, k)
+
+    assert built.implementation == "mlx"
+    assert isinstance(built.value, NeighborRanking)
+    np.testing.assert_array_equal(built.value.indices, expected_indices)
+    np.testing.assert_array_equal(built.value.ranking, expected_ranking)
+    assert built.value.indices.dtype == np.int32
+    assert built.value.ranking.dtype == np.int32
+    assert built.details["algorithm"] == "compiled_blockwise_stable_full_ranking"
+    assert built.details["block_rows"] == 3
+    assert built.details["block_count"] == 3
+    assert built.details["tie_break"] == "stable_column_index"
+    assert built.details["self_exclusion"] == "forced_rank_zero_then_removed"
+    assert built.details["distance_source"] == "fused_blockwise_pairwise"
+    assert built.details["provider_fallback"] is False
+    json.dumps(built.details)
+
+
+def test_mlx_cpu_float64_full_ranking_preserves_exact_order():
+    rng = np.random.default_rng(170)
+    points = rng.normal(size=(32, 7))
+    provider = _mlx_provider(device="cpu", dtype="float64")
+    bytes_per_row = points.shape[0] * (4 * 8 + 4 * 4)
+    built = _build(
+        provider,
+        ResourceKind.NEIGHBOR_RANKING,
+        points,
+        k=6,
+        working_memory_bytes=bytes_per_row * points.shape[0],
+    )
+    expected_indices, expected_ranking = knn.knn_with_ranking(points, 6)
+
+    np.testing.assert_array_equal(built.value.indices, expected_indices)
+    np.testing.assert_array_equal(built.value.ranking, expected_ranking)
+    assert built.details["compute_dtype"] == "float64"
+    assert built.details["input_zero_copy"] is False
+    assert built.details["input_cast_copy"] is False
+
+
+@pytest.mark.parametrize("kind", [ResourceKind.KNN, ResourceKind.STABLE_KNN])
+def test_mlx_exact_topk_matches_stable_numpy_tie_order(kind):
+    points = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+        ],
+        dtype=np.float32,
+    )
+    provider = _mlx_provider()
+    k = 3
+    bytes_per_row = points.shape[0] * (4 * 4 + 2 * 4)
+    built = _build(
+        provider,
+        kind,
+        points,
+        k=k,
+        working_memory_bytes=bytes_per_row,
+    )
+    expected = knn.knn_from_distance_matrix(cdist(points, points), k)
+
+    np.testing.assert_array_equal(built.value, expected)
+    assert built.value.dtype == np.int32
+    assert built.details["algorithm"] == "compiled_blockwise_stable_exact_topk"
+    assert built.details["top_k_algorithm"] == "stable_full_order_prefix"
+    assert built.details["block_rows"] == 1
+    assert built.details["block_count"] == points.shape[0]
+
+
+def test_mlx_ranking_reuses_distance_matrix_through_unified_memory():
+    rng = np.random.default_rng(17)
+    points = rng.normal(size=(48, 5)).astype(np.float32)
+    provider = _mlx_provider()
+    pairwise_bytes = points.shape[0] ** 2 * 4 * 4
+    matrix = _build(
+        provider,
+        ResourceKind.DISTANCE_MATRIX,
+        points,
+        working_memory_bytes=pairwise_bytes,
+    )
+    ranking_bytes = points.shape[0] ** 2 * (4 * 4 + 4 * 4)
+    ranked = _build(
+        provider,
+        ResourceKind.NEIGHBOR_RANKING,
+        points,
+        k=7,
+        distance_matrix=matrix.value,
+        working_memory_bytes=ranking_bytes,
+    )
+    expected_indices, expected_ranking = knn.knn_with_ranking(
+        points,
+        7,
+        distance_matrix=matrix.value,
+    )
+
+    np.testing.assert_array_equal(ranked.value.indices, expected_indices)
+    np.testing.assert_array_equal(ranked.value.ranking, expected_ranking)
+    assert ranked.details["distance_source"] == "shared_distance_matrix"
+    assert ranked.details["distance_zero_copy"] is True
+    assert ranked.details["input_zero_copy"] is True
+    assert ranked.details["input_reused"] is True
+    assert ranked.details["output_zero_copy"] is True
+
+
+def test_mlx_workspace_invalidation_refreshes_reused_mutable_input():
+    points = np.asarray(
+        [[0.0], [1.0], [3.0], [10.0]],
+        dtype=np.float64,
+    )
+    provider = _mlx_provider()
+    bytes_per_row = points.shape[0] * (4 * 4 + 2 * 4)
+    first = _build(
+        provider,
+        ResourceKind.KNN,
+        points,
+        k=1,
+        working_memory_bytes=bytes_per_row * points.shape[0],
+    )
+    points[1, 0] = 9.0
+    provider.invalidate(Space.ORIGINAL)
+    second = _build(
+        provider,
+        ResourceKind.KNN,
+        points,
+        k=1,
+        working_memory_bytes=bytes_per_row * points.shape[0],
+    )
+
+    assert not np.array_equal(first.value, second.value)
+    np.testing.assert_array_equal(
+        second.value,
+        knn.knn_from_distance_matrix(cdist(points, points), 1),
+    )
+    assert second.details["input_reused"] is False
+    assert second.details["input_cast_copy"] is True
+
+
+def test_zadu_mlx_routes_all_neighbor_metrics_and_preserves_scores():
+    rng = np.random.default_rng(18)
+    orig = rng.normal(size=(72, 8))
+    emb = orig @ rng.normal(size=(8, 2)) + rng.normal(scale=0.05, size=(72, 2))
+    labels = np.arange(orig.shape[0]) % 4
+    specs = [
+        {"id": "tnc", "params": {"k": 5}},
+        {"id": "lcmc", "params": {"k": 7}},
+        {"id": "nh", "params": {"k": 4}},
+        {"id": "proc", "params": {"k": 3}},
+        {"id": "topo", "params": {"k": 4}},
+    ]
+    expected = ZADU(specs, orig).measure(emb, labels)
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+        ),
+    )
+
+    actual = runner.measure(emb, labels)
+
+    for actual_score, expected_score in zip(actual, expected, strict=True):
+        assert actual_score.keys() == expected_score.keys()
+        for name in actual_score:
+            assert actual_score[name] == pytest.approx(
+                expected_score[name], rel=3e-5, abs=3e-6
+            )
+    neighbor_resources = [
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] in {"knn", "stable_knn", "neighbor_ranking"}
+    ]
+    assert neighbor_resources
+    assert all(resource["provider"] == "mlx" for resource in neighbor_resources)
+    assert all(
+        resource["details"]["provider_fallback"] is False
+        for resource in neighbor_resources
+    )
+    assert {resource["kind"] for resource in neighbor_resources} == {
+        "neighbor_ranking",
+        "stable_knn",
+    }
+    json.dumps(runner.last_run_info)
+
+
+def test_zadu_mlx_dense_pair_plan_shares_distance_storage_with_rankings():
+    rng = np.random.default_rng(180)
+    orig = rng.normal(size=(64, 6))
+    emb = orig @ rng.normal(size=(6, 2))
+    specs = [
+        {"id": "stress"},
+        {"id": "tnc", "params": {"k": 5}},
+    ]
+    expected = ZADU(specs, orig).measure(emb)
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+        ),
+    )
+
+    actual = runner.measure(emb)
+
+    for actual_score, expected_score in zip(actual, expected, strict=True):
+        for name in actual_score:
+            assert actual_score[name] == pytest.approx(
+                expected_score[name], rel=3e-5, abs=3e-6
+            )
+    ranking_resources = [
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "neighbor_ranking"
+    ]
+    assert len(ranking_resources) == 2
+    assert all(
+        resource["details"]["distance_source"] == "shared_distance_matrix"
+        for resource in ranking_resources
+    )
+    assert all(
+        resource["details"]["distance_zero_copy"] is True
+        for resource in ranking_resources
+    )
+
+
+def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
+    _mlx_provider()
+    rng = np.random.default_rng(19)
+    orig = rng.normal(size=(80, 6))
+    config = ExecutionConfig(backend="mlx", device="gpu", dtype="float32")
+    specs = [
+        {"id": "tnc", "params": {"k": 5}},
+        {"id": "lcmc", "params": {"k": 7}},
+        {"id": "topo", "params": {"k": 4}},
+    ]
+    baseline = ZADU(specs, orig, execution=config)
+    neighbor_keys = [
+        key
+        for key in baseline._execution_plan.resources
+        if key.kind
+        in {ResourceKind.KNN, ResourceKind.STABLE_KNN, ResourceKind.NEIGHBOR_RANKING}
+    ]
+
+    assert neighbor_keys
+    assert all(
+        key in baseline._execution_plan.resource_working_bytes for key in neighbor_keys
+    )
+    assert baseline._execution_plan.planned_peak_bytes >= (
+        baseline._execution_plan.estimated_cache_bytes
+        + max(
+            baseline._execution_plan.resource_working_bytes[key]
+            for key in neighbor_keys
+        )
+    )
+
+    ranking_bytes_per_row = orig.shape[0] * (4 * 4 + 4 * 4)
+    budget = baseline._execution_plan.estimated_cache_bytes + 2 * ranking_bytes_per_row
+    bounded = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="gpu",
+            dtype="float32",
+            memory_budget=budget,
+        ),
+    )
+    ranking_records = [
+        record
+        for record in bounded._resource_cache.records.values()
+        if record.key.kind is ResourceKind.NEIGHBOR_RANKING
+    ]
+
+    assert ranking_records
+    assert all(record.details["block_rows"] == 2 for record in ranking_records)
+    assert bounded._execution_plan.planned_peak_bytes <= budget
+
+    with pytest.raises(MemoryError, match="peak working memory"):
+        ZADU(
+            [{"id": "tnc", "params": {"k": 5}}],
+            orig,
+            execution=ExecutionConfig(
+                backend="mlx",
+                device="gpu",
+                dtype="float32",
+                memory_budget=(
+                    ZADU(
+                        [{"id": "tnc", "params": {"k": 5}}],
+                        orig,
+                        execution=config,
+                    )._execution_plan.estimated_cache_bytes
+                    + ranking_bytes_per_row
+                    - 1
                 ),
             ),
         )
