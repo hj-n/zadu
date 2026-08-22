@@ -315,6 +315,14 @@ benchmark are run on real CUDA hardware. Device support does not imply a
 speedup: cold setup, transfers, and warm execution are reported separately, and
 the best backend depends on the workload and hardware.
 
+For `measure_many()`, `embedding_workers` selects the requested native PyTorch
+batch width. Equal-shaped embeddings use batched `cdist` and stable sorting;
+the memory budget may lower the width or fall back to ordered sequential
+execution. CPU batching is supported for consistency but was neutral to slightly
+slower on the maintained M4 workload, while MPS benefited from amortized launch
+and transfer costs. Treat this as an explicit workload knob, not an automatic
+speedup promise.
+
 Evaluate an ordered collection of embeddings with the same exact plan and one
 shared set of immutable original-space resources:
 

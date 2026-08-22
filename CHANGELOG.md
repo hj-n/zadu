@@ -32,6 +32,9 @@
 - An optional, lazily imported PyTorch provider for exact, memory-planned
   Euclidean distance matrices, condensed pairs, stable full/inverse rankings,
   and exact stable neighbor prefixes on CPU, MPS, and CUDA.
+- Provider-native PyTorch batching for equal-shaped repeated embeddings using
+  batched `cdist` and stable sorting, with bounded batch width and indexed
+  failures.
 
 ### Changed
 
@@ -68,6 +71,9 @@
 - On MLX, `embedding_workers` now requests a native tensor batch width rather
   than Python threads; incompatible shapes or plans fall back sequentially with
   the reason recorded in collection diagnostics.
+- On PyTorch, `embedding_workers` likewise requests a native tensor batch width;
+  unsupported shapes and memory-constrained plans preserve ordered sequential
+  execution with an explicit diagnostic reason.
 
 ## 0.5.0
 

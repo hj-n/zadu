@@ -109,11 +109,6 @@ class ExecutionConfig:
                 )
             if device == "mps" and dtype != "float32":
                 raise ValueError("PyTorch MPS requires dtype='float32'")
-            if self.embedding_workers != 1:
-                raise ValueError(
-                    "The PyTorch preview requires embedding_workers=1; "
-                    "native repeated-embedding batching is planned for PR 7-C"
-                )
         object.__setattr__(self, "backend", backend)
         object.__setattr__(self, "device", device)
         object.__setattr__(self, "dtype", dtype)
