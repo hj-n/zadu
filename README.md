@@ -191,8 +191,8 @@ Topographic Product keeps exact stable neighbor ordering without persistent
 metric evaluates only the `O(nk)` distances selected by the two neighbor tables,
 and multiple requested `k` values share one maximum-`k` prefix calculation.
 
-The optional execution configuration currently exposes the exact NumPy/FAISS
-CPU path and a human-readable memory budget:
+The execution configuration exposes the default exact NumPy/FAISS CPU path, an
+optional MLX preview, and a human-readable memory budget:
 
 ```python
 from zadu import ExecutionConfig, ZADU
@@ -201,8 +201,9 @@ runner = ZADU(
     spec,
     hd,
     execution=ExecutionConfig(
-        backend="auto",       # "auto" or "numpy"
+        backend="auto",       # "auto", "numpy", or explicit "mlx"
         device="auto",        # "auto" or "cpu"
+        dtype=None,            # NumPy preserves the float64 execution baseline
         memory_budget="4GiB",
         embedding_workers=1,   # opt-in measure_many() workers
     ),
@@ -214,9 +215,41 @@ print(runner.last_run_info)
 `last_run_info` is separate from metric scores. It records the exact backend,
 resource providers, selected pair strategy and block size, estimated cache and
 peak working memory, dtype, construction and metric timings, release/reuse, and
-each resource's first and last consumer. MLX and PyTorch providers will be added
-in later acceleration PRs; unsupported backend or device requests currently
-raise an explicit `ValueError`.
+each resource's first and last consumer.
+
+### Optional MLX preview
+
+On Apple Silicon, install MLX separately and select it explicitly:
+
+```bash
+pip install "zadu[mlx]"
+```
+
+```python
+runner = ZADU(
+    spec,
+    hd,
+    execution=ExecutionConfig(
+        backend="mlx",
+        device="gpu",
+        dtype="float32",
+        memory_budget="4GiB",
+    ),
+)
+scores = runner.measure(ld)
+```
+
+PR 6-A accelerates Euclidean distance matrices and condensed pair distances.
+Other resources, and geodesic distances, fall back individually to the existing
+NumPy/SciPy/FAISS providers; each choice and fallback reason is recorded per
+resource. Importing or using the default package does not import MLX.
+
+MLX GPU execution requires an explicit `dtype="float32"`. ZADU never silently
+casts to lower precision: use `device="cpu", dtype="float64"` for the MLX CPU
+path. Float32 uses the same exact algorithms but has dtype-specific numerical
+tolerances. Diagnostics separate input/output transfer, first compile/execution,
+and warm execution time. The MLX preview currently requires
+`embedding_workers=1`; native repeated-embedding batching belongs to PR 6-C.
 
 Evaluate an ordered collection of embeddings with the same exact plan and one
 shared set of immutable original-space resources:
