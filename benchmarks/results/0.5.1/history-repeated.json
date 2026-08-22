@@ -1,0 +1,799 @@
+{
+  "metadata": {
+    "sources": [
+      {
+        "label": "2023-v0.1.1",
+        "path": "<worktree>/v0.1.1",
+        "revision": "5bf605701cfb792dea8f4772d7387b880d0c79e2"
+      },
+      {
+        "label": "pre-acceleration-v0.5.0",
+        "path": "<worktree>/v0.5.0",
+        "revision": "c475be1084f18f2c917bd1cf680ffe2d42293758"
+      },
+      {
+        "label": "current",
+        "path": "<worktree>/current",
+        "revision": "94e71a91b3611ea0ed77154b09e41151e9d27257"
+      }
+    ],
+    "samples": [
+      2000
+    ],
+    "dimension": 20,
+    "embedding_dimension": 2,
+    "k": 20,
+    "suites": [
+      "representative"
+    ],
+    "embeddings": 8,
+    "repeat": 3,
+    "seed": 2026,
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "comparison_scope": "same interpreter and installed dependency environment; only the ZADU source checkout changes"
+  },
+  "results": [
+    {
+      "label": "2023-v0.1.1",
+      "suite": "representative",
+      "samples": 2000,
+      "dimension": 20,
+      "embedding_dimension": 2,
+      "k": 20,
+      "embeddings": 8,
+      "repeat": 3,
+      "construction_seconds": 0.27584108291193843,
+      "first_measure_seconds": 5.561941999942064,
+      "cold_total_seconds": 5.837783082854003,
+      "warm_seconds": 5.555199542082846,
+      "warm_samples_seconds": [
+        5.555199542082846,
+        5.5438770421314985,
+        5.558839457808062
+      ],
+      "peak_rss_bytes": 531316736,
+      "scores": [
+        [
+          {
+            "stress": 0.7110533342262424
+          },
+          {
+            "pearson_r": 0.30089279620074294
+          },
+          {
+            "trustworthiness": 0.6066628712871286,
+            "continuity": 0.7220811500380807
+          },
+          {
+            "mrre_false": 0.6034439584390159,
+            "mrre_missing": 0.7437220619594481
+          },
+          {
+            "lcmc": 0.01724499749874937
+          },
+          {
+            "neighborhood_hit": 0.19227499999999997
+          },
+          {
+            "topographic_product": -0.7635466082252326
+          },
+          {
+            "procrustes": 0.9193324721080237
+          }
+        ],
+        [
+          {
+            "stress": 0.6584822434045792
+          },
+          {
+            "pearson_r": 0.31236205157778535
+          },
+          {
+            "trustworthiness": 0.6094406448337143,
+            "continuity": 0.7271681264280274
+          },
+          {
+            "mrre_false": 0.6075503076951814,
+            "mrre_missing": 0.7448934438476186
+          },
+          {
+            "lcmc": 0.01891999749874937
+          },
+          {
+            "neighborhood_hit": 0.19997499999999999
+          },
+          {
+            "topographic_product": -0.7570055260150964
+          },
+          {
+            "procrustes": 0.9208304150815013
+          }
+        ],
+        [
+          {
+            "stress": 0.8801734032494065
+          },
+          {
+            "pearson_r": 0.28386000501840614
+          },
+          {
+            "trustworthiness": 0.6033624650926631,
+            "continuity": 0.7213155369383093
+          },
+          {
+            "mrre_false": 0.5997204535437095,
+            "mrre_missing": 0.7423159802429553
+          },
+          {
+            "lcmc": 0.01901999749874937
+          },
+          {
+            "neighborhood_hit": 0.199375
+          },
+          {
+            "topographic_product": -0.7616406565144087
+          },
+          {
+            "procrustes": 0.9209474698391732
+          }
+        ],
+        [
+          {
+            "stress": 0.7966772297879332
+          },
+          {
+            "pearson_r": 0.29932015771717313
+          },
+          {
+            "trustworthiness": 0.610836785986291,
+            "continuity": 0.7333726072607261
+          },
+          {
+            "mrre_false": 0.6064008016268699,
+            "mrre_missing": 0.7508336556000763
+          },
+          {
+            "lcmc": 0.01964499749874937
+          },
+          {
+            "neighborhood_hit": 0.204
+          },
+          {
+            "topographic_product": -0.7518867265769571
+          },
+          {
+            "procrustes": 0.9198590113331886
+          }
+        ],
+        [
+          {
+            "stress": 0.7586342450033627
+          },
+          {
+            "pearson_r": 0.2769065483561899
+          },
+          {
+            "trustworthiness": 0.604658339680122,
+            "continuity": 0.7188001650165018
+          },
+          {
+            "mrre_false": 0.6030120014443505,
+            "mrre_missing": 0.7392267076815876
+          },
+          {
+            "lcmc": 0.018894997498749372
+          },
+          {
+            "neighborhood_hit": 0.19995
+          },
+          {
+            "topographic_product": -0.764282941669542
+          },
+          {
+            "procrustes": 0.9200228201606842
+          }
+        ],
+        [
+          {
+            "stress": 0.7198903212085767
+          },
+          {
+            "pearson_r": 0.2848087149441861
+          },
+          {
+            "trustworthiness": 0.6062526275704493,
+            "continuity": 0.7196394008631632
+          },
+          {
+            "mrre_false": 0.6039357636513414,
+            "mrre_missing": 0.7414231990465384
+          },
+          {
+            "lcmc": 0.018219997498749373
+          },
+          {
+            "neighborhood_hit": 0.20095
+          },
+          {
+            "topographic_product": -0.7618267250984633
+          },
+          {
+            "procrustes": 0.9192320723413712
+          }
+        ],
+        [
+          {
+            "stress": 0.5395410112189105
+          },
+          {
+            "pearson_r": 0.28923730962181576
+          },
+          {
+            "trustworthiness": 0.608906854531607,
+            "continuity": 0.7195944275196751
+          },
+          {
+            "mrre_false": 0.6043699878135933,
+            "mrre_missing": 0.7425074041751859
+          },
+          {
+            "lcmc": 0.020294997498749367
+          },
+          {
+            "neighborhood_hit": 0.19775
+          },
+          {
+            "topographic_product": -0.7607838042638443
+          },
+          {
+            "procrustes": 0.9226429276639491
+          }
+        ],
+        [
+          {
+            "stress": 0.5437017133570442
+          },
+          {
+            "pearson_r": 0.2932229131267168
+          },
+          {
+            "trustworthiness": 0.6072021325209443,
+            "continuity": 0.7233320258948972
+          },
+          {
+            "mrre_false": 0.60482361493219,
+            "mrre_missing": 0.7447248467264814
+          },
+          {
+            "lcmc": 0.01899499749874937
+          },
+          {
+            "neighborhood_hit": 0.19825
+          },
+          {
+            "topographic_product": -0.7597367173357317
+          },
+          {
+            "procrustes": 0.9225154274071246
+          }
+        ]
+      ]
+    },
+    {
+      "label": "pre-acceleration-v0.5.0",
+      "suite": "representative",
+      "samples": 2000,
+      "dimension": 20,
+      "embedding_dimension": 2,
+      "k": 20,
+      "embeddings": 8,
+      "repeat": 3,
+      "construction_seconds": 0.28141441685147583,
+      "first_measure_seconds": 5.922649624990299,
+      "cold_total_seconds": 6.204064041841775,
+      "warm_seconds": 5.921349707990885,
+      "warm_samples_seconds": [
+        5.9368888339959085,
+        5.921349707990885,
+        5.909712834050879
+      ],
+      "peak_rss_bytes": 550961152,
+      "scores": [
+        [
+          {
+            "stress": 0.7110533342262424
+          },
+          {
+            "pearson_r": 0.29824095701031006
+          },
+          {
+            "trustworthiness": 0.6066628712871286,
+            "continuity": 0.7220811500380807
+          },
+          {
+            "mrre_false": 0.6034439584390159,
+            "mrre_missing": 0.7437220619594481
+          },
+          {
+            "lcmc": 0.01724499749874937
+          },
+          {
+            "neighborhood_hit": 0.19227499999999997
+          },
+          {
+            "topographic_product": -0.9394157039020138
+          },
+          {
+            "procrustes": 0.9193324721080237
+          }
+        ],
+        [
+          {
+            "stress": 0.6584822434045792
+          },
+          {
+            "pearson_r": 0.30984793726262816
+          },
+          {
+            "trustworthiness": 0.6094406448337143,
+            "continuity": 0.7271681264280274
+          },
+          {
+            "mrre_false": 0.6075503076951814,
+            "mrre_missing": 0.7448934438476186
+          },
+          {
+            "lcmc": 0.01891999749874937
+          },
+          {
+            "neighborhood_hit": 0.19997499999999999
+          },
+          {
+            "topographic_product": -0.9318601284682274
+          },
+          {
+            "procrustes": 0.9208304150815013
+          }
+        ],
+        [
+          {
+            "stress": 0.8801734032494065
+          },
+          {
+            "pearson_r": 0.2810746892313618
+          },
+          {
+            "trustworthiness": 0.6033624650926631,
+            "continuity": 0.7213155369383093
+          },
+          {
+            "mrre_false": 0.5997204535437095,
+            "mrre_missing": 0.7423159802429553
+          },
+          {
+            "lcmc": 0.01901999749874937
+          },
+          {
+            "neighborhood_hit": 0.199375
+          },
+          {
+            "topographic_product": -0.9373718129857059
+          },
+          {
+            "procrustes": 0.9209474698391732
+          }
+        ],
+        [
+          {
+            "stress": 0.7966772297879332
+          },
+          {
+            "pearson_r": 0.2965369101194761
+          },
+          {
+            "trustworthiness": 0.610836785986291,
+            "continuity": 0.7333726072607261
+          },
+          {
+            "mrre_false": 0.6064008016268699,
+            "mrre_missing": 0.7508336556000763
+          },
+          {
+            "lcmc": 0.01964499749874937
+          },
+          {
+            "neighborhood_hit": 0.204
+          },
+          {
+            "topographic_product": -0.9255004101861135
+          },
+          {
+            "procrustes": 0.9198590113331886
+          }
+        ],
+        [
+          {
+            "stress": 0.7586342450033627
+          },
+          {
+            "pearson_r": 0.2741412482307204
+          },
+          {
+            "trustworthiness": 0.604658339680122,
+            "continuity": 0.7188001650165018
+          },
+          {
+            "mrre_false": 0.6030120014443505,
+            "mrre_missing": 0.7392267076815876
+          },
+          {
+            "lcmc": 0.018894997498749372
+          },
+          {
+            "neighborhood_hit": 0.19995
+          },
+          {
+            "topographic_product": -0.9399171328714938
+          },
+          {
+            "procrustes": 0.9200228201606842
+          }
+        ],
+        [
+          {
+            "stress": 0.7198903212085767
+          },
+          {
+            "pearson_r": 0.28206335537678684
+          },
+          {
+            "trustworthiness": 0.6062526275704493,
+            "continuity": 0.7196394008631632
+          },
+          {
+            "mrre_false": 0.6039357636513414,
+            "mrre_missing": 0.7414231990465384
+          },
+          {
+            "lcmc": 0.018219997498749373
+          },
+          {
+            "neighborhood_hit": 0.20095
+          },
+          {
+            "topographic_product": -0.9372769563976914
+          },
+          {
+            "procrustes": 0.9192320723413712
+          }
+        ],
+        [
+          {
+            "stress": 0.5395410112189105
+          },
+          {
+            "pearson_r": 0.2865457977626419
+          },
+          {
+            "trustworthiness": 0.608906854531607,
+            "continuity": 0.7195944275196751
+          },
+          {
+            "mrre_false": 0.6043699878135933,
+            "mrre_missing": 0.7425074041751859
+          },
+          {
+            "lcmc": 0.020294997498749367
+          },
+          {
+            "neighborhood_hit": 0.19775
+          },
+          {
+            "topographic_product": -0.9362057793633065
+          },
+          {
+            "procrustes": 0.9226429276639491
+          }
+        ],
+        [
+          {
+            "stress": 0.5437017133570442
+          },
+          {
+            "pearson_r": 0.2905255801087575
+          },
+          {
+            "trustworthiness": 0.6072021325209443,
+            "continuity": 0.7233320258948972
+          },
+          {
+            "mrre_false": 0.60482361493219,
+            "mrre_missing": 0.7447248467264814
+          },
+          {
+            "lcmc": 0.01899499749874937
+          },
+          {
+            "neighborhood_hit": 0.19825
+          },
+          {
+            "topographic_product": -0.9347713199346288
+          },
+          {
+            "procrustes": 0.9225154274071246
+          }
+        ]
+      ]
+    },
+    {
+      "label": "current",
+      "suite": "representative",
+      "samples": 2000,
+      "dimension": 20,
+      "embedding_dimension": 2,
+      "k": 20,
+      "embeddings": 8,
+      "repeat": 3,
+      "construction_seconds": 0.4418575828894973,
+      "first_measure_seconds": 3.657340625068173,
+      "cold_total_seconds": 4.09919820795767,
+      "warm_seconds": 3.650808708043769,
+      "warm_samples_seconds": [
+        3.6433454998768866,
+        3.650808708043769,
+        3.6527975001372397
+      ],
+      "peak_rss_bytes": 417759232,
+      "scores": [
+        [
+          {
+            "stress": 0.7110533342262424
+          },
+          {
+            "pearson_r": 0.29824095701030867
+          },
+          {
+            "trustworthiness": 0.6066628712871286,
+            "continuity": 0.7220811500380807
+          },
+          {
+            "mrre_false": 0.6034439584390159,
+            "mrre_missing": 0.7437220619594481
+          },
+          {
+            "lcmc": 0.01724499749874937
+          },
+          {
+            "neighborhood_hit": 0.19227499999999997
+          },
+          {
+            "topographic_product": -0.9394157039020163
+          },
+          {
+            "procrustes": 0.9193324721080237
+          }
+        ],
+        [
+          {
+            "stress": 0.6584822434045792
+          },
+          {
+            "pearson_r": 0.309847937262628
+          },
+          {
+            "trustworthiness": 0.6094406448337143,
+            "continuity": 0.7271681264280274
+          },
+          {
+            "mrre_false": 0.6075503076951814,
+            "mrre_missing": 0.7448934438476186
+          },
+          {
+            "lcmc": 0.01891999749874937
+          },
+          {
+            "neighborhood_hit": 0.19997499999999999
+          },
+          {
+            "topographic_product": -0.9318601284682323
+          },
+          {
+            "procrustes": 0.9208304150815013
+          }
+        ],
+        [
+          {
+            "stress": 0.8801734032494065
+          },
+          {
+            "pearson_r": 0.2810746892313618
+          },
+          {
+            "trustworthiness": 0.6033624650926631,
+            "continuity": 0.7213155369383093
+          },
+          {
+            "mrre_false": 0.5997204535437095,
+            "mrre_missing": 0.7423159802429553
+          },
+          {
+            "lcmc": 0.01901999749874937
+          },
+          {
+            "neighborhood_hit": 0.199375
+          },
+          {
+            "topographic_product": -0.9373718129857083
+          },
+          {
+            "procrustes": 0.9209474698391732
+          }
+        ],
+        [
+          {
+            "stress": 0.7966772297879332
+          },
+          {
+            "pearson_r": 0.29653691011947575
+          },
+          {
+            "trustworthiness": 0.610836785986291,
+            "continuity": 0.7333726072607261
+          },
+          {
+            "mrre_false": 0.6064008016268699,
+            "mrre_missing": 0.7508336556000763
+          },
+          {
+            "lcmc": 0.01964499749874937
+          },
+          {
+            "neighborhood_hit": 0.204
+          },
+          {
+            "topographic_product": -0.9255004101861228
+          },
+          {
+            "procrustes": 0.9198590113331886
+          }
+        ],
+        [
+          {
+            "stress": 0.7586342450033626
+          },
+          {
+            "pearson_r": 0.2741412482307201
+          },
+          {
+            "trustworthiness": 0.604658339680122,
+            "continuity": 0.7188001650165018
+          },
+          {
+            "mrre_false": 0.6030120014443505,
+            "mrre_missing": 0.7392267076815876
+          },
+          {
+            "lcmc": 0.018894997498749372
+          },
+          {
+            "neighborhood_hit": 0.19995
+          },
+          {
+            "topographic_product": -0.9399171328715012
+          },
+          {
+            "procrustes": 0.9200228201606844
+          }
+        ],
+        [
+          {
+            "stress": 0.7198903212085767
+          },
+          {
+            "pearson_r": 0.2820633553767868
+          },
+          {
+            "trustworthiness": 0.6062526275704493,
+            "continuity": 0.7196394008631632
+          },
+          {
+            "mrre_false": 0.6039357636513414,
+            "mrre_missing": 0.7414231990465384
+          },
+          {
+            "lcmc": 0.018219997498749373
+          },
+          {
+            "neighborhood_hit": 0.20095
+          },
+          {
+            "topographic_product": -0.9372769563976905
+          },
+          {
+            "procrustes": 0.9192320723413712
+          }
+        ],
+        [
+          {
+            "stress": 0.5395410112189106
+          },
+          {
+            "pearson_r": 0.28654579776264183
+          },
+          {
+            "trustworthiness": 0.608906854531607,
+            "continuity": 0.7195944275196751
+          },
+          {
+            "mrre_false": 0.6043699878135933,
+            "mrre_missing": 0.7425074041751859
+          },
+          {
+            "lcmc": 0.020294997498749367
+          },
+          {
+            "neighborhood_hit": 0.19775
+          },
+          {
+            "topographic_product": -0.9362057793633055
+          },
+          {
+            "procrustes": 0.9226429276639491
+          }
+        ],
+        [
+          {
+            "stress": 0.5437017133570442
+          },
+          {
+            "pearson_r": 0.29052558010875745
+          },
+          {
+            "trustworthiness": 0.6072021325209443,
+            "continuity": 0.7233320258948972
+          },
+          {
+            "mrre_false": 0.60482361493219,
+            "mrre_missing": 0.7447248467264814
+          },
+          {
+            "lcmc": 0.01899499749874937
+          },
+          {
+            "neighborhood_hit": 0.19825
+          },
+          {
+            "topographic_product": -0.934771319934626
+          },
+          {
+            "procrustes": 0.9225154274071246
+          }
+        ]
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "suite": "representative",
+      "samples": 2000,
+      "baseline": "2023-v0.1.1",
+      "current": "current",
+      "cold_speedup": 1.424128033506958,
+      "warm_speedup": 1.5216353379028495,
+      "peak_rss_ratio": 1.2718252411953879,
+      "maximum_score_delta": 0.17586909567678377
+    },
+    {
+      "suite": "representative",
+      "samples": 2000,
+      "baseline": "pre-acceleration-v0.5.0",
+      "current": "current",
+      "cold_speedup": 1.5134823268116147,
+      "warm_speedup": 1.62192823057107,
+      "peak_rss_ratio": 1.318848537140168,
+      "maximum_score_delta": 9.325873406851315e-15
+    }
+  ]
+}

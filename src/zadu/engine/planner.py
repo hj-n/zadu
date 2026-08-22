@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -160,6 +161,9 @@ def build_execution_plan(
     geodesic: bool = False,
     backend: str = "numpy",
     resource_dtype_bytes: int = np.dtype(np.float64).itemsize,
+    provider_working_memory: (
+        Callable[[ResourceKey, int, int], int | None] | None
+    ) = None,
 ) -> ExecutionPlan:
     """Build one deterministic plan and collapse compatible kNN requests."""
 
@@ -698,6 +702,30 @@ def build_execution_plan(
                 min(n_samples, available_work_bytes // bytes_per_row),
             )
             working_bytes = block_rows * bytes_per_row
+            resource_working_bytes[key] = working_bytes
+            peak_working_bytes = max(peak_working_bytes, working_bytes)
+    if provider_working_memory is not None:
+        for key in resources:
+            if key in resource_working_bytes:
+                continue
+            working_bytes = provider_working_memory(
+                key,
+                n_samples,
+                available_work_bytes,
+            )
+            if working_bytes is None:
+                continue
+            if isinstance(working_bytes, bool) or not isinstance(
+                working_bytes, (int, np.integer)
+            ):
+                raise TypeError(
+                    "Backend working_memory_bytes() must return an integer or None"
+                )
+            working_bytes = int(working_bytes)
+            if working_bytes < 1:
+                raise ValueError(
+                    "Backend working_memory_bytes() must return a positive value"
+                )
             resource_working_bytes[key] = working_bytes
             peak_working_bytes = max(peak_working_bytes, working_bytes)
     for key in resources:
