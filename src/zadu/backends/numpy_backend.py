@@ -3,15 +3,28 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
+from scipy.spatial.distance import cdist
+from scipy.spatial.distance import pdist as scipy_pdist
 
-from zadu.engine.resources import NeighborRanking, ResourceKey, ResourceKind
+from zadu.engine.resources import (
+    NeighborRanking,
+    PairStrategy,
+    ResourceKey,
+    ResourceKind,
+)
+from zadu.kernels import PairAccumulator
 from zadu.measures.utils import knn
 from zadu.measures.utils import pairwise_dist as pdist
 
 from .base import BuiltResource
+
+if TYPE_CHECKING:
+    from zadu.engine.planner import PairExecutionPlan
 
 
 class NumpyResourceProvider:
@@ -34,16 +47,211 @@ class NumpyResourceProvider:
                 else pdist.pairwise_distance_matrix(points)
             )
             return BuiltResource(value, "numpy")
+        if key.kind is ResourceKind.CONDENSED_PAIRS:
+            value = self.condensed_distances(points, geodesic=geodesic)
+            return BuiltResource(value, "scipy")
         if key.kind is ResourceKind.NEIGHBOR_RANKING:
+            assert key.k is not None
             indices, ranking = knn.knn_with_ranking(
                 points, key.k, distance_matrix=distance_matrix
             )
             return BuiltResource(NeighborRanking(indices, ranking), "numpy")
+        if key.kind is not ResourceKind.KNN:
+            raise RuntimeError(f"Unsupported NumPy resource kind: {key.kind.value}")
+        assert key.k is not None
         if distance_matrix is not None:
             return BuiltResource(
                 knn.knn_from_distance_matrix(distance_matrix, key.k), "numpy"
             )
         return BuiltResource(knn.knn(points, key.k), "faiss")
+
+    def build_pair_statistics(
+        self,
+        plan: PairExecutionPlan,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
+        *,
+        orig_distance_matrix: npt.NDArray | None,
+        emb_distance_matrix: npt.NDArray | None,
+        orig_condensed: npt.NDArray | None,
+        emb_condensed: npt.NDArray | None,
+        geodesic: bool,
+    ) -> BuiltResource:
+        accumulator = PairAccumulator(
+            needs_stress="stress" in plan.metric_ids,
+            needs_scale="scale_normalized_stress" in plan.metric_ids,
+            needs_pearson="pearson_r" in plan.metric_ids,
+        )
+        if plan.strategy is PairStrategy.DENSE:
+            if orig_distance_matrix is None or emb_distance_matrix is None:
+                raise RuntimeError(
+                    "Dense pair statistics require two distance matrices"
+                )
+            assert plan.block_rows is not None
+            blocks = self._matrix_pair_blocks(
+                orig_distance_matrix,
+                emb_distance_matrix,
+                plan.block_rows,
+            )
+        elif plan.strategy is PairStrategy.CONDENSED:
+            if orig_condensed is None or emb_condensed is None:
+                raise RuntimeError(
+                    "Condensed pair statistics require two condensed arrays"
+                )
+            assert plan.chunk_pairs is not None
+            blocks = self._condensed_pair_blocks(
+                orig_condensed,
+                emb_condensed,
+                plan.chunk_pairs,
+            )
+        else:
+            assert plan.block_rows is not None
+            blocks = self._stream_pair_blocks(
+                orig,
+                emb,
+                plan.block_rows,
+                geodesic=geodesic,
+            )
+
+        for orig_distances, emb_distances in blocks:
+            accumulator.update(orig_distances, emb_distances)
+        statistics = accumulator.finalize(
+            strategy=plan.strategy,
+            block_rows=plan.block_rows,
+            chunk_pairs=plan.chunk_pairs,
+        )
+        if statistics.count != plan.pair_count:
+            raise RuntimeError(
+                "Pair provider produced an unexpected number of distances "
+                f"({statistics.count} != {plan.pair_count})"
+            )
+        return BuiltResource(
+            statistics,
+            "numpy",
+            {
+                "strategy": plan.strategy.value,
+                "pair_count": statistics.count,
+                "block_count": statistics.block_count,
+                "block_rows": plan.block_rows,
+                "chunk_pairs": plan.chunk_pairs,
+                "working_bytes": plan.working_bytes,
+                "fused_metrics": list(plan.metric_ids),
+            },
+        )
+
+    @staticmethod
+    def _matrix_pair_blocks(
+        orig_distance_matrix: npt.NDArray,
+        emb_distance_matrix: npt.NDArray,
+        block_rows: int,
+    ) -> Iterator[tuple[npt.NDArray, npt.NDArray]]:
+        n_samples = orig_distance_matrix.shape[0]
+        for left_start in range(0, n_samples, block_rows):
+            left_stop = min(left_start + block_rows, n_samples)
+            for right_start in range(left_start, n_samples, block_rows):
+                right_stop = min(right_start + block_rows, n_samples)
+                if left_start == right_start:
+                    for row in range(left_start, left_stop):
+                        if row + 1 < right_stop:
+                            yield (
+                                orig_distance_matrix[row, row + 1 : right_stop],
+                                emb_distance_matrix[row, row + 1 : right_stop],
+                            )
+                else:
+                    yield (
+                        orig_distance_matrix[
+                            left_start:left_stop, right_start:right_stop
+                        ],
+                        emb_distance_matrix[
+                            left_start:left_stop, right_start:right_stop
+                        ],
+                    )
+
+    @staticmethod
+    def _condensed_pair_blocks(
+        orig_condensed: npt.NDArray,
+        emb_condensed: npt.NDArray,
+        chunk_pairs: int,
+    ) -> Iterator[tuple[npt.NDArray, npt.NDArray]]:
+        for start in range(0, orig_condensed.size, chunk_pairs):
+            stop = min(start + chunk_pairs, orig_condensed.size)
+            yield orig_condensed[start:stop], emb_condensed[start:stop]
+
+    @classmethod
+    def _stream_pair_blocks(
+        cls,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
+        block_rows: int,
+        *,
+        geodesic: bool,
+    ) -> Iterator[tuple[npt.NDArray, npt.NDArray]]:
+        n_samples = orig.shape[0]
+        for left_start in range(0, n_samples, block_rows):
+            left_stop = min(left_start + block_rows, n_samples)
+            orig_left = orig[left_start:left_stop]
+            emb_left = emb[left_start:left_stop]
+            for right_start in range(left_start, n_samples, block_rows):
+                right_stop = min(right_start + block_rows, n_samples)
+                if left_start == right_start:
+                    orig_distances = cls.condensed_distances(
+                        orig_left, geodesic=geodesic
+                    )
+                    emb_distances = scipy_pdist(emb_left)
+                else:
+                    orig_right = orig[right_start:right_stop]
+                    emb_right = emb[right_start:right_stop]
+                    orig_distances = (
+                        cls.geodesic_distance_block(orig_left, orig_right)
+                        if geodesic
+                        else cdist(orig_left, orig_right)
+                    )
+                    emb_distances = cdist(emb_left, emb_right)
+                yield orig_distances, emb_distances
+
+    @classmethod
+    def condensed_distances(
+        cls,
+        points: npt.NDArray,
+        *,
+        geodesic: bool,
+    ) -> npt.NDArray:
+        if not geodesic:
+            return scipy_pdist(points)
+        if points.shape[1] < 2:
+            raise ValueError(
+                "geodesic=True requires orig[:, 0] = longitude and "
+                "orig[:, 1] = latitude in radians"
+            )
+        result = np.empty(points.shape[0] * (points.shape[0] - 1) // 2)
+        offset = 0
+        for left in range(points.shape[0] - 1):
+            for right in range(left + 1, points.shape[0]):
+                result[offset] = cls.geodesic_distance(
+                    points[left, 1],
+                    points[left, 0],
+                    points[right, 1],
+                    points[right, 0],
+                )
+                offset += 1
+        return result
+
+    @classmethod
+    def geodesic_distance_block(
+        cls,
+        left_points: npt.NDArray,
+        right_points: npt.NDArray,
+    ) -> npt.NDArray:
+        result = np.empty((left_points.shape[0], right_points.shape[0]))
+        for left in range(left_points.shape[0]):
+            for right in range(right_points.shape[0]):
+                result[left, right] = cls.geodesic_distance(
+                    left_points[left, 1],
+                    left_points[left, 0],
+                    right_points[right, 1],
+                    right_points[right, 0],
+                )
+        return result
 
     @staticmethod
     def geodesic_distance(phi1, lambda1, phi2, lambda2) -> float:

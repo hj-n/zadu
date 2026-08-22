@@ -14,7 +14,7 @@ import numpy as np
 from .backends import NumpyResourceProvider
 from .engine.config import ExecutionConfig
 from .engine.planner import build_execution_plan
-from .engine.resources import ResourceCache, Space
+from .engine.resources import ResourceCache, ResourceKind, Space
 from .engine.result import build_run_info
 from .measures.utils.validation import (
     as_finite_2d,
@@ -75,6 +75,12 @@ class ZADU:
             self.spec_list,
             n_samples=self.orig.shape[0],
             default_k=self.DEFAULT_K,
+            memory_budget=self.max_memory_bytes,
+            geodesic=self.geodesic,
+        )
+        self.distance_matrices_flag = any(
+            key.kind is ResourceKind.DISTANCE_MATRIX
+            for key in self._execution_plan.resources
         )
         self.estimated_cache_bytes = self._estimate_cache_bytes()
         if (
@@ -84,6 +90,16 @@ class ZADU:
             raise MemoryError(
                 "Estimated ZADU cache size exceeds max_memory_bytes "
                 f"({self.estimated_cache_bytes} > {self.max_memory_bytes})"
+            )
+        if (
+            self.max_memory_bytes is not None
+            and self._execution_plan.planned_peak_bytes > self.max_memory_bytes
+        ):
+            raise MemoryError(
+                "Estimated ZADU cache size or peak working memory exceeds "
+                "max_memory_bytes "
+                f"({self._execution_plan.planned_peak_bytes} > "
+                f"{self.max_memory_bytes})"
             )
 
         self._provider = NumpyResourceProvider()
@@ -122,6 +138,7 @@ class ZADU:
         self._resource_cache.begin_run()
         run_started = perf_counter()
         self._prepare_embedded_space()
+        self._prepare_paired_resources()
 
         score_results = []
         local_results = []
@@ -157,6 +174,7 @@ class ZADU:
                 score_results.append(_python_scalars(result))
                 if self.return_local:
                     local_results.append(None)
+            self._resource_cache.release_after(index)
 
         self.last_run_info = build_run_info(
             plan=self._execution_plan,
@@ -276,6 +294,9 @@ class ZADU:
     def _prepare_embedded_space(self) -> None:
         self._resource_cache.prepare_embedded(self.emb)
         self._sync_resource_views()
+
+    def _prepare_paired_resources(self) -> None:
+        self._resource_cache.prepare_paired(self.orig, self.emb)
 
     def _sync_resource_views(self) -> None:
         self.orig_distance_matrix = self._resource_cache.distance_matrix(Space.ORIGINAL)
