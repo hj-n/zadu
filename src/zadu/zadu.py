@@ -14,7 +14,7 @@ from typing import Any, ClassVar
 import numpy as np
 from threadpoolctl import threadpool_limits
 
-from .backends import NumpyResourceProvider
+from .backends import NumpyResourceProvider, create_resource_provider
 from .engine.batching import BatchExecutionPlan, build_batch_execution_plan
 from .engine.config import ExecutionConfig
 from .engine.errors import EmbeddingExecutionError
@@ -76,6 +76,7 @@ class ZADU:
         self._definitions: list[MetricDefinition] = []
         self._validate_and_normalize_specs()
         self._interpret_specs()
+        self._provider = create_resource_provider(self.execution)
         self._execution_plan = build_execution_plan(
             self._definitions,
             self.spec_list,
@@ -84,6 +85,8 @@ class ZADU:
             default_k=self.DEFAULT_K,
             memory_budget=self.max_memory_bytes,
             geodesic=self.geodesic,
+            backend=self._provider.name,
+            resource_dtype_bytes=np.dtype(self._provider.dtype).itemsize,
         )
         self.distance_matrices_flag = any(
             key.kind is ResourceKind.DISTANCE_MATRIX
@@ -109,7 +112,6 @@ class ZADU:
                 f"{self.max_memory_bytes})"
             )
 
-        self._provider = NumpyResourceProvider()
         self._resource_cache = ResourceCache(
             self._execution_plan,
             self._provider,
@@ -198,8 +200,9 @@ class ZADU:
         self.last_run_info = build_many_run_info(
             plan=self._execution_plan,
             cache=self._resource_cache,
-            backend=self.execution.resolved_backend,
-            device=self.execution.resolved_device,
+            backend=self._provider.name,
+            device=self._provider.device,
+            dtype=self._provider.dtype,
             batch_plan=batch_plan,
             run_infos=run_infos,
             total_seconds=perf_counter() - batch_started,
@@ -366,8 +369,9 @@ class ZADU:
         run_info = build_run_info(
             plan=self._execution_plan,
             cache=cache,
-            backend=self.execution.resolved_backend,
-            device=self.execution.resolved_device,
+            backend=cache.provider.name,
+            device=cache.provider.device,
+            dtype=cache.provider.dtype,
             metric_timings=metric_timings,
             total_seconds=perf_counter() - run_started,
             snc_effective_workers=snc_effective_workers,

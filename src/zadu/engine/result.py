@@ -16,6 +16,7 @@ def _plan_info(
     *,
     backend: str,
     device: str,
+    dtype: str,
     snc_effective_workers: dict[int, int] | None = None,
 ) -> dict[str, Any]:
     """Return diagnostics shared by single- and repeated-embedding runs."""
@@ -45,6 +46,7 @@ def _plan_info(
         "exact": True,
         "backend": backend,
         "device": device,
+        "dtype": dtype,
         "estimated_cache_bytes": plan.estimated_cache_bytes,
         "planned_peak_bytes": plan.planned_peak_bytes,
         "memory_budget_bytes": plan.memory_budget_bytes,
@@ -76,6 +78,7 @@ def build_run_info(
     cache: ResourceCache,
     backend: str,
     device: str,
+    dtype: str,
     metric_timings: list[tuple[str, float]],
     total_seconds: float,
     snc_effective_workers: dict[int, int] | None = None,
@@ -115,6 +118,7 @@ def build_run_info(
             plan,
             backend=backend,
             device=device,
+            dtype=dtype,
             snc_effective_workers=snc_effective_workers,
         ),
         "resource_seconds": float(
@@ -126,6 +130,11 @@ def build_run_info(
         ),
         "metric_seconds": float(sum(seconds for _, seconds in metric_timings)),
         "total_seconds": float(total_seconds),
+        "provider_timings": _provider_timings(
+            record
+            for record in records.values()
+            if record.generation == cache.generation
+        ),
         "resources": resources,
         "metrics": [
             {"id": metric_id, "seconds": float(seconds)}
@@ -140,6 +149,7 @@ def build_many_run_info(
     cache: ResourceCache,
     backend: str,
     device: str,
+    dtype: str,
     batch_plan: BatchExecutionPlan,
     run_infos: list[dict[str, Any]],
     total_seconds: float,
@@ -181,6 +191,7 @@ def build_many_run_info(
             plan,
             backend=backend,
             device=device,
+            dtype=dtype,
             snc_effective_workers=snc_effective_workers,
         ),
         "mode": "many",
@@ -207,6 +218,29 @@ def build_many_run_info(
         "resource_seconds": float(sum(info["resource_seconds"] for info in run_infos)),
         "metric_seconds": float(sum(info["metric_seconds"] for info in run_infos)),
         "total_seconds": float(total_seconds),
+        "provider_timings": {
+            name: float(
+                sum(info["provider_timings"].get(name, 0.0) for info in run_infos)
+            )
+            for name in _PROVIDER_TIMING_NAMES
+        },
         "metrics": metric_timings,
         "runs": indexed_runs,
     }
+
+
+_PROVIDER_TIMING_NAMES = (
+    "input_transfer_seconds",
+    "compile_and_first_execution_seconds",
+    "warm_execution_seconds",
+    "output_transfer_seconds",
+)
+
+
+def _provider_timings(records) -> dict[str, float]:
+    totals = {name: 0.0 for name in _PROVIDER_TIMING_NAMES}
+    for record in records:
+        timings = record.details.get("timings", {})
+        for name in totals:
+            totals[name] += float(timings.get(name, 0.0))
+    return totals

@@ -39,6 +39,9 @@ Repository = "https://github.com/hj-n/zadu"
 Issues = "https://github.com/hj-n/zadu/issues"
 
 [project.optional-dependencies]
+mlx = [
+  "mlx>=0.32,<0.33; platform_system == 'Darwin' and platform_machine == 'arm64'",
+]
 dev = [
   "black==26.5.1",
   "build>=1.2",

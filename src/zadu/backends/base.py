@@ -28,6 +28,7 @@ class BuiltResource:
 class ExactResourceProvider(Protocol):
     name: str
     device: str
+    dtype: str
     exact: bool
 
     def fork(self) -> ExactResourceProvider:
