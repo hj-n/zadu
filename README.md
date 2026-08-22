@@ -204,6 +204,7 @@ runner = ZADU(
         backend="auto",       # "auto" or "numpy"
         device="auto",        # "auto" or "cpu"
         memory_budget="4GiB",
+        embedding_workers=1,   # opt-in measure_many() workers
     ),
 )
 scores = runner.measure(ld)
@@ -227,11 +228,34 @@ batch_info = runner.last_run_info
 
 `measure_many()` returns one normal `measure()` result per input embedding, in
 input order. If a configured metric requires labels, pass one shared label
-vector as `labels=`. PR 5-A executes the embeddings sequentially, so the planned
-peak-memory bound is per embedding rather than multiplied by the collection
-size. Batch diagnostics include aggregate timings, original-resource reuse, and
-the full diagnostics for each embedding under `last_run_info["runs"]`. A `ZADU`
-instance is mutable and should not be called concurrently from multiple threads.
+vector as `labels=`. The default `embedding_workers=1` executes sequentially.
+Set a larger value to opt into exact thread-level collection execution:
+
+```python
+runner = ZADU(
+    spec,
+    hd,
+    execution=ExecutionConfig(
+        embedding_workers=2,
+        memory_budget="4GiB",
+    ),
+)
+results = runner.measure_many(embeddings, labels=labels)
+```
+
+Original-space resources are frozen and shared; each in-flight embedding owns a
+separate mutable embedded/paired cache. The planner caps workers by input count
+and `memory_budget`, submits only one worker-sized batch at a time, and limits
+native library threads to avoid oversubscription. Fixed-seed SNC uses one inner
+iteration worker when multiple embeddings run concurrently. Mutable or global
+random-state configurations that cannot preserve ordered behavior fall back to
+the sequential path with the reason recorded in diagnostics.
+
+Batch diagnostics include requested/effective workers, aggregate timings,
+planned collection peak memory, original-resource reuse, and full per-embedding
+diagnostics under `last_run_info["runs"]`. Execution failures raise
+`EmbeddingExecutionError` with the failing input index. A `ZADU` instance is
+mutable and should not be called concurrently from multiple user threads.
 
 ### Parameters:
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -299,6 +299,22 @@ def resource_dtype(value: Any) -> str | dict[str, str] | None:
     return None
 
 
+def _freeze_resource(value: Any) -> None:
+    """Recursively mark arrays in one package-owned resource as read-only."""
+
+    if isinstance(value, np.ndarray):
+        value.flags.writeable = False
+    elif isinstance(value, NeighborRanking):
+        _freeze_resource(value.indices)
+        _freeze_resource(value.ranking)
+    elif isinstance(value, PairOrder):
+        _freeze_resource(value.indices)
+        _freeze_resource(value.sorted_ranks)
+    elif isinstance(value, dict):
+        for item in value.values():
+            _freeze_resource(item)
+
+
 class ResourceCache:
     """Build canonical resources once and provide sliced metric arguments."""
 
@@ -322,6 +338,25 @@ class ResourceCache:
 
     def prepare_original(self, points: npt.NDArray) -> None:
         self._prepare(Space.ORIGINAL, points)
+
+    def freeze_original(self) -> None:
+        """Make package-owned original-space arrays read-only before sharing."""
+
+        for key, value in self._values.items():
+            if key.space is Space.ORIGINAL:
+                _freeze_resource(value)
+
+    def fork_original(self, provider: ExactResourceProvider) -> ResourceCache:
+        """Create an independent run cache sharing only immutable originals."""
+
+        fork = type(self)(self.plan, provider, geodesic=self.geodesic)
+        for key, record in self._records.items():
+            if key.space is not Space.ORIGINAL:
+                continue
+            fork._records[key] = replace(record, details=dict(record.details))
+            if key in self._values:
+                fork._values[key] = self._values[key]
+        return fork
 
     def begin_run(self) -> None:
         self.generation += 1

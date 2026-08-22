@@ -38,13 +38,19 @@ def _mixed_specs():
 
 
 def test_execution_config_normalizes_exact_numpy_options():
-    config = ExecutionConfig(backend="NUMPY", device="CPU", memory_budget="1.5MiB")
+    config = ExecutionConfig(
+        backend="NUMPY",
+        device="CPU",
+        memory_budget="1.5MiB",
+        embedding_workers=np.int64(3),
+    )
 
     assert config.backend == "numpy"
     assert config.device == "cpu"
     assert config.resolved_backend == "numpy"
     assert config.resolved_device == "cpu"
     assert config.memory_budget_bytes == int(1.5 * 1024**2)
+    assert config.embedding_workers == 3
 
 
 @pytest.mark.parametrize(
@@ -57,6 +63,9 @@ def test_execution_config_normalizes_exact_numpy_options():
         ({"memory_budget": True}, TypeError, "memory_budget"),
         ({"memory_budget": 0}, ValueError, "greater than zero"),
         ({"memory_budget": "many"}, ValueError, "4GiB"),
+        ({"embedding_workers": True}, TypeError, "embedding_workers"),
+        ({"embedding_workers": 1.5}, TypeError, "embedding_workers"),
+        ({"embedding_workers": 0}, ValueError, "embedding_workers"),
     ],
 )
 def test_execution_config_rejects_unsupported_options(kwargs, error, match):

@@ -30,6 +30,11 @@ class ExactResourceProvider(Protocol):
     device: str
     exact: bool
 
+    def fork(self) -> ExactResourceProvider:
+        """Return an isolated provider context for one concurrent embedding."""
+
+        ...
+
     def build(
         self,
         key: ResourceKey,

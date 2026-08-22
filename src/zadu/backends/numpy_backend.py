@@ -51,6 +51,11 @@ class NumpyResourceProvider:
     device = "cpu"
     exact = True
 
+    def fork(self) -> NumpyResourceProvider:
+        """Return a stateless provider context for one embedding worker."""
+
+        return type(self)()
+
     def build(
         self,
         key: ResourceKey,
