@@ -78,8 +78,24 @@ jobs:
           python -c "import mlx.core as mx; assert mx.metal.is_available()"
           python -m pytest src/zadu/tests/test_mlx_backend.py -q
 
+  torch:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install ZADU with the optional PyTorch backend
+        run: python -m pip install -e ".[dev,torch]"
+      - name: Run PyTorch CPU and MPS provider parity tests
+        run: |
+          python -c "import torch; assert torch.backends.mps.is_available()"
+          python -m pytest src/zadu/tests/test_torch_backend.py -q
+
   build:
-    needs: [lint, test, snc-compat, mlx]
+    needs: [lint, test, snc-compat, mlx, torch]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -42,6 +42,9 @@ Issues = "https://github.com/hj-n/zadu/issues"
 mlx = [
   "mlx>=0.32,<0.33; platform_system == 'Darwin' and platform_machine == 'arm64'",
 ]
+torch = [
+  "torch>=2.6",
+]
 dev = [
   "black==26.5.1",
   "build>=1.2",
@@ -88,8 +91,8 @@ ignore = ["E501"]
 
 [tool.coverage.run]
 source = ["zadu", "zaduvis"]
-# The optional MLX backend is exercised in its dedicated Apple Silicon CI job.
-omit = ["*/zadu/backends/mlx_backend.py"]
+# Optional accelerators are exercised in dedicated backend CI jobs.
+omit = ["*/zadu/backends/mlx_backend.py", "*/zadu/backends/torch_backend.py"]
 
 [tool.coverage.report]
 show_missing = true
