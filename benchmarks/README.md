@@ -27,4 +27,3 @@ The PR targets are 10x for T&C and class-aware T&C, 4x for MRRE, 5x for LCMC,
 10x for Neighborhood Hit, 50x for Topographic Product, and 1.5x for Procrustes
 on a representative large input. These are review targets, not shared-CI timing
 gates; noisy pull-request runners only enforce correctness.
-
