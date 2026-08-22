@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import replace
@@ -160,6 +161,12 @@ class ZADU:
                     self._execution_plan.metric_plans[index]
                 )
             )
+            snc_plan = self._execution_plan.snc_plan
+            if snc_plan is not None and index in snc_plan.effective_workers:
+                exec_params["n_jobs"] = snc_plan.effective_workers[index]
+                exec_params["working_memory_bytes"] = snc_plan.metric_working_bytes[
+                    index
+                ]
             if definition.supports_local:
                 exec_params["return_local"] = self.return_local
 
@@ -254,6 +261,8 @@ class ZADU:
                     params.get("sigma", 0.1),
                     "sigma",
                 )
+            if definition.id == "steadiness_cohesiveness":
+                self._validate_snc_params(params)
             self._validate_k(definition, params)
             self._definitions.append(definition)
 
@@ -269,6 +278,26 @@ class ZADU:
             validate_trustworthiness_k(self.orig.shape[0], value)
         else:
             validate_neighbor_k(self.orig.shape[0], value)
+
+    @staticmethod
+    def _validate_snc_params(params: dict[str, Any]) -> None:
+        if "iteration" in params:
+            iteration = params["iteration"]
+            if isinstance(iteration, bool) or not isinstance(iteration, Integral):
+                raise TypeError("iteration must be an integer")
+            if iteration < 1:
+                raise ValueError("iteration must be at least 1")
+            params["iteration"] = int(iteration)
+        for name, default in (("walk_num_ratio", 0.3), ("alpha", 0.1)):
+            if name in params:
+                params[name] = validate_positive_real(params.get(name, default), name)
+        if "n_jobs" in params:
+            n_jobs = params["n_jobs"]
+            if isinstance(n_jobs, bool) or not isinstance(n_jobs, Integral):
+                raise TypeError("n_jobs must be an integer")
+            if n_jobs < 1:
+                raise ValueError("n_jobs must be at least 1")
+            params["n_jobs"] = int(n_jobs)
 
     def _interpret_specs(self) -> None:
         for spec, definition in zip(self.spec_list, self._definitions, strict=True):
@@ -287,9 +316,12 @@ class ZADU:
                     requirement.argument == "knn_info"
                     or requirement.argument == "neighbor_statistics"
                 ):
-                    self.knn_both_k = max(
-                        self.knn_both_k, params.get("k", self.DEFAULT_K)
+                    default_k = (
+                        math.isqrt(self.orig.shape[0])
+                        if requirement.k_default_rule == "sqrt"
+                        else self.DEFAULT_K
                     )
+                    self.knn_both_k = max(self.knn_both_k, params.get("k", default_k))
                 elif requirement.argument == "knn_emb_info":
                     self.knn_emb_k = max(
                         self.knn_emb_k, params.get("k", self.DEFAULT_K)

@@ -16,6 +16,8 @@ def measure(
     knn_info: tuple | None = None,
     return_local: bool = False,
     random_state: int | np.random.Generator | None = None,
+    n_jobs: int = 1,
+    working_memory_bytes: int | None = None,
 ) -> tuple | dict:
     """
     Compute the Steadiness and Cohesiveness of the embedding
@@ -29,6 +31,8 @@ def measure(
             str: clustering_strategy: clustering strategy to use (dbscan or kmeans)
             tuple: knn_info: precomputed k-nearest neighbors of the original and embedded data (Optional)
             int: random_state: seed for reproducible walks and KMeans clustering
+            int: n_jobs: number of exact iteration workers
+            int: working_memory_bytes: internal per-measure working-memory budget (Optional)
     OUTPUT:
             dict: steadiness and cohesiveness score
     """
@@ -43,6 +47,8 @@ def measure(
         k=k,
         cluster_strategy=clustering_strategy,
         random_state=random_state,
+        n_jobs=n_jobs,
+        working_memory_bytes=working_memory_bytes,
     )
 
     snc_obj.fit(record_vis_info=return_local, knn_info=knn_info)

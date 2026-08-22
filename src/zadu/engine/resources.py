@@ -60,6 +60,7 @@ class ResourceRequirement:
     kind: ResourceKind
     spaces: tuple[Space, ...]
     uses_k: bool = False
+    k_default_rule: str | None = None
     parameter_name: str | None = None
     default_parameter: float | None = None
 
@@ -93,6 +94,13 @@ KNN_EMB_INFO = ResourceRequirement(
     ResourceKind.KNN,
     (Space.EMBEDDED,),
     uses_k=True,
+)
+SNC_KNN_INFO = ResourceRequirement(
+    "knn_info",
+    ResourceKind.KNN,
+    (Space.ORIGINAL, Space.EMBEDDED),
+    uses_k=True,
+    k_default_rule="sqrt",
 )
 TOPOGRAPHIC_KNN_INFO = ResourceRequirement(
     "knn_info",

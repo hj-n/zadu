@@ -74,6 +74,16 @@ def build_run_info(
             if plan.neighbor_statistics_plan is not None
             else None
         ),
+        "snc_strategy": (
+            {
+                "algorithm": "sparse_batched_iterations",
+                "requested_workers": plan.snc_plan.requested_workers,
+                "effective_workers": plan.snc_plan.effective_workers,
+                "working_bytes": plan.snc_plan.working_bytes,
+            }
+            if plan.snc_plan is not None
+            else None
+        ),
         "resource_seconds": float(
             sum(
                 record.build_seconds
