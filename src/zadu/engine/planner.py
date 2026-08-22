@@ -40,6 +40,8 @@ MLX_PAIRWISE_WORK_ARRAYS = 4
 MLX_NEIGHBOR_FLOAT_WORK_ARRAYS = 4
 MLX_KNN_INDEX_WORK_ARRAYS = 2
 MLX_RANKING_INDEX_WORK_ARRAYS = 4
+TORCH_KNN_INDEX_WORK_ARRAYS = 2
+TORCH_RANKING_INDEX_WORK_ARRAYS = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -675,6 +677,19 @@ def build_execution_plan(
                     resource_dtype_bytes * MLX_NEIGHBOR_FLOAT_WORK_ARRAYS
                     + compact_index_dtype(n_samples).itemsize
                     * MLX_RANKING_INDEX_WORK_ARRAYS
+                )
+            elif backend == "torch" and key.kind in {
+                ResourceKind.KNN,
+                ResourceKind.STABLE_KNN,
+            }:
+                bytes_per_row = n_samples * (
+                    resource_dtype_bytes * MLX_NEIGHBOR_FLOAT_WORK_ARRAYS
+                    + np.dtype(np.int64).itemsize * TORCH_KNN_INDEX_WORK_ARRAYS
+                )
+            elif backend == "torch" and key.kind is ResourceKind.NEIGHBOR_RANKING:
+                bytes_per_row = n_samples * (
+                    resource_dtype_bytes * MLX_NEIGHBOR_FLOAT_WORK_ARRAYS
+                    + np.dtype(np.int64).itemsize * TORCH_RANKING_INDEX_WORK_ARRAYS
                 )
             else:
                 continue

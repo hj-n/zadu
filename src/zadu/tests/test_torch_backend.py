@@ -8,7 +8,8 @@ from scipy.spatial.distance import cdist, pdist
 
 from zadu import ZADU, ExecutionConfig
 from zadu.backends import torch_backend
-from zadu.engine.resources import ResourceKey, ResourceKind, Space
+from zadu.engine.resources import NeighborRanking, ResourceKey, ResourceKind, Space
+from zadu.measures.utils import knn
 
 
 def _torch_provider(*, device="cpu", dtype="float64"):
@@ -26,11 +27,13 @@ def _build(
     working_memory_bytes,
     geodesic=False,
     space=Space.ORIGINAL,
+    k=None,
+    distance_matrix=None,
 ):
     return provider.build(
-        ResourceKey(kind, space),
+        ResourceKey(kind, space, k),
         points,
-        distance_matrix=None,
+        distance_matrix=distance_matrix,
         condensed_pairs=None,
         working_memory_bytes=working_memory_bytes,
         geodesic=geodesic,
@@ -248,4 +251,201 @@ def test_torch_plan_accounts_for_pairwise_working_memory():
     assert plan.planned_peak_bytes >= (
         plan.estimated_cache_bytes
         + max(plan.resource_working_bytes[key] for key in pairwise_keys)
+    )
+
+
+@pytest.mark.parametrize("device", ["cpu", "mps"])
+def test_torch_full_ranking_preserves_self_and_stable_duplicate_ties(device):
+    points = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+            [2.0, 2.0],
+        ],
+        dtype=np.float32,
+    )
+    dtype = "float32" if device == "mps" else "float64"
+    provider = _torch_provider(device=device, dtype=dtype)
+    k = 4
+    bytes_per_row = points.shape[0] * (
+        4 * np.dtype(dtype).itemsize + 4 * np.dtype(np.int64).itemsize
+    )
+
+    built = _build(
+        provider,
+        ResourceKind.NEIGHBOR_RANKING,
+        points,
+        k=k,
+        working_memory_bytes=3 * bytes_per_row,
+    )
+    expected_indices, expected_ranking = knn.knn_with_ranking(points, k)
+
+    assert built.implementation == "torch"
+    assert isinstance(built.value, NeighborRanking)
+    np.testing.assert_array_equal(built.value.indices, expected_indices)
+    np.testing.assert_array_equal(built.value.ranking, expected_ranking)
+    assert built.value.indices.dtype == np.int32
+    assert built.value.ranking.dtype == np.int32
+    assert built.details["algorithm"] == "torch_blockwise_stable_full_ranking"
+    assert built.details["block_rows"] == 3
+    assert built.details["block_count"] == 3
+    assert built.details["tie_break"] == "stable_column_index"
+    assert built.details["self_exclusion"] == "forced_rank_zero_then_removed"
+    assert built.details["distance_source"] == "fused_blockwise_pairwise"
+    assert built.details["provider_fallback"] is False
+    json.dumps(built.details)
+
+
+@pytest.mark.parametrize("kind", [ResourceKind.KNN, ResourceKind.STABLE_KNN])
+@pytest.mark.parametrize("device", ["cpu", "mps"])
+def test_torch_exact_topk_matches_stable_numpy_tie_order(kind, device):
+    points = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+        ],
+        dtype=np.float32,
+    )
+    dtype = "float32" if device == "mps" else "float64"
+    provider = _torch_provider(device=device, dtype=dtype)
+    k = 3
+    bytes_per_row = points.shape[0] * (
+        4 * np.dtype(dtype).itemsize + 2 * np.dtype(np.int64).itemsize
+    )
+
+    built = _build(
+        provider,
+        kind,
+        points,
+        k=k,
+        working_memory_bytes=bytes_per_row,
+    )
+    expected = knn.knn_from_distance_matrix(cdist(points, points), k)
+
+    np.testing.assert_array_equal(built.value, expected)
+    assert built.value.dtype == np.int32
+    assert built.details["algorithm"] == "torch_blockwise_stable_exact_topk"
+    assert built.details["top_k_algorithm"] == "stable_full_order_prefix"
+    assert built.details["block_rows"] == 1
+    assert built.details["block_count"] == points.shape[0]
+
+
+@pytest.mark.parametrize("device", ["cpu", "mps"])
+def test_torch_ranking_reuses_planned_distance_matrix(device):
+    rng = np.random.default_rng(76)
+    points = rng.normal(size=(48, 5)).astype(np.float32)
+    dtype = "float32" if device == "mps" else "float64"
+    provider = _torch_provider(device=device, dtype=dtype)
+    pairwise_bytes = points.shape[0] ** 2 * np.dtype(dtype).itemsize * 4
+    matrix = _build(
+        provider,
+        ResourceKind.DISTANCE_MATRIX,
+        points,
+        working_memory_bytes=pairwise_bytes,
+    )
+    ranking_bytes = points.shape[0] ** 2 * (
+        4 * np.dtype(dtype).itemsize + 4 * np.dtype(np.int64).itemsize
+    )
+
+    ranked = _build(
+        provider,
+        ResourceKind.NEIGHBOR_RANKING,
+        points,
+        k=7,
+        distance_matrix=matrix.value,
+        working_memory_bytes=ranking_bytes,
+    )
+    expected_indices, expected_ranking = knn.knn_with_ranking(
+        points,
+        7,
+        distance_matrix=matrix.value,
+    )
+
+    np.testing.assert_array_equal(ranked.value.indices, expected_indices)
+    np.testing.assert_array_equal(ranked.value.ranking, expected_ranking)
+    assert ranked.details["distance_source"] == "shared_distance_matrix"
+    assert ranked.details["distance_zero_copy"] is False
+
+
+@pytest.mark.parametrize(
+    ("device", "dtype", "rel", "abs_"),
+    [("cpu", "float64", 1e-12, 1e-12), ("mps", "float32", 4e-5, 4e-6)],
+)
+def test_zadu_torch_routes_neighbor_metrics_and_preserves_scores(
+    device, dtype, rel, abs_
+):
+    _torch_provider(device=device, dtype=dtype)
+    rng = np.random.default_rng(77)
+    orig = rng.normal(size=(72, 8))
+    emb = orig @ rng.normal(size=(8, 2)) + rng.normal(scale=0.05, size=(72, 2))
+    labels = np.arange(orig.shape[0]) % 4
+    specs = [
+        {"id": "tnc", "params": {"k": 5}},
+        {"id": "lcmc", "params": {"k": 7}},
+        {"id": "nh", "params": {"k": 4}},
+        {"id": "proc", "params": {"k": 3}},
+        {"id": "topo", "params": {"k": 4}},
+    ]
+    expected = ZADU(specs, orig).measure(emb, labels)
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(backend="torch", device=device, dtype=dtype),
+    )
+
+    actual = runner.measure(emb, labels)
+
+    for actual_score, expected_score in zip(actual, expected, strict=True):
+        assert actual_score.keys() == expected_score.keys()
+        for name in actual_score:
+            assert actual_score[name] == pytest.approx(
+                expected_score[name], rel=rel, abs=abs_
+            )
+    neighbor_resources = [
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] in {"knn", "stable_knn", "neighbor_ranking"}
+    ]
+    assert neighbor_resources
+    assert all(resource["provider"] == "torch" for resource in neighbor_resources)
+    assert all(
+        resource["details"]["provider_fallback"] is False
+        for resource in neighbor_resources
+    )
+
+
+def test_torch_plan_accounts_for_neighbor_working_memory():
+    _torch_provider()
+    rng = np.random.default_rng(78)
+    orig = rng.normal(size=(80, 6))
+    runner = ZADU(
+        [
+            {"id": "tnc", "params": {"k": 5}},
+            {"id": "lcmc", "params": {"k": 7}},
+            {"id": "topo", "params": {"k": 4}},
+        ],
+        orig,
+        execution=ExecutionConfig(backend="torch", device="cpu", dtype="float64"),
+    )
+    plan = runner._execution_plan
+    neighbor_keys = [
+        key
+        for key in plan.resources
+        if key.kind
+        in {ResourceKind.KNN, ResourceKind.STABLE_KNN, ResourceKind.NEIGHBOR_RANKING}
+    ]
+
+    assert neighbor_keys
+    assert all(key in plan.resource_working_bytes for key in neighbor_keys)
+    assert plan.planned_peak_bytes >= (
+        plan.estimated_cache_bytes
+        + max(plan.resource_working_bytes[key] for key in neighbor_keys)
     )

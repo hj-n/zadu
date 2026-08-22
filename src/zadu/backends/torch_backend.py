@@ -11,7 +11,13 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from zadu.engine.resources import ResourceKey, ResourceKind, Space
+from zadu.engine.resources import (
+    NeighborRanking,
+    ResourceKey,
+    ResourceKind,
+    Space,
+    compact_index_dtype,
+)
 
 from .base import BuiltResource
 from .numpy_backend import NumpyResourceProvider
@@ -105,6 +111,19 @@ class TorchResourceProvider(NumpyResourceProvider):
             return self._build_euclidean(
                 key,
                 points,
+                working_memory_bytes=working_memory_bytes,
+            )
+        if not geodesic and key.kind in {
+            ResourceKind.KNN,
+            ResourceKind.STABLE_KNN,
+            ResourceKind.NEIGHBOR_RANKING,
+        }:
+            if working_memory_bytes is None:
+                raise RuntimeError("PyTorch neighbor resources require a memory plan")
+            return self._build_neighbors(
+                key,
+                points,
+                distance_matrix=distance_matrix,
                 working_memory_bytes=working_memory_bytes,
             )
 
@@ -204,6 +223,175 @@ class TorchResourceProvider(NumpyResourceProvider):
                 "input_transfer_seconds": float(
                     0.0 if input_reused else workspace.input_seconds
                 ),
+                "compile_and_first_execution_seconds": float(cold_seconds),
+                "warm_execution_seconds": float(warm_seconds),
+                "output_transfer_seconds": float(output_transfer_seconds),
+            },
+        }
+        return BuiltResource(value, "torch", details)
+
+    def _build_neighbors(
+        self,
+        key: ResourceKey,
+        points: npt.NDArray,
+        *,
+        distance_matrix: npt.NDArray | None,
+        working_memory_bytes: int,
+    ) -> BuiltResource:
+        """Build stable exact neighbor prefixes and optional inverse ranks."""
+
+        assert key.k is not None
+        n_samples = points.shape[0]
+        index_dtype = compact_index_dtype(n_samples)
+        ranking_requested = key.kind is ResourceKind.NEIGHBOR_RANKING
+        index_arrays = 4 if ranking_requested else 2
+        bytes_per_row = n_samples * (
+            4 * self._numpy_dtype.itemsize + index_arrays * np.dtype(np.int64).itemsize
+        )
+        if working_memory_bytes < bytes_per_row:
+            raise MemoryError(
+                "PyTorch neighbor execution needs enough memory for one distance row"
+            )
+        block_rows = max(
+            1,
+            min(n_samples, working_memory_bytes // bytes_per_row),
+        )
+
+        workspace = None
+        input_reused = False
+        input_seconds = 0.0
+        input_cast_copy = False
+        input_zero_copy = False
+        distance_zero_copy = False
+        distances_array = None
+        if distance_matrix is None:
+            workspace, input_reused = self._workspace(key.space, points)
+            input_seconds = 0.0 if input_reused else workspace.input_seconds
+            input_cast_copy = workspace.cast_copy
+            input_zero_copy = self.device == "cpu" and not workspace.device_copy
+            distance_source = "fused_blockwise_pairwise"
+        else:
+            raw_distances = np.asarray(distance_matrix)
+            if raw_distances.ndim != 2 or raw_distances.shape != (
+                n_samples,
+                n_samples,
+            ):
+                raise ValueError(
+                    "distance_matrix must be square and match the point count"
+                )
+            with np.errstate(over="ignore", invalid="ignore"):
+                distances_array = np.ascontiguousarray(
+                    raw_distances,
+                    dtype=self._numpy_dtype,
+                )
+            if not np.all(np.isfinite(distances_array)):
+                raise ValueError("distance_matrix must contain only finite values")
+            if np.any(distances_array < 0):
+                raise ValueError("distance_matrix must be non-negative")
+            input_cast_copy = not np.shares_memory(raw_distances, distances_array)
+            distance_source = "shared_distance_matrix"
+
+        indices_result = np.empty((n_samples, key.k), dtype=index_dtype)
+        ranking_result = (
+            np.empty((n_samples, n_samples), dtype=index_dtype)
+            if ranking_requested
+            else None
+        )
+        cold_seconds = 0.0
+        warm_seconds = 0.0
+        output_transfer_seconds = 0.0
+        block_count = 0
+        with self._torch.inference_mode():
+            for start in range(0, n_samples, block_rows):
+                stop = min(start + block_rows, n_samples)
+                if workspace is not None:
+                    execution_started = perf_counter()
+                    sortable = self._torch.cdist(
+                        workspace.tensor[start:stop],
+                        workspace.tensor,
+                        p=2.0,
+                        compute_mode="use_mm_for_euclid_dist",
+                    )
+                else:
+                    assert distances_array is not None
+                    transfer_started = perf_counter()
+                    sortable = self._torch.from_numpy(distances_array[start:stop]).to(
+                        self._device, dtype=self._torch_dtype, copy=True
+                    )
+                    self._synchronize()
+                    input_seconds += perf_counter() - transfer_started
+                    execution_started = perf_counter()
+
+                local_rows = self._torch.arange(stop - start, device=self._device)
+                self_columns = self._torch.arange(start, stop, device=self._device)
+                sortable[local_rows, self_columns] = -self._torch.inf
+                order = self._torch.argsort(
+                    sortable,
+                    dim=1,
+                    stable=True,
+                )
+                inverse = None
+                if ranking_requested:
+                    inverse = self._torch.empty_like(order)
+                    positions = self._torch.arange(
+                        n_samples,
+                        device=self._device,
+                    ).expand_as(order)
+                    inverse.scatter_(1, order, positions)
+                self._synchronize()
+                elapsed = perf_counter() - execution_started
+                if "neighbors" in self._executed:
+                    warm_seconds += elapsed
+                else:
+                    cold_seconds += elapsed
+                    self._executed.add("neighbors")
+
+                output_started = perf_counter()
+                indices_result[start:stop] = (
+                    order[:, 1 : key.k + 1]
+                    .to("cpu")
+                    .numpy()
+                    .astype(index_dtype, copy=False)
+                )
+                if inverse is not None:
+                    assert ranking_result is not None
+                    ranking_result[start:stop] = (
+                        inverse.to("cpu").numpy().astype(index_dtype, copy=False)
+                    )
+                output_transfer_seconds += perf_counter() - output_started
+                block_count += 1
+
+        value: npt.NDArray | NeighborRanking
+        if ranking_requested:
+            assert ranking_result is not None
+            value = NeighborRanking(indices_result, ranking_result)
+            algorithm = "torch_blockwise_stable_full_ranking"
+        else:
+            value = indices_result
+            algorithm = "torch_blockwise_stable_exact_topk"
+
+        details: dict[str, Any] = {
+            "algorithm": algorithm,
+            "device": self.device,
+            "compute_dtype": self.dtype,
+            "index_dtype": index_dtype.name,
+            "k": key.k,
+            "block_rows": block_rows,
+            "block_count": block_count,
+            "working_bytes": block_rows * bytes_per_row,
+            "torch_version": self._torch_version(),
+            "distance_source": distance_source,
+            "distance_zero_copy": distance_zero_copy,
+            "input_zero_copy": input_zero_copy,
+            "input_cast_copy": input_cast_copy,
+            "input_reused": input_reused,
+            "output_zero_copy": False,
+            "self_exclusion": "forced_rank_zero_then_removed",
+            "tie_break": "stable_column_index",
+            "top_k_algorithm": "stable_full_order_prefix",
+            "provider_fallback": False,
+            "timings": {
+                "input_transfer_seconds": float(input_seconds),
                 "compile_and_first_execution_seconds": float(cold_seconds),
                 "warm_execution_seconds": float(warm_seconds),
                 "output_transfer_seconds": float(output_transfer_seconds),
