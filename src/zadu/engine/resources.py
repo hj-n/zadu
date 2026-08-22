@@ -445,6 +445,7 @@ class ResourceCache:
             self._store(neighbor_plan.statistics_key, built, perf_counter() - start)
 
     def _invalidate(self, space: Space) -> None:
+        self.provider.invalidate(space)
         for key in tuple(self._records):
             if key.space is space:
                 self._values.pop(key, None)

@@ -37,6 +37,9 @@ NEIGHBOR_PRODUCT_BYTES_PER_CELL = 48
 SNC_SPARSE_BYTES_PER_ENTRY = 16
 SNC_ITERATION_BYTES_PER_CELL = 24
 MLX_PAIRWISE_WORK_ARRAYS = 4
+MLX_NEIGHBOR_FLOAT_WORK_ARRAYS = 4
+MLX_KNN_INDEX_WORK_ARRAYS = 2
+MLX_RANKING_INDEX_WORK_ARRAYS = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -650,12 +653,27 @@ def build_execution_plan(
 
     resource_working_bytes = {}
     if backend == "mlx":
-        bytes_per_row = n_samples * resource_dtype_bytes * MLX_PAIRWISE_WORK_ARRAYS
         for key in resources:
-            if key.kind not in {
+            if key.kind in {
                 ResourceKind.DISTANCE_MATRIX,
                 ResourceKind.CONDENSED_PAIRS,
             }:
+                bytes_per_row = (
+                    n_samples * resource_dtype_bytes * MLX_PAIRWISE_WORK_ARRAYS
+                )
+            elif key.kind in {ResourceKind.KNN, ResourceKind.STABLE_KNN}:
+                bytes_per_row = n_samples * (
+                    resource_dtype_bytes * MLX_NEIGHBOR_FLOAT_WORK_ARRAYS
+                    + compact_index_dtype(n_samples).itemsize
+                    * MLX_KNN_INDEX_WORK_ARRAYS
+                )
+            elif key.kind is ResourceKind.NEIGHBOR_RANKING:
+                bytes_per_row = n_samples * (
+                    resource_dtype_bytes * MLX_NEIGHBOR_FLOAT_WORK_ARRAYS
+                    + compact_index_dtype(n_samples).itemsize
+                    * MLX_RANKING_INDEX_WORK_ARRAYS
+                )
+            else:
                 continue
             block_rows = max(
                 1,
@@ -665,7 +683,7 @@ def build_execution_plan(
             resource_working_bytes[key] = working_bytes
             peak_working_bytes = max(peak_working_bytes, working_bytes)
     for key in resources:
-        if key.kind is not ResourceKind.STABLE_KNN:
+        if key.kind is not ResourceKind.STABLE_KNN or key in resource_working_bytes:
             continue
         bytes_per_row = n_samples * STABLE_KNN_WORK_BYTES_PER_CELL
         block_rows = max(
