@@ -43,3 +43,16 @@ streaming. The JSON report includes cold resource construction, warm repeated-
 embedding time, isolated process peak RSS, planned cache/peak bytes, selected
 strategy, speedup, and maximum score delta. Peak RSS remains process-wide rather
 than an allocation delta.
+
+## Ordered-pair planner
+
+Compare the legacy dense Spearman/Non-Metric Stress path with the shared exact
+condensed/order resources:
+
+```bash
+python benchmarks/benchmark_ordered_pair_resources.py \
+  --samples 2000 --dimension 20 --repeat 5
+```
+
+The isolated JSON report separates cold construction from a warm repeated
+embedding, process peak RSS, planned cache/peak bytes, and maximum score delta.

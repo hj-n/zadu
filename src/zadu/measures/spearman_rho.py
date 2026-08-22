@@ -2,12 +2,17 @@ import numpy as np
 import numpy.typing as npt
 from scipy.stats import spearmanr
 
+from zadu.engine.resources import OrderedPairStatistics
+
 from .utils import pairwise_dist as pdist
 from .utils.validation import validate_pair
 
 
 def measure(
-    orig: npt.NDArray, emb: npt.NDArray, distance_matrices: tuple | None = None
+    orig: npt.NDArray,
+    emb: npt.NDArray,
+    distance_matrices: tuple | None = None,
+    ordered_pair_statistics: OrderedPairStatistics | None = None,
 ) -> dict:
     """
     Compute Spearman's rank correlation coefficient of the embedding
@@ -20,6 +25,11 @@ def measure(
     """
 
     orig, emb = validate_pair(orig, emb)
+    if ordered_pair_statistics is not None:
+        rho = ordered_pair_statistics.spearman_rho
+        if rho is None:
+            raise RuntimeError("Ordered pair statistics do not contain Spearman rho")
+        return {"spearman_rho": float(rho)}
     if distance_matrices is None:
         orig_distance_matrix = pdist.pairwise_distance_matrix(orig)
         emb_distance_matrix = pdist.pairwise_distance_matrix(emb)

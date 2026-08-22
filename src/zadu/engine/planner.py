@@ -25,6 +25,8 @@ DEFAULT_PAIR_CACHE_BYTES = 256 * 1024**2
 DEFAULT_PAIR_WORK_BYTES = 64 * 1024**2
 PAIR_WORK_BYTES_PER_CELL = 64
 CONDENSED_WORK_BYTES_PER_PAIR = 48
+PAIR_ORDER_BYTES_PER_PAIR = np.dtype(np.intp).itemsize + np.dtype(np.float64).itemsize
+ORDERED_WORK_BYTES_PER_PAIR = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +44,9 @@ class MetricPlan:
 @dataclass(frozen=True, slots=True)
 class PairExecutionPlan:
     strategy: PairStrategy
-    statistics_key: ResourceKey
+    statistics_key: ResourceKey | None
+    ordered_statistics_key: ResourceKey | None
+    order_key: ResourceKey | None
     original_source_key: ResourceKey | None
     embedded_source_key: ResourceKey | None
     pair_count: int
@@ -50,6 +54,7 @@ class PairExecutionPlan:
     chunk_pairs: int | None
     working_bytes: int
     metric_ids: tuple[str, ...]
+    ordered_metric_ids: tuple[str, ...]
 
 
 @dataclass(slots=True)
@@ -107,6 +112,11 @@ def build_execution_plan(
         ResourceKind.PAIR_STATISTICS,
         Space.PAIRED,
     ) in requested_pairs
+    has_ordered_pair_statistics = (
+        ResourceKind.ORDERED_PAIR_STATISTICS,
+        Space.PAIRED,
+    ) in requested_pairs
+    has_pair_resources = has_pair_statistics or has_ordered_pair_statistics
     has_other_exact_resources = any(
         request.space is not Space.PAIRED
         and request.kind
@@ -118,11 +128,14 @@ def build_execution_plan(
         for request in all_requests
     )
     pair_strategy = None
-    if has_pair_statistics:
+    if has_pair_resources:
         dense_for_compatibility = geodesic or has_other_exact_resources
         condensed_bytes = 2 * pair_count * np.dtype(np.float64).itemsize
         if dense_for_compatibility:
             pair_strategy = PairStrategy.DENSE
+        elif has_ordered_pair_statistics:
+            # Exact rank and isotonic metrics require all pairs to be materialized.
+            pair_strategy = PairStrategy.CONDENSED
         elif memory_budget is None:
             pair_strategy = (
                 PairStrategy.CONDENSED
@@ -144,7 +157,9 @@ def build_execution_plan(
             key = ResourceKey(ResourceKind.DISTANCE_MATRIX, space)
             resources.append(key)
             canonical_by_pair[distance_pair] = key
-        elif pair_strategy is PairStrategy.CONDENSED:
+        elif pair_strategy is PairStrategy.CONDENSED and (
+            space is Space.EMBEDDED or has_pair_statistics
+        ):
             condensed_pair = (ResourceKind.CONDENSED_PAIRS, space)
             key = ResourceKey(ResourceKind.CONDENSED_PAIRS, space)
             resources.append(key)
@@ -166,11 +181,27 @@ def build_execution_plan(
             resources.append(key)
             canonical_by_pair[knn_pair] = key
 
+    order_key = None
+    if has_ordered_pair_statistics:
+        order_key = ResourceKey(ResourceKind.PAIR_ORDER, Space.ORIGINAL)
+        resources.append(order_key)
+
     statistics_key = None
     if has_pair_statistics:
         statistics_key = ResourceKey(ResourceKind.PAIR_STATISTICS, Space.PAIRED)
         resources.append(statistics_key)
         canonical_by_pair[(ResourceKind.PAIR_STATISTICS, Space.PAIRED)] = statistics_key
+
+    ordered_statistics_key = None
+    if has_ordered_pair_statistics:
+        ordered_statistics_key = ResourceKey(
+            ResourceKind.ORDERED_PAIR_STATISTICS,
+            Space.PAIRED,
+        )
+        resources.append(ordered_statistics_key)
+        canonical_by_pair[(ResourceKind.ORDERED_PAIR_STATISTICS, Space.PAIRED)] = (
+            ordered_statistics_key
+        )
 
     request_to_key = {
         request: canonical_by_pair[(request.kind, request.space)]
@@ -183,6 +214,12 @@ def build_execution_plan(
                 consumer_sets[request_to_key[request]].add(metric_index)
 
     pair_consumers = set() if statistics_key is None else consumer_sets[statistics_key]
+    ordered_pair_consumers = (
+        set()
+        if ordered_statistics_key is None
+        else consumer_sets[ordered_statistics_key]
+    )
+    all_pair_consumers = pair_consumers | ordered_pair_consumers
     original_source_key = None
     embedded_source_key = None
     if pair_strategy is PairStrategy.DENSE:
@@ -193,15 +230,17 @@ def build_execution_plan(
             (ResourceKind.DISTANCE_MATRIX, Space.EMBEDDED)
         ]
     elif pair_strategy is PairStrategy.CONDENSED:
-        original_source_key = canonical_by_pair[
+        original_source_key = canonical_by_pair.get(
             (ResourceKind.CONDENSED_PAIRS, Space.ORIGINAL)
-        ]
+        )
         embedded_source_key = canonical_by_pair[
             (ResourceKind.CONDENSED_PAIRS, Space.EMBEDDED)
         ]
     for source_key in (original_source_key, embedded_source_key):
         if source_key is not None:
-            consumer_sets[source_key].update(pair_consumers)
+            consumer_sets[source_key].update(all_pair_consumers)
+    if order_key is not None:
+        consumer_sets[order_key].update(ordered_pair_consumers)
 
     if pair_strategy is PairStrategy.DENSE:
         for metric_index, metric_plan in enumerate(metric_plans):
@@ -221,36 +260,46 @@ def build_execution_plan(
     estimated_cache_bytes = _estimate_cache_bytes(resources, n_samples)
     pair_plan = None
     planned_peak_bytes = estimated_cache_bytes
-    if pair_strategy is not None and statistics_key is not None:
+    if pair_strategy is not None:
         available_work_bytes = (
             DEFAULT_PAIR_WORK_BYTES
             if memory_budget is None
             else max(0, memory_budget - estimated_cache_bytes)
         )
-        if pair_strategy is PairStrategy.CONDENSED:
-            chunk_pairs = max(
-                1,
-                min(
-                    pair_count,
-                    available_work_bytes // CONDENSED_WORK_BYTES_PER_PAIR,
-                ),
-            )
-            block_rows = None
-            working_bytes = chunk_pairs * CONDENSED_WORK_BYTES_PER_PAIR
-        else:
-            block_rows = max(
-                1,
-                min(
-                    n_samples,
-                    math.isqrt(available_work_bytes // PAIR_WORK_BYTES_PER_CELL),
-                ),
-            )
-            chunk_pairs = None
-            working_bytes = PAIR_WORK_BYTES_PER_CELL * block_rows**2
+        block_rows = None
+        chunk_pairs = None
+        statistics_working_bytes = 0
+        if statistics_key is not None:
+            if pair_strategy is PairStrategy.CONDENSED:
+                chunk_pairs = max(
+                    1,
+                    min(
+                        pair_count,
+                        available_work_bytes // CONDENSED_WORK_BYTES_PER_PAIR,
+                    ),
+                )
+                statistics_working_bytes = chunk_pairs * CONDENSED_WORK_BYTES_PER_PAIR
+            else:
+                block_rows = max(
+                    1,
+                    min(
+                        n_samples,
+                        math.isqrt(available_work_bytes // PAIR_WORK_BYTES_PER_CELL),
+                    ),
+                )
+                statistics_working_bytes = PAIR_WORK_BYTES_PER_CELL * block_rows**2
+        ordered_working_bytes = (
+            pair_count * ORDERED_WORK_BYTES_PER_PAIR
+            if ordered_statistics_key is not None
+            else 0
+        )
+        working_bytes = max(statistics_working_bytes, ordered_working_bytes)
         planned_peak_bytes += working_bytes
         pair_plan = PairExecutionPlan(
             strategy=pair_strategy,
             statistics_key=statistics_key,
+            ordered_statistics_key=ordered_statistics_key,
+            order_key=order_key,
             original_source_key=original_source_key,
             embedded_source_key=embedded_source_key,
             pair_count=pair_count,
@@ -259,6 +308,10 @@ def build_execution_plan(
             working_bytes=working_bytes,
             metric_ids=tuple(
                 metric_plans[index].metric_id for index in sorted(pair_consumers)
+            ),
+            ordered_metric_ids=tuple(
+                metric_plans[index].metric_id
+                for index in sorted(ordered_pair_consumers)
             ),
         )
 
@@ -281,6 +334,8 @@ def _estimate_cache_bytes(resources: list[ResourceKey], n_samples: int) -> int:
             total += n_samples * n_samples * np.dtype(np.float64).itemsize
         elif key.kind is ResourceKind.CONDENSED_PAIRS:
             total += n_samples * (n_samples - 1) // 2 * np.dtype(np.float64).itemsize
+        elif key.kind is ResourceKind.PAIR_ORDER:
+            total += n_samples * (n_samples - 1) // 2 * PAIR_ORDER_BYTES_PER_PAIR
         elif key.kind is ResourceKind.NEIGHBOR_RANKING:
             assert key.k is not None
             total += n_samples * n_samples * np.dtype(np.intp).itemsize

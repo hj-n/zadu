@@ -12,6 +12,8 @@
   `ZADU.last_run_info` for separate execution diagnostics.
 - Exact condensed and memory-bounded streaming pair resources, with an isolated
   dense-versus-planned benchmark.
+- Shared exact pair ordering and tie-aware rank resources for Spearman and
+  Non-Metric Stress, with repeated-embedding reuse and preallocation guards.
 
 ### Changed
 
@@ -24,6 +26,9 @@
 - Stress, Scale-Normalized Stress, and Pearson now share one stable sufficient-
   statistics pass over unique off-diagonal pairs and release per-run pair
   temporaries after their final consumer.
+- Spearman and Non-Metric Stress now share compact condensed distances and one
+  reusable original-space pair order instead of requiring two persistent dense
+  distance matrices.
 
 ## 0.5.0
 

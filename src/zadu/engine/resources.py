@@ -24,9 +24,11 @@ class Space(str, Enum):
 class ResourceKind(str, Enum):
     DISTANCE_MATRIX = "distance_matrix"
     CONDENSED_PAIRS = "condensed_pairs"
+    PAIR_ORDER = "pair_order"
     KNN = "knn"
     NEIGHBOR_RANKING = "neighbor_ranking"
     PAIR_STATISTICS = "pair_statistics"
+    ORDERED_PAIR_STATISTICS = "ordered_pair_statistics"
 
 
 class PairStrategy(str, Enum):
@@ -71,6 +73,11 @@ KNN_EMB_INFO = ResourceRequirement(
 PAIR_STATISTICS = ResourceRequirement(
     "pair_statistics",
     ResourceKind.PAIR_STATISTICS,
+    (Space.PAIRED,),
+)
+ORDERED_PAIR_STATISTICS = ResourceRequirement(
+    "ordered_pair_statistics",
+    ResourceKind.ORDERED_PAIR_STATISTICS,
     (Space.PAIRED,),
 )
 
@@ -121,6 +128,26 @@ class PairStatistics:
     chunk_pairs: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class PairOrder:
+    """Reusable original-space ordering and tie-aware ranks for exact pairs."""
+
+    indices: npt.NDArray
+    sorted_ranks: npt.NDArray
+    min_distance: float
+    max_distance: float
+
+
+@dataclass(frozen=True, slots=True)
+class OrderedPairStatistics:
+    """Final exact results from metrics that require all pair distances ordered."""
+
+    spearman_rho: float | None
+    non_metric_stress: float | None
+    strategy: PairStrategy
+    pair_count: int
+
+
 @dataclass(slots=True)
 class ResourceRecord:
     key: ResourceKey
@@ -136,6 +163,8 @@ class ResourceRecord:
 def resource_nbytes(value: Any) -> int:
     if isinstance(value, NeighborRanking):
         return int(value.indices.nbytes + value.ranking.nbytes)
+    if isinstance(value, PairOrder):
+        return int(value.indices.nbytes + value.sorted_ranks.nbytes)
     if isinstance(value, np.ndarray):
         return int(value.nbytes)
     return 0
@@ -147,9 +176,14 @@ def resource_dtype(value: Any) -> str | dict[str, str] | None:
             "indices": value.indices.dtype.name,
             "ranking": value.ranking.dtype.name,
         }
+    if isinstance(value, PairOrder):
+        return {
+            "indices": value.indices.dtype.name,
+            "sorted_ranks": value.sorted_ranks.dtype.name,
+        }
     if isinstance(value, np.ndarray):
         return value.dtype.name
-    if isinstance(value, PairStatistics):
+    if isinstance(value, (PairStatistics, OrderedPairStatistics)):
         return "float64"
     return None
 
@@ -194,19 +228,38 @@ class ResourceCache:
         pair_plan = self.plan.pair_plan
         if pair_plan is None:
             return
-        key = pair_plan.statistics_key
-        start = perf_counter()
-        built = self.provider.build_pair_statistics(
-            pair_plan,
-            orig,
-            emb,
-            orig_distance_matrix=self.distance_matrix(Space.ORIGINAL),
-            emb_distance_matrix=self.distance_matrix(Space.EMBEDDED),
-            orig_condensed=self.condensed_pairs(Space.ORIGINAL),
-            emb_condensed=self.condensed_pairs(Space.EMBEDDED),
-            geodesic=self.geodesic,
-        )
-        self._store(key, built, perf_counter() - start)
+        orig_distance_matrix = self.distance_matrix(Space.ORIGINAL)
+        emb_distance_matrix = self.distance_matrix(Space.EMBEDDED)
+        orig_condensed = self.condensed_pairs(Space.ORIGINAL)
+        emb_condensed = self.condensed_pairs(Space.EMBEDDED)
+        if pair_plan.statistics_key is not None:
+            start = perf_counter()
+            built = self.provider.build_pair_statistics(
+                pair_plan,
+                orig,
+                emb,
+                orig_distance_matrix=orig_distance_matrix,
+                emb_distance_matrix=emb_distance_matrix,
+                orig_condensed=orig_condensed,
+                emb_condensed=emb_condensed,
+                geodesic=self.geodesic,
+            )
+            self._store(pair_plan.statistics_key, built, perf_counter() - start)
+        if pair_plan.ordered_statistics_key is not None:
+            if pair_plan.order_key is None:
+                raise RuntimeError("Ordered pair statistics require a pair order")
+            start = perf_counter()
+            built = self.provider.build_ordered_pair_statistics(
+                pair_plan,
+                self._values[pair_plan.order_key],
+                emb_distance_matrix=emb_distance_matrix,
+                emb_condensed=emb_condensed,
+            )
+            self._store(
+                pair_plan.ordered_statistics_key,
+                built,
+                perf_counter() - start,
+            )
         if pair_plan.strategy is PairStrategy.CONDENSED:
             self._release(pair_plan.embedded_source_key)
 
@@ -226,6 +279,7 @@ class ResourceCache:
                 key,
                 points,
                 distance_matrix=distance_matrix,
+                condensed_pairs=self.condensed_pairs(space),
                 geodesic=self.geodesic and space is Space.ORIGINAL,
             )
             self._store(key, built, perf_counter() - start)
@@ -254,7 +308,10 @@ class ResourceCache:
         for key, consumers in self.plan.consumers.items():
             if not consumers or consumers[-1] != metric_index:
                 continue
-            if key.kind is ResourceKind.PAIR_STATISTICS:
+            if key.kind in {
+                ResourceKind.PAIR_STATISTICS,
+                ResourceKind.ORDERED_PAIR_STATISTICS,
+            }:
                 self._release(key)
 
     def get(self, request: ResourceRequest) -> Any:
@@ -264,6 +321,7 @@ class ResourceCache:
             ResourceKind.DISTANCE_MATRIX,
             ResourceKind.CONDENSED_PAIRS,
             ResourceKind.PAIR_STATISTICS,
+            ResourceKind.ORDERED_PAIR_STATISTICS,
         }:
             return value
         if request.kind is ResourceKind.KNN:
