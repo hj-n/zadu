@@ -366,6 +366,50 @@ class ResourceCache:
     def prepare_embedded(self, points: npt.NDArray) -> None:
         self._prepare(Space.EMBEDDED, points)
 
+    def prepare_embedded_batch(
+        self,
+        points_batch: list[npt.NDArray],
+    ) -> list[ResourceCache]:
+        """Prepare isolated embedded caches through one provider-native batch."""
+
+        if not points_batch:
+            return []
+        self.begin_run()
+        caches = [self]
+        for _ in points_batch[1:]:
+            cache = self.fork_original(self.provider)
+            cache.generation = self.generation
+            caches.append(cache)
+
+        batch_size = len(caches)
+        for key in self.plan.resources_for(Space.EMBEDDED):
+            started = perf_counter()
+            built_batch = self.provider.build_batch(
+                key,
+                points_batch,
+                distance_matrices=[
+                    cache.distance_matrix(Space.EMBEDDED) for cache in caches
+                ],
+                condensed_pairs=[
+                    cache.condensed_pairs(Space.EMBEDDED) for cache in caches
+                ],
+                working_memory_bytes=self.plan.resource_working_bytes.get(key),
+                geodesic=False,
+            )
+            if len(built_batch) != batch_size:
+                raise RuntimeError(
+                    "Provider batch returned an unexpected number of resources "
+                    f"({len(built_batch)} != {batch_size})"
+                )
+            elapsed_share = (perf_counter() - started) / batch_size
+            for cache, built in zip(caches, built_batch, strict=True):
+                cache._store(key, built, elapsed_share)
+
+        for key in self.plan.release_after_prepare.get(Space.EMBEDDED, ()):
+            for cache in caches:
+                cache._release(key)
+        return caches
+
     def prepare_paired(
         self,
         orig: npt.NDArray,

@@ -25,11 +25,20 @@ class BuiltResource:
     details: dict[str, Any] = field(default_factory=dict)
 
 
+class BatchResourceError(RuntimeError):
+    """A provider-native batch failed for one input in that batch."""
+
+    def __init__(self, batch_index: int, message: str) -> None:
+        self.batch_index = batch_index
+        super().__init__(message)
+
+
 class ExactResourceProvider(Protocol):
     name: str
     device: str
     dtype: str
     exact: bool
+    supports_embedding_batching: bool
 
     def fork(self) -> ExactResourceProvider:
         """Return an isolated provider context for one concurrent embedding."""
@@ -38,6 +47,25 @@ class ExactResourceProvider(Protocol):
 
     def invalidate(self, space: Space) -> None:
         """Release provider-private state for one invalidated resource space."""
+
+        ...
+
+    def can_batch(self, key: ResourceKey) -> bool:
+        """Return whether one resource can use provider-native batching."""
+
+        ...
+
+    def build_batch(
+        self,
+        key: ResourceKey,
+        points_batch: list[npt.NDArray],
+        *,
+        distance_matrices: list[npt.NDArray | None],
+        condensed_pairs: list[npt.NDArray | None],
+        working_memory_bytes: int | None,
+        geodesic: bool,
+    ) -> list[BuiltResource]:
+        """Build one resource for each embedding, optionally as one device batch."""
 
         ...
 

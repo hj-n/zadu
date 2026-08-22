@@ -88,6 +88,8 @@ ignore = ["E501"]
 
 [tool.coverage.run]
 source = ["zadu", "zaduvis"]
+# The optional MLX backend is exercised in its dedicated Apple Silicon CI job.
+omit = ["*/zadu/backends/mlx_backend.py"]
 
 [tool.coverage.report]
 show_missing = true

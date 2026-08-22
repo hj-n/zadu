@@ -27,6 +27,8 @@
 - An optional, lazily imported MLX provider for memory-bounded Euclidean
   distance matrices, condensed pairs, stable full/inverse rankings, exact
   neighbor prefixes, and stable-kNN tables on Apple Silicon.
+- Provider-native MLX tensor batching for equal-shaped `measure_many()` inputs,
+  including memory-capped batch width and indexed batch failures.
 
 ### Changed
 
@@ -60,6 +62,9 @@
   rankings; embedded workspaces are invalidated between runs, and neighbor
   diagnostics expose stable tie handling, self exclusion, block bounds, and
   zero-copy boundaries.
+- On MLX, `embedding_workers` now requests a native tensor batch width rather
+  than Python threads; incompatible shapes or plans fall back sequentially with
+  the reason recorded in collection diagnostics.
 
 ## 0.5.0
 

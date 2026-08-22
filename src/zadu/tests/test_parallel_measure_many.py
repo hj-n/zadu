@@ -72,6 +72,7 @@ def test_parallel_measure_many_matches_sequential_local_results_and_order():
     assert runner.last_run_info["worker_limit_reason"] is None
     assert runner.last_run_info["native_threads_per_worker"] == 1
     assert runner.last_run_info["provider_batching"] is False
+    assert runner.last_run_info["native_batch_size"] == 1
     assert [run["embedding_index"] for run in runner.last_run_info["runs"]] == [
         0,
         1,
