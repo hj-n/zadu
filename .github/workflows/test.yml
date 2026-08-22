@@ -62,8 +62,24 @@ jobs:
       - name: Compare the CPU port with SNC 0.2.0
         run: python -m pytest src/zadu/tests/test_snc_cpu_compat.py -q
 
+  mlx:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install ZADU with the optional MLX backend
+        run: python -m pip install -e ".[dev,mlx]"
+      - name: Run MLX provider parity and routing tests
+        run: |
+          python -c "import mlx.core as mx; assert mx.metal.is_available()"
+          python -m pytest src/zadu/tests/test_mlx_backend.py -q
+
   build:
-    needs: [lint, test, snc-compat]
+    needs: [lint, test, snc-compat, mlx]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
