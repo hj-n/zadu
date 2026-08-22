@@ -6,6 +6,14 @@ from dataclasses import dataclass
 from importlib import import_module
 from types import ModuleType
 
+from .engine.resources import (
+    DISTANCE_MATRICES,
+    KNN_EMB_INFO,
+    KNN_INFO,
+    KNN_RANKING_INFO,
+    ResourceRequirement,
+)
+
 
 @dataclass(frozen=True)
 class MetricDefinition:
@@ -16,12 +24,18 @@ class MetricDefinition:
     inputs: frozenset[str] = frozenset(("orig", "emb"))
     user_params: frozenset[str] = frozenset()
     needs_label: bool = False
-    cache: frozenset[str] = frozenset()
+    resources: tuple[ResourceRequirement, ...] = ()
     supports_local: bool = False
     k_rule: str | None = None
 
     def load(self) -> ModuleType:
         return import_module(f"zadu.measures.{self.id}")
+
+    @property
+    def cache(self) -> frozenset[str]:
+        """Backward-compatible view of injected resource argument names."""
+
+        return frozenset(requirement.argument for requirement in self.resources)
 
 
 def _metric(
@@ -31,7 +45,7 @@ def _metric(
     params: tuple[str, ...] = (),
     inputs: tuple[str, ...] = ("orig", "emb"),
     label: bool = False,
-    cache: tuple[str, ...] = (),
+    resources: tuple[ResourceRequirement, ...] = (),
     local: bool = False,
     k_rule: str | None = None,
 ) -> MetricDefinition:
@@ -41,7 +55,7 @@ def _metric(
         inputs=frozenset(inputs),
         user_params=frozenset(params),
         needs_label=label,
-        cache=frozenset(cache),
+        resources=resources,
         supports_local=local,
         k_rule=k_rule,
     )
@@ -52,7 +66,7 @@ METRICS = (
         "trustworthiness_continuity",
         "tnc",
         params=("k",),
-        cache=("knn_ranking_info",),
+        resources=(KNN_RANKING_INFO,),
         local=True,
         k_rule="trustworthiness",
     ),
@@ -60,7 +74,7 @@ METRICS = (
         "mean_relative_rank_error",
         "mrre",
         params=("k",),
-        cache=("knn_ranking_info",),
+        resources=(KNN_RANKING_INFO,),
         local=True,
         k_rule="neighbor",
     ),
@@ -68,7 +82,7 @@ METRICS = (
         "local_continuity_meta_criteria",
         "lcmc",
         params=("k",),
-        cache=("knn_info",),
+        resources=(KNN_INFO,),
         local=True,
         k_rule="neighbor",
     ),
@@ -78,7 +92,7 @@ METRICS = (
         params=("k",),
         inputs=("emb",),
         label=True,
-        cache=("knn_emb_info",),
+        resources=(KNN_EMB_INFO,),
         local=True,
         k_rule="neighbor",
     ),
@@ -87,7 +101,7 @@ METRICS = (
         "ca_tnc",
         params=("k",),
         label=True,
-        cache=("knn_ranking_info",),
+        resources=(KNN_RANKING_INFO,),
         local=True,
         k_rule="trustworthiness",
     ),
@@ -101,16 +115,24 @@ METRICS = (
         "neighbor_dissimilarity",
         "nd",
         params=("k",),
-        cache=("knn_info",),
+        resources=(KNN_INFO,),
         k_rule="neighbor",
     ),
     _metric(
-        "distance_to_measure", "dtm", params=("sigma",), cache=("distance_matrices",)
+        "distance_to_measure",
+        "dtm",
+        params=("sigma",),
+        resources=(DISTANCE_MATRICES,),
     ),
-    _metric("kl_divergence", "kl_div", params=("sigma",), cache=("distance_matrices",)),
+    _metric(
+        "kl_divergence",
+        "kl_div",
+        params=("sigma",),
+        resources=(DISTANCE_MATRICES,),
+    ),
     _metric("distance_consistency", "dsc", inputs=("emb",), label=True),
-    _metric("pearson_r", "pr", cache=("distance_matrices",)),
-    _metric("spearman_rho", "srho", cache=("distance_matrices",)),
+    _metric("pearson_r", "pr", resources=(DISTANCE_MATRICES,)),
+    _metric("spearman_rho", "srho", resources=(DISTANCE_MATRICES,)),
     _metric(
         "internal_validation_measure",
         "ivm",
@@ -143,19 +165,23 @@ METRICS = (
         "topographic_product",
         "topo",
         params=("k",),
-        cache=("distance_matrices", "knn_info"),
+        resources=(DISTANCE_MATRICES, KNN_INFO),
         k_rule="neighbor",
     ),
     _metric(
         "procrustes",
         "proc",
         params=("k",),
-        cache=("knn_info",),
+        resources=(KNN_INFO,),
         k_rule="neighbor",
     ),
-    _metric("stress", "stress", cache=("distance_matrices",)),
-    _metric("scale_normalized_stress", "sn_stress", cache=("distance_matrices",)),
-    _metric("non_metric_stress", "nm_stress", cache=("distance_matrices",)),
+    _metric("stress", "stress", resources=(DISTANCE_MATRICES,)),
+    _metric(
+        "scale_normalized_stress",
+        "sn_stress",
+        resources=(DISTANCE_MATRICES,),
+    ),
+    _metric("non_metric_stress", "nm_stress", resources=(DISTANCE_MATRICES,)),
     _metric(
         "class_angular_distortion_index",
         "cadi",

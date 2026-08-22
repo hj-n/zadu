@@ -6,12 +6,19 @@
 
 - Slow-reference parity tests and isolated microbenchmarks for exact NumPy metric
   kernels.
+- Typed exact resource contracts, a deterministic execution planner, and a
+  NumPy/FAISS resource provider.
+- `ExecutionConfig` for backend, device, and memory-budget selection, plus
+  `ZADU.last_run_info` for separate execution diagnostics.
 
 ### Changed
 
 - Vectorized T&C, class-aware T&C, MRRE, LCMC, and Neighborhood Hit kernels.
 - Reduced Topographic Product to gathered ratios and cumulative logs, and batched
   local Procrustes alignment with bounded temporary memory.
+- Metric registry cache declarations now use typed resource requirements; full
+  rankings satisfy compatible kNN requests and larger `k` resources serve
+  smaller prefixes.
 
 ## 0.5.0
 

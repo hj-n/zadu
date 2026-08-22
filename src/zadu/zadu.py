@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from copy import deepcopy
+from dataclasses import replace
+from numbers import Integral
+from time import perf_counter
 from typing import Any, ClassVar
 
 import numpy as np
 
-from .measures.utils import knn
-from .measures.utils import pairwise_dist as pdist
+from .backends import NumpyResourceProvider
+from .engine.config import ExecutionConfig
+from .engine.planner import build_execution_plan
+from .engine.resources import ResourceCache, Space
+from .engine.result import build_run_info
 from .measures.utils.validation import (
     as_finite_2d,
     validate_labels,
@@ -36,24 +41,25 @@ class ZADU:
         verbose: bool = False,
         geodesic: bool = False,
         max_memory_bytes: int | None = None,
+        execution: ExecutionConfig | None = None,
     ):
         self.spec_list = deepcopy(spec_list)
         self.return_local = bool(return_local)
         self.verbose = bool(verbose)
         self.geodesic = bool(geodesic)
-        if max_memory_bytes is not None and max_memory_bytes < 1:
-            raise ValueError("max_memory_bytes must be greater than zero")
-        self.max_memory_bytes = max_memory_bytes
+        self.execution = self._resolve_execution(execution, max_memory_bytes)
+        self.max_memory_bytes = self.execution.memory_budget_bytes
 
         self.orig = as_finite_2d(orig, "orig")
         self.emb = None
         self.label = None
+        self.last_run_info: dict[str, Any] | None = None
 
+        # Compatibility views backed by the typed resource cache.
         self.distance_matrices_flag = False
         self.ranking_k = -1
         self.knn_both_k = -1
         self.knn_emb_k = -1
-
         self.orig_distance_matrix = None
         self.emb_distance_matrix = None
         self.orig_knn_ranking = None
@@ -64,6 +70,12 @@ class ZADU:
         self._definitions: list[MetricDefinition] = []
         self._validate_and_normalize_specs()
         self._interpret_specs()
+        self._execution_plan = build_execution_plan(
+            self._definitions,
+            self.spec_list,
+            n_samples=self.orig.shape[0],
+            default_k=self.DEFAULT_K,
+        )
         self.estimated_cache_bytes = self._estimate_cache_bytes()
         if (
             self.max_memory_bytes is not None
@@ -73,6 +85,13 @@ class ZADU:
                 "Estimated ZADU cache size exceeds max_memory_bytes "
                 f"({self.estimated_cache_bytes} > {self.max_memory_bytes})"
             )
+
+        self._provider = NumpyResourceProvider()
+        self._resource_cache = ResourceCache(
+            self._execution_plan,
+            self._provider,
+            geodesic=self.geodesic,
+        )
         self._prepare_original_space()
 
     def measure(self, emb, label=None):
@@ -97,13 +116,19 @@ class ZADU:
                 )
             label = validate_labels(label, emb_array.shape[0])
 
+        self.last_run_info = None
         self.emb = emb_array
         self.label = label
+        self._resource_cache.begin_run()
+        run_started = perf_counter()
         self._prepare_embedded_space()
 
         score_results = []
         local_results = []
-        for spec, definition in zip(self.spec_list, self._definitions, strict=True):
+        metric_timings = []
+        for index, (spec, definition) in enumerate(
+            zip(self.spec_list, self._definitions, strict=True)
+        ):
             exec_params = dict(spec["params"])
             if "orig" in definition.inputs:
                 exec_params["orig"] = self.orig
@@ -111,33 +136,19 @@ class ZADU:
                 exec_params["emb"] = self.emb
             if definition.needs_label:
                 exec_params["label"] = self.label
-
-            k_value = exec_params.get("k", self.DEFAULT_K)
-            if "distance_matrices" in definition.cache:
-                exec_params["distance_matrices"] = (
-                    self.orig_distance_matrix,
-                    self.emb_distance_matrix,
+            exec_params.update(
+                self._resource_cache.arguments_for(
+                    self._execution_plan.metric_plans[index]
                 )
-            if "knn_ranking_info" in definition.cache:
-                exec_params["knn_ranking_info"] = (
-                    self.orig_knn_indices[:, :k_value],
-                    self.orig_knn_ranking,
-                    self.emb_knn_indices[:, :k_value],
-                    self.emb_knn_ranking,
-                )
-            if "knn_info" in definition.cache:
-                exec_params["knn_info"] = (
-                    self.orig_knn_indices[:, :k_value],
-                    self.emb_knn_indices[:, :k_value],
-                )
-            if "knn_emb_info" in definition.cache:
-                exec_params["knn_emb_info"] = self.emb_knn_indices[:, :k_value]
+            )
             if definition.supports_local:
                 exec_params["return_local"] = self.return_local
 
             if self.verbose:
                 print(f"Computing {definition.id}")
+            metric_started = perf_counter()
             result = definition.load().measure(**exec_params)
+            metric_timings.append((definition.id, perf_counter() - metric_started))
             if self.return_local and definition.supports_local:
                 score, local = result
                 score_results.append(_python_scalars(score))
@@ -147,9 +158,39 @@ class ZADU:
                 if self.return_local:
                     local_results.append(None)
 
+        self.last_run_info = build_run_info(
+            plan=self._execution_plan,
+            cache=self._resource_cache,
+            backend=self.execution.resolved_backend,
+            device=self.execution.resolved_device,
+            metric_timings=metric_timings,
+            total_seconds=perf_counter() - run_started,
+        )
         if self.return_local:
             return score_results, local_results
         return score_results
+
+    @staticmethod
+    def _resolve_execution(
+        execution: ExecutionConfig | None,
+        max_memory_bytes: int | None,
+    ) -> ExecutionConfig:
+        if execution is not None and not isinstance(execution, ExecutionConfig):
+            raise TypeError("execution must be an ExecutionConfig")
+        config = execution or ExecutionConfig()
+        if max_memory_bytes is None:
+            return config
+        if isinstance(max_memory_bytes, bool) or not isinstance(
+            max_memory_bytes, Integral
+        ):
+            raise TypeError("max_memory_bytes must be an integer")
+        if max_memory_bytes < 1:
+            raise ValueError("max_memory_bytes must be greater than zero")
+        if config.memory_budget_bytes is not None:
+            raise ValueError(
+                "Provide only one of max_memory_bytes or execution.memory_budget"
+            )
+        return replace(config, memory_budget=int(max_memory_bytes))
 
     def _validate_and_normalize_specs(self) -> None:
         if isinstance(self.spec_list, (str, bytes)) or not isinstance(
@@ -207,92 +248,50 @@ class ZADU:
     def _interpret_specs(self) -> None:
         for spec, definition in zip(self.spec_list, self._definitions, strict=True):
             params = spec["params"]
-            if "distance_matrices" in definition.cache:
-                self.distance_matrices_flag = True
-            if "knn_ranking_info" in definition.cache:
-                self.ranking_k = max(self.ranking_k, params.get("k", self.DEFAULT_K))
-            if "knn_info" in definition.cache:
-                self.knn_both_k = max(self.knn_both_k, params.get("k", self.DEFAULT_K))
-            if "knn_emb_info" in definition.cache:
-                self.knn_emb_k = max(self.knn_emb_k, params.get("k", self.DEFAULT_K))
+            for requirement in definition.resources:
+                if requirement.argument == "distance_matrices":
+                    self.distance_matrices_flag = True
+                elif requirement.argument == "knn_ranking_info":
+                    self.ranking_k = max(
+                        self.ranking_k, params.get("k", self.DEFAULT_K)
+                    )
+                elif requirement.argument == "knn_info":
+                    self.knn_both_k = max(
+                        self.knn_both_k, params.get("k", self.DEFAULT_K)
+                    )
+                elif requirement.argument == "knn_emb_info":
+                    self.knn_emb_k = max(
+                        self.knn_emb_k, params.get("k", self.DEFAULT_K)
+                    )
 
     def _prepare_original_space(self) -> None:
-        if self.distance_matrices_flag:
-            if self.geodesic:
-                self.orig_distance_matrix = self._pairwise_geodesic_distance_matrix(
-                    self.orig
-                )
-            else:
-                self.orig_distance_matrix = pdist.pairwise_distance_matrix(self.orig)
-
-        orig_k = max(self.ranking_k, self.knn_both_k)
-        if orig_k < 0:
-            return
-        if self.ranking_k >= 0:
-            self.orig_knn_indices, self.orig_knn_ranking = knn.knn_with_ranking(
-                self.orig, orig_k, distance_matrix=self.orig_distance_matrix
-            )
-        elif self.orig_distance_matrix is not None:
-            self.orig_knn_indices = knn.knn_from_distance_matrix(
-                self.orig_distance_matrix, orig_k
-            )
-        else:
-            self.orig_knn_indices = knn.knn(self.orig, orig_k)
+        self._resource_cache.prepare_original(self.orig)
+        self._sync_resource_views()
 
     def _estimate_cache_bytes(self) -> int:
         """Estimate persistent original+embedded cache storage."""
 
-        n_samples = self.orig.shape[0]
-        total = 0
-        if self.distance_matrices_flag:
-            total += 2 * n_samples * n_samples * np.dtype(np.float64).itemsize
-        if self.ranking_k >= 0:
-            total += 2 * n_samples * n_samples * np.dtype(np.intp).itemsize
-        orig_k = max(self.ranking_k, self.knn_both_k, 0)
-        emb_k = max(self.ranking_k, self.knn_both_k, self.knn_emb_k, 0)
-        total += (orig_k + emb_k) * n_samples * np.dtype(np.int64).itemsize
-        return int(total)
+        return self._execution_plan.estimated_cache_bytes
 
     def _prepare_embedded_space(self) -> None:
-        if self.distance_matrices_flag:
-            self.emb_distance_matrix = pdist.pairwise_distance_matrix(self.emb)
+        self._resource_cache.prepare_embedded(self.emb)
+        self._sync_resource_views()
 
-        emb_k = max(self.ranking_k, self.knn_both_k, self.knn_emb_k)
-        if emb_k < 0:
-            return
-        if self.ranking_k >= 0:
-            self.emb_knn_indices, self.emb_knn_ranking = knn.knn_with_ranking(
-                self.emb, emb_k, distance_matrix=self.emb_distance_matrix
-            )
-        elif self.emb_distance_matrix is not None:
-            self.emb_knn_indices = knn.knn_from_distance_matrix(
-                self.emb_distance_matrix, emb_k
-            )
-        else:
-            self.emb_knn_indices = knn.knn(self.emb, emb_k)
+    def _sync_resource_views(self) -> None:
+        self.orig_distance_matrix = self._resource_cache.distance_matrix(Space.ORIGINAL)
+        self.emb_distance_matrix = self._resource_cache.distance_matrix(Space.EMBEDDED)
+        self.orig_knn_indices = self._resource_cache.neighbor_indices(Space.ORIGINAL)
+        self.emb_knn_indices = self._resource_cache.neighbor_indices(Space.EMBEDDED)
+        self.orig_knn_ranking = self._resource_cache.ranking(Space.ORIGINAL)
+        self.emb_knn_ranking = self._resource_cache.ranking(Space.EMBEDDED)
 
     @staticmethod
     def _geodesic_distance(phi1, lambda1, phi2, lambda2) -> float:
-        cosine = math.sin(phi1) * math.sin(phi2) + math.cos(phi1) * math.cos(
-            phi2
-        ) * math.cos(abs(lambda2 - lambda1))
-        return math.acos(float(np.clip(cosine, -1.0, 1.0)))
+        return NumpyResourceProvider.geodesic_distance(phi1, lambda1, phi2, lambda2)
 
     @classmethod
     def _pairwise_geodesic_distance_matrix(cls, orig):
-        if orig.shape[1] < 2:
-            raise ValueError(
-                "geodesic=True requires orig[:, 0] = longitude and "
-                "orig[:, 1] = latitude in radians"
-            )
-        data_len = len(orig)
-        distance_matrix = np.zeros((data_len, data_len))
-        for i in range(data_len):
-            for j in range(i + 1, data_len):
-                distance_matrix[i, j] = distance_matrix[j, i] = cls._geodesic_distance(
-                    orig[i, 1], orig[i, 0], orig[j, 1], orig[j, 0]
-                )
-        return distance_matrix
+        return NumpyResourceProvider.pairwise_geodesic_distance_matrix(orig)
 
 
 def _python_scalars(value):
