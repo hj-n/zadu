@@ -266,6 +266,24 @@ Workspaces are evaluation-scoped and cleaned after success, errors, and
 interruption; unlike the faster condensed path, external original ordering is
 therefore recomputed for repeated embeddings.
 
+On the maintained Apple M4 with Python 3.12.13, NumPy 2.5.2, `n=2,000`, 20
+original dimensions, Spearman plus Non-Metric Stress, and three repetitions:
+
+| Strategy | Warm median | Process peak RSS | Planned RAM | Persistent pair cache | Temporary peak |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Legacy dense reference | 1.070 s | 480.3 MiB | — | 61.0 MiB estimate | 0 |
+| In-memory condensed | 0.673 s | 361.7 MiB | 160.1 MiB | 38.1 MiB | 0 |
+| External, 32 MiB RAM budget | 5.506 s | 336.1 MiB | 32.0 MiB | 0 | 99.1 MiB |
+
+The external path reduced package-planned RAM by about 5x versus condensed,
+but was 8.18x slower warm. Process RSS fell only about 7% because interpreter,
+SciPy, and Numba/JIT overhead is not proportional to pair storage; against the
+dense reference it fell about 30%. The maximum score delta from condensed was
+`8.11e-14`. This is an exact capacity path, not a default speed claim. Cold and
+warm external times were similar because its evaluation-scoped workspace is
+intentionally recomputed and removed. The raw record is
+[`external-pair-ordering-m4.json`](../../benchmarks/results/post-0.5.1/external-pair-ordering-m4.json).
+
 ## Packaging and release policy
 
 - NumPy/SciPy remains the mandatory exact baseline; MLX and PyTorch stay optional

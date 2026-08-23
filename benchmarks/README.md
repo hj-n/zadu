@@ -94,6 +94,8 @@ construction from a warm repeated embedding, process peak RSS, planned RAM and
 temporary bytes, observed temporary peak, slowdown from disk I/O, and maximum
 score delta. The external mode deliberately recomputes and cleans its pair
 workspace for each embedding instead of retaining unbounded order files.
+The maintained Apple M4 `n=2,000` record is stored in
+[external-pair-ordering-m4.json](results/post-0.5.1/external-pair-ordering-m4.json).
 
 ## Topographic Product resources
 
