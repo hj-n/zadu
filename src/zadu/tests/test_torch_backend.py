@@ -555,6 +555,8 @@ def test_torch_selected_ranks_match_numpy_on_ties_and_bounded_blocks(device):
 
 
 def test_torch_selected_ranks_record_geodesic_fallback():
+    _torch_provider()
+
     orig = np.asarray([[0.0, 0.0], [0.1, 0.2], [-0.2, 0.1], [0.3, -0.1], [-0.1, -0.3]])
     emb = np.asarray([[0.0], [1.0], [2.0], [3.0], [4.0]])
     runner = ZADU(
@@ -578,6 +580,8 @@ def test_torch_selected_ranks_record_geodesic_fallback():
 
 
 def test_torch_selected_ranks_support_mrre_without_membership_masks():
+    _torch_provider()
+
     rng = np.random.default_rng(771)
     orig = rng.normal(size=(40, 5))
     emb = orig @ rng.normal(size=(5, 2))

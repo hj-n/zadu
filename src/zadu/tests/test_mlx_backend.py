@@ -175,6 +175,8 @@ def test_mlx_cpu_float64_does_not_downgrade_precision():
 
 
 def test_mlx_cpu_float64_neighbors_work_in_a_fresh_default_gpu_process():
+    pytest.importorskip("mlx.core")
+
     completed = subprocess.run(
         [
             sys.executable,
@@ -608,6 +610,8 @@ def test_mlx_selected_ranks_match_numpy_on_ties_and_bounded_blocks(device, dtype
 
 
 def test_mlx_selected_ranks_record_geodesic_fallback():
+    _mlx_provider(device="cpu", dtype="float64")
+
     orig = np.asarray([[0.0, 0.0], [0.1, 0.2], [-0.2, 0.1], [0.3, -0.1], [-0.1, -0.3]])
     emb = np.asarray([[0.0], [1.0], [2.0], [3.0], [4.0]])
     runner = ZADU(
@@ -631,6 +635,8 @@ def test_mlx_selected_ranks_record_geodesic_fallback():
 
 
 def test_mlx_selected_ranks_support_mrre_without_membership_masks():
+    _mlx_provider()
+
     rng = np.random.default_rng(181)
     orig = rng.normal(size=(40, 5))
     emb = orig @ rng.normal(size=(5, 2))
