@@ -128,30 +128,36 @@ scores = ZADU(spec, hd).measure(ld)
 
 `MEASURE` enum mapping (typed helper):
 
-| MEASURE | ID | Metric Name |
-|---|---|---|
-| `MEASURE.TNC` | `tnc` | Trustworthiness & Continuity |
-| `MEASURE.MRRE` | `mrre` | Mean Relative Rank Error |
-| `MEASURE.LCMC` | `lcmc` | Local Continuity Meta-Criteria |
-| `MEASURE.NH` | `nh` | Neighborhood Hit |
-| `MEASURE.CA_TNC` | `ca_tnc` | Class-Aware Trustworthiness & Continuity |
-| `MEASURE.L_TNC` | `l_tnc` | Label Trustworthiness & Continuity |
-| `MEASURE.ND` | `nd` | Neighbor Dissimilarity |
-| `MEASURE.DTM` | `dtm` | Distance-to-Measure |
-| `MEASURE.KL_DIV` | `kl_div` | Kullback-Leibler Divergence |
-| `MEASURE.DSC` | `dsc` | Distance Consistency |
-| `MEASURE.PR` | `pr` | Pearson's Correlation Coefficient |
-| `MEASURE.SRHO` | `srho` | Spearman's Rank Correlation Coefficient |
-| `MEASURE.IVM` | `ivm` | Internal Validation Measure |
-| `MEASURE.C_EVM` | `c_evm` | Clustering + External Validation Measure |
-| `MEASURE.SNC` | `snc` | Steadiness & Cohesiveness |
-| `MEASURE.TOPO` | `topo` | Topographic Product |
-| `MEASURE.PROC` | `proc` | Procrustes Measure |
-| `MEASURE.STRESS` | `stress` | Stress |
-| `MEASURE.SN_STRESS` | `sn_stress` | Scale-Normalized Stress |
-| `MEASURE.NM_STRESS` | `nm_stress` | Non-Metric Stress |
-| `MEASURE.CADI` | `cadi` | Class Angular Distortion Index |
-| `MEASURE.GI` | `gi` | Gap Index |
+| MEASURE | ID | Metric Name | Primary reference |
+|---|---|---|---|
+| `MEASURE.TNC` | `tnc` | Trustworthiness & Continuity | [Venna & Kaski (2006)](https://doi.org/10.1016/j.neunet.2006.05.014) |
+| `MEASURE.MRRE` | `mrre` | Mean Relative Rank Error | [Lee & Verleysen (2009)](https://doi.org/10.1016/j.neucom.2008.12.017) |
+| `MEASURE.LCMC` | `lcmc` | Local Continuity Meta-Criteria | [Chen & Buja (2009)](https://doi.org/10.1198/jasa.2009.0111) |
+| `MEASURE.NH` | `nh` | Neighborhood Hit | [Paulovich et al. (2008)](https://doi.org/10.1109/TVCG.2007.70443) |
+| `MEASURE.CA_TNC` | `ca_tnc` | Class-Aware Trustworthiness & Continuity | [Colange et al. (2020)](https://proceedings.neurips.cc/paper/2020/hash/99607461cdb9c26e2bd5f31b12dcf27a-Abstract.html) |
+| `MEASURE.L_TNC` | `l_tnc` | Label Trustworthiness & Continuity | [Jeon et al. (2024)](https://doi.org/10.1109/TVCG.2023.3327187) |
+| `MEASURE.ND` | `nd` | Neighbor Dissimilarity | [Fujiwara et al. (2023)](https://doi.org/10.1109/PacificVis56936.2023.00021) |
+| `MEASURE.DTM` | `dtm` | Distance-to-Measure | [Chazal et al. (2011)](https://doi.org/10.1007/s10208-011-9098-0) |
+| `MEASURE.KL_DIV` | `kl_div` | Kullback-Leibler Divergence | [Hinton & Roweis (2002)](https://papers.nips.cc/paper/2276-stochastic-neighbor-embedding) |
+| `MEASURE.DSC` | `dsc` | Distance Consistency | [Sips et al. (2009)](https://doi.org/10.1111/j.1467-8659.2009.01467.x) |
+| `MEASURE.PR` | `pr` | Pearson's Correlation Coefficient | [Pearson (1895)](https://doi.org/10.1098/rspl.1895.0041) |
+| `MEASURE.SRHO` | `srho` | Spearman's Rank Correlation Coefficient | [Spearman (1904)](https://doi.org/10.2307/1412159) |
+| `MEASURE.IVM` | `ivm` | Internal Validation Measure | [Silhouette](https://doi.org/10.1016/0377-0427%2887%2990125-7), [Calinski-Harabasz](https://doi.org/10.1080/03610927408827101), [Davies-Bouldin](https://doi.org/10.1109/TPAMI.1979.4766909) |
+| `MEASURE.C_EVM` | `c_evm` | Clustering + External Validation Measure | [Adjusted Rand](https://doi.org/10.1007/BF01908075), [AMI/NMI](https://www.jmlr.org/papers/v11/vinh10a.html), [V-measure](https://aclanthology.org/D07-1043/) |
+| `MEASURE.SNC` | `snc` | Steadiness & Cohesiveness | [Jeon et al. (2021)](https://doi.org/10.1109/TVCG.2021.3114833) |
+| `MEASURE.TOPO` | `topo` | Topographic Product | [Bauer & Pawelzik (1992)](https://doi.org/10.1109/72.143371) |
+| `MEASURE.PROC` | `proc` | Procrustes Measure | [Goldberg & Ritov (2009)](https://doi.org/10.1007/s10994-009-5107-9) |
+| `MEASURE.STRESS` | `stress` | Stress | [Kruskal (1964a)](https://doi.org/10.1007/BF02289565), [(1964b)](https://doi.org/10.1007/BF02289694) |
+| `MEASURE.SN_STRESS` | `sn_stress` | Scale-Normalized Stress | [Smelser et al. (2024)](https://arxiv.org/abs/2408.07724) |
+| `MEASURE.NM_STRESS` | `nm_stress` | Non-Metric Stress | [Kruskal (1964)](https://doi.org/10.1007/BF02289565) |
+| `MEASURE.CADI` | `cadi` | Class Angular Distortion Index | [Gunaratne et al. (2026)](https://doi.org/10.1111/cgf.70465) |
+| `MEASURE.GI` | `gi` | Gap Index | [Ros et al. (2026)](https://arxiv.org/abs/2607.28324) |
+
+The references for ZADU's original 17 measures follow Table 1 of the
+[ZADU paper](https://arxiv.org/abs/2308.00282). General-purpose correlation
+coefficients link to their foundational publications, validation wrappers link
+to the papers for their selectable scores, and later additions link to the
+papers that introduced them.
 
 ## ZADU Class
 

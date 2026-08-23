@@ -24,6 +24,8 @@
 
 ### Changed
 
+- The supported-measures table now links every metric to its primary academic
+  reference, including the constituent scores exposed by validation wrappers.
 - Matplotlib is no longer installed by the base `zadu` package; users of
   ZADUVis can install it with `pip install "zadu[vis]"`.
 - Mixed pair-and-neighbor specifications now plan condensed, streaming, or
