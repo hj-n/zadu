@@ -37,6 +37,10 @@ jobs:
             --samples 1000 --dimension 20 --repeat 3 \
             --memory-budget 32MiB --temporary-budget 128MiB \
             --json benchmark-results/ordered-pair-resources.json
+          python benchmarks/benchmark_density_resources.py \
+            --samples 5000 --dimension 20 --sigmas 0.1 0.3 --repeat 3 \
+            --memory-budget 16MiB \
+            --json benchmark-results/density-resources.json
           python benchmarks/benchmark_topographic_resources.py \
             --samples 2000 --dimension 20 --neighbors 20 --repeat 5 \
             --json benchmark-results/topographic-resources.json

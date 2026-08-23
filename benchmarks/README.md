@@ -97,6 +97,22 @@ workspace for each embedding instead of retaining unbounded order files.
 The maintained Apple M4 `n=2,000` record is stored in
 [external-pair-ordering-m4.json](results/post-0.5.1/external-pair-ordering-m4.json).
 
+## Density resources
+
+Compare dense Gaussian-density construction with the exact two-pass blockwise
+multi-sigma resource:
+
+```bash
+python benchmarks/benchmark_density_resources.py \
+  --samples 5000 --dimension 20 --sigmas 0.1 0.3 \
+  --memory-budget 16MiB --repeat 3
+```
+
+The isolated workers report elapsed time, process peak RSS, retained density
+bytes, planned working bytes, block shape, and maximum density delta. The Apple
+M4 record is stored in
+[blockwise-density-m4.json](results/post-0.5.1/blockwise-density-m4.json).
+
 ## Topographic Product resources
 
 Compare the legacy dense distance/neighbor cache with exact blockwise stable-kNN

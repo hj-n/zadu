@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from zadu import ZADU, ExecutionConfig
+from zadu.backends import numpy_backend
 from zadu.engine.resources import ResourceKind, compact_index_dtype
 from zadu.measures import (
     class_aware_trustworthiness_continuity,
@@ -51,8 +52,17 @@ def test_compact_index_dtype_uses_int32_with_safe_int64_fallback():
         compact_index_dtype(-1)
 
 
-def test_density_resources_deduplicate_sigma_and_release_distance_matrices():
+def test_density_resources_fuse_sigma_and_avoid_distance_matrices(monkeypatch):
     orig, emb, _ = _sample()
+    distance_calls = 0
+    real_cdist = numpy_backend.cdist
+
+    def counted_cdist(*args, **kwargs):
+        nonlocal distance_calls
+        distance_calls += 1
+        return real_cdist(*args, **kwargs)
+
+    monkeypatch.setattr(numpy_backend, "cdist", counted_cdist)
     specs = [
         {"id": "dtm", "params": {"sigma": 0.15}},
         {"id": "kl_div", "params": {"sigma": 0.15}},
@@ -72,17 +82,45 @@ def test_density_resources_deduplicate_sigma_and_release_distance_matrices():
 
     resources = runner.last_run_info["resources"]
     densities = [resource for resource in resources if resource["kind"] == "density"]
-    distances = [
-        resource for resource in resources if resource["kind"] == "distance_matrix"
-    ]
     assert len(densities) == 4
     assert {resource["parameter"] for resource in densities} == {0.15, 0.3}
-    assert all(resource["released"] for resource in distances)
+    assert all(
+        resource["details"]["algorithm"] == "blockwise_two_pass_gaussian_density"
+        for resource in densities
+    )
+    assert all(
+        resource["details"]["fused_sigmas"] == [0.15, 0.3] for resource in densities
+    )
+    assert not any(resource["kind"] == "distance_matrix" for resource in resources)
+    assert distance_calls == 4
     assert runner.orig_distance_matrix is None
     assert runner.emb_distance_matrix is None
     assert runner.estimated_cache_bytes == 4 * len(orig) * 8
     assert runner._execution_plan.planned_peak_bytes == (
         runner.estimated_cache_bytes + 2 * len(orig) * len(orig) * 8
+    )
+
+
+def test_density_reuses_a_dense_matrix_required_by_other_metrics():
+    orig, emb, _ = _sample(seed=2)
+    runner = ZADU([{"id": "dtm"}, {"id": "stress"}], orig)
+
+    actual = runner.measure(emb)
+
+    _assert_result_close(actual[0], distance_to_measure.measure(orig, emb))
+    assert np.isfinite(actual[1]["stress"])
+    densities = [
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "density"
+    ]
+    assert densities
+    assert all(
+        resource["details"]["source"] == "distance_matrix" for resource in densities
+    )
+    assert any(
+        resource["kind"] == "distance_matrix"
+        for resource in runner.last_run_info["resources"]
     )
 
 
@@ -283,18 +321,57 @@ def test_density_peak_memory_guard_runs_before_distance_allocation(monkeypatch):
     orig, _, _ = _sample(n=100)
     specs = [{"id": "dtm"}, {"id": "kl_div"}]
     unbounded = ZADU(specs, orig)
-    budget = unbounded._execution_plan.planned_peak_bytes - 1
+    budget = unbounded.estimated_cache_bytes + len(orig) * 16 - 1
 
     def unexpected_distance(*args, **kwargs):
         raise AssertionError("distance allocation should not start")
 
-    monkeypatch.setattr(pairwise_dist, "pairwise_distance_matrix", unexpected_distance)
+    monkeypatch.setattr(numpy_backend, "cdist", unexpected_distance)
     with pytest.raises(MemoryError, match="peak working memory"):
         ZADU(
             specs,
             orig,
             execution=ExecutionConfig(memory_budget=budget),
         )
+
+
+def test_density_blocks_respect_budget_and_preserve_geodesic_results():
+    rng = np.random.default_rng(13)
+    orig = rng.uniform(low=[-np.pi, -np.pi / 2], high=[np.pi, np.pi / 2], size=(40, 2))
+    emb = rng.normal(size=(40, 2))
+    specs = [{"id": "dtm"}, {"id": "kl_div"}]
+    baseline = ZADU(specs, orig, geodesic=True)
+    budget = baseline.estimated_cache_bytes + 5 * len(orig) * 16
+    runner = ZADU(
+        specs,
+        orig,
+        geodesic=True,
+        execution=ExecutionConfig(memory_budget=budget),
+    )
+
+    actual = runner.measure(emb)
+    distance_matrices = (
+        runner._provider.pairwise_geodesic_distance_matrix(orig),
+        pairwise_dist.pairwise_distance_matrix(emb),
+    )
+    expected = [
+        distance_to_measure.measure(orig, emb, distance_matrices=distance_matrices),
+        kl_divergence.measure(orig, emb, distance_matrices=distance_matrices),
+    ]
+
+    for actual_score, expected_score in zip(actual, expected, strict=True):
+        _assert_result_close(actual_score, expected_score)
+    density_resources = [
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "density"
+    ]
+    assert density_resources
+    assert all(resource["details"]["block_rows"] == 5 for resource in density_resources)
+    assert all(
+        resource["details"]["block_count"] == 8 for resource in density_resources
+    )
+    assert runner._execution_plan.planned_peak_bytes == budget
 
 
 def test_neighbor_dissimilarity_respects_blockwise_memory_plan():
