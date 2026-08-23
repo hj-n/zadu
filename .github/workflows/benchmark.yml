@@ -39,6 +39,9 @@ jobs:
           python benchmarks/benchmark_measure_many.py \
             --samples 2000 --dimension 20 --embeddings 8 --workers 2 --repeat 3 \
             --json benchmark-results/measure-many.json
+          python benchmarks/benchmark_stream_measure_many.py \
+            --samples 2000 --dimension 20 --embeddings 32 --workers 2 --repeat 3 \
+            --json benchmark-results/stream-measure-many.json
       - uses: actions/upload-artifact@v7
         with:
           name: cpu-benchmarks-${{ github.run_id }}

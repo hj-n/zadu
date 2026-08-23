@@ -151,6 +151,19 @@ already-correct manual `measure()` loop. It also reports exact score deltas,
 process peak RSS, planned collection peak bytes, effective workers, and
 reuse-event counts.
 
+For long or generated collections, compare the materialized API with sequential
+and bounded-parallel iterator execution in isolated processes:
+
+```bash
+python benchmarks/benchmark_stream_measure_many.py \
+  --samples 2000 --dimension 20 --embeddings 32 --workers 2 --repeat 3
+```
+
+The report includes elapsed time, process peak RSS, the planned and observed
+in-flight width, whether run diagnostics were retained, and an exact score
+checksum delta. Peak RSS is process-wide; use enough generated embeddings for
+their retained input/result footprint to rise above interpreter noise.
+
 ## Exact selected-rank design gate
 
 Compare the 0.5.1 full inverse-ranking representation with the production NumPy

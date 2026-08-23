@@ -61,6 +61,24 @@ scores = runner.measure_many(embeddings)
 print(runner.last_run_info)
 ```
 
+For a generated or very long input, keep both values and diagnostics bounded:
+
+```python
+stream = runner.iter_measure_many(generate_embeddings())
+try:
+    for item in stream:
+        consume(item.index, item.result, item.run_info)
+finally:
+    stream.close()
+```
+
+The stream is lazy and ordered. NumPy and thread-safe external providers use the
+memory-planned in-flight width. MLX and PyTorch currently execute this iterator
+sequentially because their repeated-embedding acceleration is native tensor
+batching; the materialized `measure_many()` API retains that batching path.
+`last_run_info` becomes a bounded aggregate after exhaustion or close and does
+not retain every per-embedding run.
+
 Diagnostics distinguish requested and actual providers, per-resource fallback
 reasons, input/output transfers, first execution, warm execution, block sizes,
 planned package-managed peak memory, and provider-native batch width. Device

@@ -230,6 +230,85 @@ def build_many_run_info(
     }
 
 
+def build_stream_run_info(
+    *,
+    plan: ExecutionPlan,
+    cache: ResourceCache,
+    backend: str,
+    device: str,
+    dtype: str,
+    batch_plan: BatchExecutionPlan,
+    embedding_count: int,
+    input_consumed_count: int,
+    resource_seconds: float,
+    metric_seconds: float,
+    provider_timings: dict[str, float],
+    metric_timings: list[float],
+    total_seconds: float,
+    original_resources_reused: bool,
+    max_in_flight_observed: int,
+    stream_complete: bool,
+    snc_effective_workers: dict[int, int] | None = None,
+) -> dict[str, Any]:
+    """Create bounded diagnostics for an iterator-style collection run."""
+
+    original_records = [
+        record
+        for record in cache.records.values()
+        if record.key.space is Space.ORIGINAL
+    ]
+    return {
+        **_plan_info(
+            plan,
+            backend=backend,
+            device=device,
+            dtype=dtype,
+            snc_effective_workers=snc_effective_workers,
+        ),
+        "mode": "many_stream",
+        "batch_strategy": batch_plan.strategy,
+        "requested_workers": batch_plan.requested_workers,
+        "effective_workers": batch_plan.effective_workers,
+        "worker_limit_reason": batch_plan.limit_reason,
+        "native_threads_per_worker": batch_plan.native_threads_per_worker,
+        "provider_batching": False,
+        "native_batch_size": 1 if embedding_count else 0,
+        "embedding_count": embedding_count,
+        "input_consumed_count": input_consumed_count,
+        "stream_complete": stream_complete,
+        "runs_retained": False,
+        "max_in_flight_observed": max_in_flight_observed,
+        "per_embedding_planned_peak_bytes": plan.planned_peak_bytes,
+        "shared_original_bytes": batch_plan.shared_original_bytes,
+        "per_embedding_peak_bytes": batch_plan.per_embedding_peak_bytes,
+        "planned_peak_bytes": batch_plan.planned_peak_bytes,
+        "original_resource_count": len(original_records),
+        "original_resource_bytes": int(
+            sum(record.bytes for record in original_records)
+        ),
+        "original_resource_seconds": float(
+            sum(record.build_seconds for record in original_records)
+        ),
+        "original_resources_reused": original_resources_reused,
+        "original_resource_reuse_events": len(original_records) * embedding_count,
+        "resource_seconds": float(resource_seconds),
+        "metric_seconds": float(metric_seconds),
+        "total_seconds": float(total_seconds),
+        "provider_timings": {
+            name: float(provider_timings.get(name, 0.0))
+            for name in _PROVIDER_TIMING_NAMES
+        },
+        "metrics": [
+            {"id": metric_plan.metric_id, "seconds": float(seconds)}
+            for metric_plan, seconds in zip(
+                plan.metric_plans,
+                metric_timings,
+                strict=True,
+            )
+        ],
+    }
+
+
 _PROVIDER_TIMING_NAMES = (
     "input_transfer_seconds",
     "compile_and_first_execution_seconds",
