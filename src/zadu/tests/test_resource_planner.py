@@ -86,6 +86,21 @@ def test_execution_config_normalizes_exact_numpy_options():
         ({"embedding_workers": True}, TypeError, "embedding_workers"),
         ({"embedding_workers": 1.5}, TypeError, "embedding_workers"),
         ({"embedding_workers": 0}, ValueError, "embedding_workers"),
+        ({"pair_order_strategy": 1}, TypeError, "pair_order_strategy"),
+        ({"pair_order_strategy": "disk"}, ValueError, "auto.*memory.*external"),
+        ({"temporary_directory": 1}, TypeError, "temporary_directory"),
+        ({"temporary_budget": True}, TypeError, "temporary_budget"),
+        ({"temporary_budget": 0}, ValueError, "temporary_budget.*greater"),
+        (
+            {"temporary_directory": "/tmp"},
+            ValueError,
+            "temporary_directory.*temporary_budget",
+        ),
+        (
+            {"pair_order_strategy": "external"},
+            ValueError,
+            "external.*temporary_budget",
+        ),
     ],
 )
 def test_execution_config_rejects_unsupported_options(kwargs, error, match):
@@ -131,6 +146,18 @@ def test_execution_config_normalizes_explicit_torch_options():
         embedding_workers=3,
     )
     assert batched.embedding_workers == 3
+
+
+def test_execution_config_normalizes_external_pair_order_options():
+    config = ExecutionConfig(
+        pair_order_strategy="EXTERNAL",
+        temporary_directory="/tmp/zadu-tests",
+        temporary_budget="1.5GiB",
+    )
+
+    assert config.pair_order_strategy == "external"
+    assert config.temporary_directory == "/tmp/zadu-tests"
+    assert config.temporary_budget_bytes == int(1.5 * 1024**3)
 
 
 def test_external_backend_entry_point_is_loaded_and_can_plan_working_memory(

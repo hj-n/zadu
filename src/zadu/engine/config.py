@@ -23,30 +23,32 @@ _MEMORY_MULTIPLIERS = {
 }
 
 
-def parse_memory_budget(value: int | str | None) -> int | None:
-    """Return a positive memory budget in bytes."""
-
+def _parse_byte_budget(value: int | str | None, name: str) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool):
-        raise TypeError("memory_budget must be an integer byte count or size string")
+        raise TypeError(f"{name} must be an integer byte count or size string")
     if isinstance(value, Integral):
         result = int(value)
     elif isinstance(value, str):
         match = _MEMORY_PATTERN.fullmatch(value)
         if match is None:
-            raise ValueError(
-                "memory_budget must be a byte count or a size such as '4GiB'"
-            )
+            raise ValueError(f"{name} must be a byte count or a size such as '4GiB'")
         number = float(match.group("value"))
         unit = match.group("unit")
         multiplier = _MEMORY_MULTIPLIERS[unit.upper() if unit is not None else None]
         result = int(number * multiplier)
     else:
-        raise TypeError("memory_budget must be an integer byte count or size string")
+        raise TypeError(f"{name} must be an integer byte count or size string")
     if result < 1:
-        raise ValueError("memory_budget must be greater than zero")
+        raise ValueError(f"{name} must be greater than zero")
     return result
+
+
+def parse_memory_budget(value: int | str | None) -> int | None:
+    """Return a positive memory budget in bytes."""
+
+    return _parse_byte_budget(value, "memory_budget")
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +60,11 @@ class ExecutionConfig:
     dtype: str | None = None
     memory_budget: int | str | None = None
     embedding_workers: int = 1
+    pair_order_strategy: str = "auto"
+    temporary_directory: str | None = None
+    temporary_budget: int | str | None = None
     _memory_budget_bytes: int | None = field(init=False, repr=False)
+    _temporary_budget_bytes: int | None = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.backend, str):
@@ -67,6 +73,12 @@ class ExecutionConfig:
             raise TypeError("device must be a string")
         if self.dtype is not None and not isinstance(self.dtype, str):
             raise TypeError("dtype must be a string or None")
+        if not isinstance(self.pair_order_strategy, str):
+            raise TypeError("pair_order_strategy must be a string")
+        if self.temporary_directory is not None and not isinstance(
+            self.temporary_directory, str
+        ):
+            raise TypeError("temporary_directory must be a string or None")
         if isinstance(self.embedding_workers, bool) or not isinstance(
             self.embedding_workers, Integral
         ):
@@ -76,6 +88,24 @@ class ExecutionConfig:
         backend = self.backend.lower()
         device = self.device.lower()
         dtype = self.dtype.lower() if self.dtype is not None else None
+        pair_order_strategy = self.pair_order_strategy.lower()
+        if pair_order_strategy not in {"auto", "memory", "external"}:
+            raise ValueError(
+                "pair_order_strategy must be 'auto', 'memory', or 'external'"
+            )
+        temporary_budget_bytes = _parse_byte_budget(
+            self.temporary_budget,
+            "temporary_budget",
+        )
+        if self.temporary_directory is not None and temporary_budget_bytes is None:
+            raise ValueError(
+                "temporary_directory requires an explicit temporary_budget"
+            )
+        if pair_order_strategy == "external" and temporary_budget_bytes is None:
+            raise ValueError(
+                "pair_order_strategy='external' requires an explicit "
+                "temporary_budget"
+            )
         if backend in {"auto", "numpy"}:
             if device not in {"auto", "cpu"}:
                 raise ValueError("device must be 'auto' or 'cpu' for the NumPy backend")
@@ -121,9 +151,15 @@ class ExecutionConfig:
         object.__setattr__(self, "backend", backend)
         object.__setattr__(self, "device", device)
         object.__setattr__(self, "dtype", dtype)
+        object.__setattr__(self, "pair_order_strategy", pair_order_strategy)
         object.__setattr__(self, "embedding_workers", int(self.embedding_workers))
         object.__setattr__(
             self, "_memory_budget_bytes", parse_memory_budget(self.memory_budget)
+        )
+        object.__setattr__(
+            self,
+            "_temporary_budget_bytes",
+            temporary_budget_bytes,
         )
 
     @property
@@ -131,6 +167,12 @@ class ExecutionConfig:
         """Normalized memory budget in bytes."""
 
         return self._memory_budget_bytes
+
+    @property
+    def temporary_budget_bytes(self) -> int | None:
+        """Maximum package-managed temporary disk usage in bytes."""
+
+        return self._temporary_budget_bytes
 
     @property
     def resolved_backend(self) -> str:

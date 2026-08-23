@@ -22,6 +22,9 @@ class BatchExecutionPlan:
     native_threads_per_worker: int | None
     provider_batching: bool
     native_batch_size: int
+    per_embedding_temporary_bytes: int
+    planned_temporary_bytes: int
+    temporary_budget_bytes: int | None
 
 
 def build_batch_execution_plan(
@@ -43,6 +46,11 @@ def build_batch_execution_plan(
         raise ValueError("provider_batch_input_bytes must be zero or greater")
 
     if embedding_count == 0:
+        temporary_budget = (
+            plan.pair_plan.temporary_budget_bytes
+            if plan.pair_plan is not None
+            else None
+        )
         return BatchExecutionPlan(
             requested_workers=requested_workers,
             effective_workers=0,
@@ -55,10 +63,27 @@ def build_batch_execution_plan(
             native_threads_per_worker=None,
             provider_batching=False,
             native_batch_size=0,
+            per_embedding_temporary_bytes=0,
+            planned_temporary_bytes=0,
+            temporary_budget_bytes=temporary_budget,
         )
 
     usable_workers = min(requested_workers, embedding_count)
     limit_reason = "embedding_count" if usable_workers < requested_workers else None
+    per_embedding_temporary_bytes = (
+        plan.pair_plan.planned_temporary_bytes if plan.pair_plan is not None else 0
+    )
+    temporary_budget_bytes = (
+        plan.pair_plan.temporary_budget_bytes if plan.pair_plan is not None else None
+    )
+    if per_embedding_temporary_bytes and temporary_budget_bytes is not None:
+        temporary_capacity = max(
+            1,
+            temporary_budget_bytes // per_embedding_temporary_bytes,
+        )
+        if temporary_capacity < usable_workers:
+            usable_workers = temporary_capacity
+            limit_reason = "temporary_budget"
     if provider_batching:
         per_embedding_peak_bytes = (
             plan.per_embedding_peak_bytes + provider_batch_input_bytes
@@ -81,6 +106,9 @@ def build_batch_execution_plan(
                     native_threads_per_worker=None,
                     provider_batching=False,
                     native_batch_size=1,
+                    per_embedding_temporary_bytes=per_embedding_temporary_bytes,
+                    planned_temporary_bytes=per_embedding_temporary_bytes,
+                    temporary_budget_bytes=temporary_budget_bytes,
                 )
             if memory_capacity < usable_workers:
                 usable_workers = memory_capacity
@@ -100,6 +128,9 @@ def build_batch_execution_plan(
             native_threads_per_worker=None,
             provider_batching=True,
             native_batch_size=native_batch_size,
+            per_embedding_temporary_bytes=per_embedding_temporary_bytes,
+            planned_temporary_bytes=(native_batch_size * per_embedding_temporary_bytes),
+            temporary_budget_bytes=temporary_budget_bytes,
         )
 
     if parallel_fallback_reason is not None and usable_workers > 1:
@@ -133,4 +164,7 @@ def build_batch_execution_plan(
         native_threads_per_worker=1 if effective_workers > 1 else None,
         provider_batching=False,
         native_batch_size=1,
+        per_embedding_temporary_bytes=per_embedding_temporary_bytes,
+        planned_temporary_bytes=(effective_workers * per_embedding_temporary_bytes),
+        temporary_budget_bytes=temporary_budget_bytes,
     )

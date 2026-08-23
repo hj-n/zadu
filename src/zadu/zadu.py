@@ -95,6 +95,9 @@ class ZADU:
             backend=self._provider.name,
             resource_dtype_bytes=np.dtype(self._provider.dtype).itemsize,
             provider_working_memory=provider_working_memory,
+            pair_order_strategy=self.execution.pair_order_strategy,
+            temporary_directory=self.execution.temporary_directory,
+            temporary_budget=self.execution.temporary_budget_bytes,
         )
         self.distance_matrices_flag = any(
             key.kind is ResourceKind.DISTANCE_MATRIX

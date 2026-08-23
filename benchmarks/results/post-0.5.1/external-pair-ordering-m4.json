@@ -1,0 +1,78 @@
+{
+  "metadata": {
+    "samples": 2000,
+    "dimension": 20,
+    "embedding_dimension": 2,
+    "repeat": 3,
+    "memory_budget": "32MiB",
+    "temporary_budget": "128MiB",
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "machine": "arm64",
+    "revision": "ab32c5c6cbed9ae75b46271da77bd3a5d5c4007b"
+  },
+  "dense": {
+    "mode": "dense",
+    "strategy": "dense-reference",
+    "cold_seconds": 1.092259292025119,
+    "warm_seconds": 1.0704240421764553,
+    "peak_rss_mib": 480.34375,
+    "estimated_cache_bytes": 64000000,
+    "planned_peak_bytes": null,
+    "planned_temporary_bytes": null,
+    "temporary_bytes_peak": null,
+    "scores": [
+      {
+        "spearman_rho": 0.004570743495069485
+      },
+      {
+        "non_metric_stress": 0.46248154034765
+      }
+    ]
+  },
+  "planned": {
+    "mode": "planned",
+    "strategy": "condensed",
+    "cold_seconds": 1.0490174579899758,
+    "warm_seconds": 0.6727984580211341,
+    "peak_rss_mib": 361.671875,
+    "estimated_cache_bytes": 39980000,
+    "planned_peak_bytes": 167916000,
+    "planned_temporary_bytes": 0,
+    "temporary_bytes_peak": 0,
+    "scores": [
+      {
+        "spearman_rho": 0.004570743495066641
+      },
+      {
+        "non_metric_stress": 0.46248154034764993
+      }
+    ]
+  },
+  "external": {
+    "mode": "external",
+    "strategy": "external",
+    "cold_seconds": 5.499641041038558,
+    "warm_seconds": 5.506163500016555,
+    "peak_rss_mib": 336.140625,
+    "estimated_cache_bytes": 0,
+    "planned_peak_bytes": 33554432,
+    "planned_temporary_bytes": 103948000,
+    "temporary_bytes_peak": 103948000,
+    "scores": [
+      {
+        "spearman_rho": 0.004570743494985502
+      },
+      {
+        "non_metric_stress": 0.46248154034766903
+      }
+    ]
+  },
+  "cold_speedup": 1.0412212720634784,
+  "warm_speedup": 1.591002520018901,
+  "maximum_score_delta": 2.8440791388639752e-15,
+  "external_cold_slowdown": 5.242659213295106,
+  "external_warm_slowdown": 8.183971640201937,
+  "maximum_external_score_delta": 8.113908850360119e-14
+}

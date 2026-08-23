@@ -1071,6 +1071,43 @@ def test_mlx_measure_many_shape_mismatch_falls_back_to_ordered_sequential():
     assert runner.last_run_info["worker_limit_reason"] == "embedding_shape_mismatch"
 
 
+def test_mlx_external_pair_order_uses_explicit_numpy_fallback(tmp_path):
+    _mlx_provider(device="cpu", dtype="float64")
+    rng = np.random.default_rng(911)
+    orig = rng.normal(size=(24, 5))
+    emb = rng.normal(size=(24, 2))
+    specs = [{"id": "srho"}, {"id": "nm_stress"}]
+    expected = ZADU(specs, orig).measure(emb)
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(
+            backend="mlx",
+            device="cpu",
+            dtype="float64",
+            memory_budget="4KiB",
+            pair_order_strategy="external",
+            temporary_budget="1MiB",
+            temporary_directory=str(tmp_path),
+        ),
+    )
+
+    actual = runner.measure(emb)
+
+    for actual_score, expected_score in zip(actual, expected, strict=True):
+        for key in actual_score:
+            assert actual_score[key] == pytest.approx(
+                expected_score[key], rel=2e-12, abs=2e-14
+            )
+    ordered = runner.last_run_info["resources"][0]
+    assert ordered["provider"] == "numpy"
+    assert ordered["details"]["strategy"] == "external"
+    assert ordered["details"]["provider_fallback"] is True
+    assert ordered["details"]["requested_provider"] == "mlx"
+    assert ordered["details"]["fallback_reason"] == "unsupported_resource"
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_mlx_native_batch_overflow_reports_the_exact_embedding_index():
     _mlx_provider()
     rng = np.random.default_rng(24)

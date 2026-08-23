@@ -96,10 +96,13 @@ class ExactResourceProvider(Protocol):
     def build_ordered_pair_statistics(
         self,
         plan: PairExecutionPlan,
-        pair_order: PairOrder,
+        pair_order: PairOrder | None,
         *,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
         emb_distance_matrix: npt.NDArray | None,
         emb_condensed: npt.NDArray | None,
+        geodesic: bool,
     ) -> BuiltResource: ...
 
     def build_topographic_product_statistics(

@@ -192,9 +192,27 @@ block streaming for larger or memory-constrained workloads, and reuses dense
 matrices when another requested metric already needs them. Every point pair is
 still evaluated; neither path is approximate.
 
-Metrics that require a global pair order cannot use block streaming. For those
-metrics, an explicit memory budget that cannot hold the exact condensed/order
-plan raises `MemoryError` before distance allocation begins.
+Metrics that require a global pair order cannot use ordinary block reductions.
+By default they retain the faster condensed/order path and an insufficient
+memory budget raises before allocation. Large exact jobs can opt into bounded
+external ordering with an explicit temporary-disk allowance:
+
+```python
+execution = ExecutionConfig(
+    memory_budget="512MiB",
+    pair_order_strategy="external",
+    temporary_budget="20GiB",
+    temporary_directory="/fast-scratch/zadu",  # optional
+)
+```
+
+ZADU writes sorted pair runs, performs deterministic bounded-fan-in merges,
+computes tie-average Spearman ranks and weighted PAVA stress exactly, and
+removes the workspace on completion or failure. `pair_order_strategy="auto"`
+may select this path after an in-memory plan exceeds `memory_budget`, but only
+when `temporary_budget` was explicitly supplied. It never infers permission to
+consume arbitrary system disk, and repeated-embedding workers are capped by the
+same allowance.
 
 Topographic Product keeps exact stable neighbor ordering without persistent
 `n x n` matrices. Its neighbor search uses bounded distance-row blocks, the
@@ -216,6 +234,8 @@ runner = ZADU(
         dtype=None,            # NumPy preserves the float64 execution baseline
         memory_budget="4GiB",
         embedding_workers=1,   # opt-in measure_many() workers
+        pair_order_strategy="auto",  # "memory" or exact "external"
+        temporary_budget=None,       # required before disk can be used
     ),
 )
 scores = runner.measure(ld)
