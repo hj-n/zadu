@@ -19,6 +19,9 @@ from zadu.registry import (
 )
 
 _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
+_RESOURCE_BACKED_METRICS = tuple(
+    definition for definition in METRICS if definition.resources
+)
 
 
 def _contract_params(definition: MetricDefinition) -> dict:
@@ -135,3 +138,23 @@ def test_registered_metric_direct_and_scheduled_interfaces_match(definition):
     scheduled = runner.measure(emb, labels)[0]
 
     _assert_score_dicts_close(scheduled, direct)
+
+
+@pytest.mark.parametrize(
+    "definition",
+    _RESOURCE_BACKED_METRICS,
+    ids=lambda metric: metric.alias,
+)
+def test_registered_metric_declared_resources_are_shared_by_the_dag(definition):
+    orig, emb, labels = _sample_data()
+    params = _contract_params(definition)
+    repeated_spec = {"id": definition.alias, "params": params}
+    runner = ZADU([repeated_spec, repeated_spec], orig)
+
+    runner.measure(emb, labels)
+
+    resources = runner.last_run_info["resources"]
+    assert resources, f"{definition.id} declares resources but planned none"
+    for resource in resources:
+        assert resource["consumer_count"] == 2
+        assert resource["consumers"] == [definition.id, definition.id]

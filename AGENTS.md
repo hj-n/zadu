@@ -33,6 +33,24 @@ and reference implementation disagree, document the discrepancy in the pull
 request and ask only for the scientific decision that cannot be resolved from
 the sources.
 
+## Using the execution DAG
+
+Before computing distances, neighbors, ranks, densities, or pair reductions
+inside a metric, inspect the `ResourceRequirement` constants in
+`src/zadu/engine/resources.py`.
+
+- When an existing resource has exactly the required semantics, declare it in
+  the registry and consume the injected argument. Keep a direct-call fallback
+  so the standalone measure API remains usable.
+- Add a mixed-specification test and inspect `last_run_info` to confirm that the
+  expected resource has multiple consumers instead of being built twice. The
+  repository-wide contract also checks duplicate-specification DAG sharing.
+- Do not request a dense or ordered resource when the formula only needs a
+  small subset; DAG participation must not increase asymptotic work or memory.
+- If no existing resource is an exact match, keep the metric standalone. Add a
+  new typed resource only when the computation is expensive enough to plan or
+  is reusable by more than one metric.
+
 ## Required checks
 
 ```bash
