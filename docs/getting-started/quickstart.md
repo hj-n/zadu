@@ -1,8 +1,8 @@
 # Quickstart
 
-## Evaluate one embedding
+## Evaluate one projection
 
-Prepare a finite two-dimensional original array and an embedding with the same
+Prepare a finite two-dimensional original array and a projection with the same
 number of rows:
 
 ```python
@@ -11,7 +11,7 @@ from zadu import ZADU
 
 rng = np.random.default_rng(0)
 original = rng.normal(size=(200, 16))
-embedding = original[:, :2] + 0.05 * rng.normal(size=(200, 2))
+projection = original[:, :2] + 0.05 * rng.normal(size=(200, 2))
 
 specs = [
     {"id": "tnc", "params": {"k": 20}},
@@ -19,7 +19,7 @@ specs = [
 ]
 
 runner = ZADU(specs, original)
-scores = runner.measure(embedding)
+scores = runner.measure(projection)
 
 print(scores[0]["trustworthiness"])
 print(scores[0]["continuity"])
@@ -42,7 +42,7 @@ specs = [
     make_spec(MEASURE.STRESS),
 ]
 
-scores = ZADU(specs, original).measure(embedding)
+scores = ZADU(specs, original).measure(projection)
 ```
 
 The short aliases such as `"tnc"` and full IDs such as
@@ -59,14 +59,14 @@ specs = [
     {"id": "dsc", "params": {}},
 ]
 
-scores = ZADU(specs, original).measure(embedding, label=labels)
+scores = ZADU(specs, original).measure(projection, label=labels)
 ```
 
 Labels may be strings or arbitrary numeric values.
 
 ## Input checklist
 
-- `original` and `embedding` must be finite numeric 2D arrays with the same
+- `original` and `projection` must be finite numeric 2D arrays with the same
   number of rows.
 - For neighbor-based measures, use `1 <= k < n`.
 - Standard T&C and class-aware T&C normalization additionally require
@@ -77,5 +77,5 @@ Labels may be strings or arbitrary numeric values.
   or `inf`.
 
 Next, use [Choose measures](../guides/choosing-measures.md) to match scientific
-questions to metrics, or read [Evaluate embeddings](../guides/evaluating-embeddings.md)
+questions to metrics, or read [Evaluate projections](../guides/evaluating-projections.md)
 for configuration and diagnostics.

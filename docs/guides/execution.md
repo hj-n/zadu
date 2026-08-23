@@ -21,7 +21,7 @@ execution = ExecutionConfig(
 )
 
 runner = ZADU(specs, original, execution=execution)
-scores = runner.measure(embedding)
+scores = runner.measure(projection)
 ```
 
 `backend="auto"` deliberately resolves to NumPy/SciPy. Optional accelerators

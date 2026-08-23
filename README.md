@@ -6,18 +6,18 @@
 <p align="center">
   <a href="https://pypi.org/project/zadu/"><img alt="PyPI" src="https://img.shields.io/pypi/v/zadu"></a>
   <a href="https://github.com/hj-n/zadu/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/hj-n/zadu/actions/workflows/test.yml/badge.svg"></a>
-  <a href="https://hj-n.github.io/zadu/"><img alt="Documentation" src="https://img.shields.io/badge/docs-GitHub%20Pages-4051b5"></a>
+  <a href="https://hyeonword.com/zadu/"><img alt="Documentation" src="https://img.shields.io/badge/docs-GitHub%20Pages-4051b5"></a>
 </p>
 
-ZADU evaluates how faithfully a dimensionality-reduction embedding preserves
+ZADU evaluates how faithfully a dimensionality-reduction projection preserves
 its original data. It provides 22 local, cluster-level, global, and gap-based
 distortion measures through one consistent Python interface, with exact shared
-execution, bounded-memory strategies, repeated-embedding evaluation, and
+execution, bounded-memory strategies, repeated-projection evaluation, and
 optional MLX and PyTorch backends.
 
-**[Documentation](https://hj-n.github.io/zadu/)** ·
-**[Measure reference](https://hj-n.github.io/zadu/measures/)** ·
-**[Performance report](https://hj-n.github.io/zadu/performance/0.5.1-acceleration-report/)** ·
+**[Documentation](https://hyeonword.com/zadu/)** ·
+**[Measure reference](https://hyeonword.com/zadu/measures/)** ·
+**[Performance report](https://hyeonword.com/zadu/performance/0.5.1-acceleration-report/)** ·
 **[ZADU paper](https://doi.org/10.1109/VIS54172.2023.00048)**
 
 ## Installation
@@ -32,7 +32,7 @@ Visualization is optional:
 python -m pip install "zadu[vis]"
 ```
 
-See the [installation guide](https://hj-n.github.io/zadu/getting-started/installation/)
+See the [installation guide](https://hyeonword.com/zadu/getting-started/installation/)
 for optional MLX and PyTorch backends.
 
 ## Quick start
@@ -43,14 +43,14 @@ from zadu import ZADU
 
 rng = np.random.default_rng(0)
 original = rng.normal(size=(200, 16))
-embedding = original[:, :2] + 0.05 * rng.normal(size=(200, 2))
+projection = original[:, :2] + 0.05 * rng.normal(size=(200, 2))
 
 specs = [
     {"id": "tnc", "params": {"k": 20}},
     {"id": "mrre", "params": {"k": 20}},
 ]
 
-scores = ZADU(specs, original).measure(embedding)
+scores = ZADU(specs, original).measure(projection)
 print(scores)
 ```
 
@@ -58,9 +58,9 @@ ZADU's execution DAG shares compatible exact distances, neighbors, ranks,
 densities, and pair reductions across measures. Scientific scores remain
 separate from backend, timing, and memory diagnostics in `last_run_info`.
 
-Read the [quickstart](https://hj-n.github.io/zadu/getting-started/quickstart/),
-[choose measures](https://hj-n.github.io/zadu/guides/choosing-measures/), or
-browse the complete [measure reference](https://hj-n.github.io/zadu/measures/).
+Read the [quickstart](https://hyeonword.com/zadu/getting-started/quickstart/),
+[choose measures](https://hyeonword.com/zadu/guides/choosing-measures/), or
+browse the complete [measure reference](https://hyeonword.com/zadu/measures/).
 
 ## Contributing
 
@@ -84,4 +84,4 @@ You do not need to learn ZADU's internals or prepare repository files. See
 ```
 
 Each metric's original literature and later additions are credited in the
-[measure reference](https://hj-n.github.io/zadu/measures/).
+[measure reference](https://hyeonword.com/zadu/measures/).

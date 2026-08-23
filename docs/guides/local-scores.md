@@ -12,7 +12,7 @@ specs = [
 ]
 
 runner = ZADU(specs, original, return_local=True)
-global_scores, local_scores = runner.measure(embedding)
+global_scores, local_scores = runner.measure(projection)
 
 print(global_scores[1])
 print(local_scores[1]["local_mrre_false"])

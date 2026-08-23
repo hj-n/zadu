@@ -1,4 +1,4 @@
-"""Public records yielded by bounded repeated-embedding evaluation."""
+"""Public records yielded by bounded repeated-projection evaluation."""
 
 from __future__ import annotations
 

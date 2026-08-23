@@ -1,4 +1,4 @@
-# Evaluate embeddings
+# Evaluate projections
 
 The `ZADU` class is the recommended interface. It validates specifications,
 plans shared exact work, reuses original-space resources, and returns results
@@ -20,7 +20,7 @@ runner = ZADU(
     return_local=False,
     execution=ExecutionConfig(memory_budget="4GiB"),
 )
-scores = runner.measure(embedding)
+scores = runner.measure(projection)
 ```
 
 The constructor accepts:
@@ -44,7 +44,7 @@ values.
 `last_run_info`:
 
 ```python
-scores = runner.measure(embedding)
+scores = runner.measure(projection)
 
 print(scores)
 print(runner.last_run_info["backend"])
@@ -64,10 +64,10 @@ two original columns:
 
 ```python
 runner = ZADU(specs, spherical_coordinates, geodesic=True)
-scores = runner.measure(embedding)
+scores = runner.measure(projection)
 ```
 
-Geodesic distance applies only to the registered original space. Embedded
+Geodesic distance applies only to the registered original space. Projection
 coordinates remain Euclidean. Unsupported accelerator resources fall back to
 the exact NumPy path and report the reason in diagnostics.
 

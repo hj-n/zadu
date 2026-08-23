@@ -15,10 +15,10 @@ Scatterplots with the Gap Index*](https://arxiv.org/abs/2607.28324).
 from zadu import ZADU
 
 specs = [{"id": "gi", "params": {"metric": "euclidean"}}]
-score = ZADU(specs, original).measure(embedding)[0]["gap_index"]
+score = ZADU(specs, original).measure(projection)[0]["gap_index"]
 ```
 
-The embedding must have exactly two columns and contain at least three
+The projection must have exactly two columns and contain at least three
 non-collinear points. Its Delaunay triangulation defines the regions.
 
 ## Distance choices
@@ -31,7 +31,7 @@ non-collinear points. Its Delaunay triangulation defines the regions.
 - `"precomputed"` when `original` is a finite, symmetric, non-negative
   `(n, n)` distance matrix with a zero diagonal.
 
-The embedded triangle edges are always Euclidean, matching the published
+The projection-space triangle edges are always Euclidean, matching the published
 formulation.
 
 ```python
@@ -39,7 +39,7 @@ from scipy.spatial.distance import pdist, squareform
 from zadu.measures import gap_index
 
 distances = squareform(pdist(original))
-score = gap_index.gap_index(distances, embedding, metric="precomputed")
+score = gap_index.gap_index(distances, projection, metric="precomputed")
 ```
 
 ## Regional details
@@ -50,7 +50,7 @@ per-region values:
 ```python
 from zadu.measures import gap_index
 
-result = gap_index.compute(original, embedding)
+result = gap_index.compute(original, projection)
 
 print(result.score)
 print(result.triangles)

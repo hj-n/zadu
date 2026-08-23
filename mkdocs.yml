@@ -1,9 +1,13 @@
 site_name: ZADU
-site_description: Evaluate the reliability of dimensionality reduction embeddings
-site_url: https://hj-n.github.io/zadu/
+site_description: Evaluate the reliability of dimensionality reduction projections
+site_url: https://hyeonword.com/zadu/
 repo_url: https://github.com/hj-n/zadu
 repo_name: hj-n/zadu
 edit_uri: edit/master/docs/
+
+exclude_docs: |
+  development/0.5.1-acceleration-plan.md
+  development/post-0.5.1-exact-scaling-plan.md
 
 theme:
   name: material
@@ -40,8 +44,8 @@ nav:
       - Quickstart: getting-started/quickstart.md
   - User guides:
       - Choose measures: guides/choosing-measures.md
-      - Evaluate embeddings: guides/evaluating-embeddings.md
-      - Evaluate many embeddings: guides/many-embeddings.md
+      - Evaluate projections: guides/evaluating-projections.md
+      - Evaluate many projections: guides/many-projections.md
       - Memory and exact execution: guides/execution.md
       - Pointwise scores: guides/local-scores.md
       - Visualization: guides/visualization.md
@@ -61,7 +65,6 @@ nav:
       - Contributing: development/contributing.md
       - Adding a measure: development/adding-a-measure.md
       - Execution DAG: development/execution-dag.md
-      - Maintainer archive: development/archive.md
   - Changelog: changelog.md
 
 plugins:

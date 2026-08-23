@@ -1,6 +1,6 @@
-# Evaluate many embeddings
+# Evaluate many projections
 
-Use one `ZADU` instance when comparing multiple embeddings of the same original
+Use one `ZADU` instance when comparing multiple projections of the same original
 data. Immutable original-space resources are constructed once and reused.
 
 ## Materialized collections
@@ -18,13 +18,17 @@ runner = ZADU(
 )
 
 results = runner.measure_many(
-    [pca_embedding, tsne_embedding, umap_embedding],
+    [pca_projection, tsne_projection, umap_projection],
     labels=labels,
 )
 ```
 
 `measure_many()` preserves input order and returns one ordinary `measure()`
-result per embedding. `labels` is one optional vector shared by the collection.
+result per projection. `labels` is one optional vector shared by the collection.
+
+The public names `embedding_workers`, `EmbeddingExecutionError`, and
+`EmbeddingResult` are retained for backward compatibility; the documentation
+otherwise calls dimensionality-reduction outputs projections.
 
 `embedding_workers=1` is the deterministic default. Larger values opt into
 bounded threads on thread-safe CPU providers or native tensor batching on
@@ -36,7 +40,7 @@ Inspect `runner.last_run_info` for:
 - requested and effective workers;
 - why a requested strategy was limited;
 - original-resource reuse;
-- aggregate and per-embedding timings;
+- aggregate and per-projection timings;
 - provider-native batch width; and
 - the planned collection peak.
 
@@ -50,7 +54,7 @@ For generated or very long sequences, avoid retaining every input, result, and
 diagnostic record:
 
 ```python
-stream = runner.iter_measure_many(generate_embeddings())
+stream = runner.iter_measure_many(generate_projections())
 try:
     for item in stream:
         print(item.index, item.result, item.run_info)
@@ -61,8 +65,8 @@ finally:
 The iterator is lazy, yields in input order, and keeps at most the planned
 in-flight window. Exhaustion or explicit closure finalizes a bounded aggregate
 in `last_run_info`. Each `EmbeddingResult` carries the detailed diagnostics for
-its own embedding.
+its own projection.
 
-MLX and PyTorch currently use their native repeated-embedding tensor batching
+MLX and PyTorch currently use their native repeated-projection tensor batching
 only for the materialized `measure_many()` interface. The streaming interface
 remains ordered and bounded but executes those providers sequentially.

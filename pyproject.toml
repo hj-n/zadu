@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zadu"
-version = "0.5.2"
-description = "A Python Toolkit for Evaluating the Reliability of Dimensionality Reduction Embeddings"
+version = "0.5.3"
+description = "A Python Toolkit for Evaluating the Reliability of Dimensionality Reduction Projections"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -33,7 +33,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/hj-n/zadu"
-Documentation = "https://hj-n.github.io/zadu/"
+Documentation = "https://hyeonword.com/zadu/"
 Repository = "https://github.com/hj-n/zadu"
 Issues = "https://github.com/hj-n/zadu/issues"
 

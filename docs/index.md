@@ -1,6 +1,6 @@
 # ZADU
 
-ZADU evaluates how faithfully a dimensionality-reduction embedding preserves
+ZADU evaluates how faithfully a dimensionality-reduction projection preserves
 the structure of its original data. It provides **22 local, cluster-level,
 global, and gap-based measures** through one consistent Python interface.
 
@@ -10,14 +10,14 @@ from zadu import ZADU
 
 rng = np.random.default_rng(0)
 original = rng.normal(size=(200, 16))
-embedding = original[:, :2] + 0.05 * rng.normal(size=(200, 2))
+projection = original[:, :2] + 0.05 * rng.normal(size=(200, 2))
 
 specs = [
     {"id": "tnc", "params": {"k": 20}},
     {"id": "mrre", "params": {"k": 20}},
 ]
 
-scores = ZADU(specs, original).measure(embedding)
+scores = ZADU(specs, original).measure(projection)
 print(scores)
 ```
 
@@ -26,12 +26,12 @@ print(scores)
 
 ## Where to begin
 
-- **New to embedding evaluation?** Read [Choose measures](guides/choosing-measures.md)
+- **New to projection evaluation?** Read [Choose measures](guides/choosing-measures.md)
   and start with more than one structural perspective.
 - **Already know the metric?** Find its ID, parameters, score range, return
   keys, and primary paper in the [measure reference](measures/index.md).
 - **Evaluating many projections?** Reuse original-space work with
-  [`measure_many()`](guides/many-embeddings.md).
+  [`measure_many()`](guides/many-projections.md).
 - **Working at larger scale?** Configure bounded exact execution and optional
   accelerator backends in [Memory and exact execution](guides/execution.md).
 - **Adding a published metric?** A paper link and an optional reference
