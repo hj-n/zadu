@@ -129,6 +129,21 @@ warm time, process peak RSS, retained package resources, planned peak bytes,
 providers, and maximum score delta. The Apple M4 record is stored in
 [mixed-resources-m4.json](results/post-0.5.1/mixed-resources-m4.json).
 
+## Gap Index triangle kernels
+
+Compare the original scalar per-edge calls with exact bounded Euclidean
+triangle blocks:
+
+```bash
+python benchmarks/benchmark_gap_index.py \
+  --samples 50000 --dimension 20 --repeat 3
+```
+
+Both isolated workers reuse the same deterministic Delaunay triangles and
+report median triangle-area time, process peak RSS, block shape, retained area
+bytes, Gap Index score, and score delta. The Apple M4 record is stored in
+[gap-index-vectorized-m4.json](results/post-0.5.1/gap-index-vectorized-m4.json).
+
 ## Topographic Product resources
 
 Compare the legacy dense distance/neighbor cache with exact blockwise stable-kNN

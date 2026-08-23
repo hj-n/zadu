@@ -476,7 +476,7 @@ Pearson and Spearman correlations use each unique off-diagonal distance once (th
 > |---------|----|------------|-------|---------|
 > | Gap Index[^2] | gi | `metric="euclidean"` | [0, 1] | 0 |
 
-The Gap Index operates on empty triangular regions of a 2D projection rather than fitting cleanly into the local, cluster-level, or global categories above. It supports a SciPy distance function or function name, and `metric="precomputed"` when `hd` is a square distance matrix.
+The Gap Index operates on empty triangular regions of a 2D projection rather than fitting cleanly into the local, cluster-level, or global categories above. It supports a SciPy distance function or function name, and `metric="precomputed"` when `hd` is a square distance matrix. Euclidean and precomputed triangle areas use exact bounded vectorized blocks; other named and callable metrics retain the scalar compatibility path.
 
 [^2]: Introduced by Jaume Ros, Alessio Arleo, and Fernando Paulovich ([paper](https://arxiv.org/abs/2607.28324), [reference implementation](https://codeberg.org/jros/gap-index)); ZADU retains the original [MIT license](/LICENSES/gap-index-MIT.txt) and [provenance notice](/THIRD_PARTY_NOTICES.md).
 

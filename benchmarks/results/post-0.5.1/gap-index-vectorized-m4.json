@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "samples": 50000,
+    "dimension": 20,
+    "repeat": 3,
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "scalar": {
+    "mode": "scalar",
+    "seconds": 1.6872320408001542,
+    "peak_rss_mib": 150.984375,
+    "triangle_count": 99986,
+    "block_rows": 1,
+    "block_count": 99986,
+    "retained_area_bytes": 1599776,
+    "score": 0.8004256319323559
+  },
+  "vectorized": {
+    "mode": "vectorized",
+    "seconds": 0.02626991691067815,
+    "peak_rss_mib": 165.515625,
+    "triangle_count": 99986,
+    "block_rows": 31775,
+    "block_count": 4,
+    "retained_area_bytes": 1599776,
+    "score": 0.8004256319323559
+  },
+  "speedup": 64.22677492802923,
+  "score_delta": 0.0
+}

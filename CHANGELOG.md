@@ -29,6 +29,9 @@
   scheduled execution. This removes the implicit FAISS float32 conversion and
   the mandatory `faiss-cpu` dependency while preserving bounded scheduler
   memory and deterministic duplicate-distance ties.
+- Gap Index now evaluates Euclidean and precomputed triangle edges in bounded
+  vectorized blocks while preserving its scalar callable/SciPy-metric fallback,
+  published triangulation, Heron validation, and upstream score parity.
 - Exact external pair ordering now uses compiled binary merges instead of a
   per-record Python heap merge.
 - DTM and KL density resources now fuse multiple sigma values in exact
