@@ -124,7 +124,7 @@ jobs:
               assert any(name.endswith("THIRD_PARTY_NOTICES.md") for name in names)
               metadata_name = next(name for name in names if name.endswith("/METADATA"))
               metadata = archive.read(metadata_name).decode()
-              assert "Version: 0.5.1" in metadata
+              assert "Version: 0.5.2" in metadata
               assert "Provides-Extra: vis" in metadata
               assert "Provides-Extra: mlx" in metadata
               assert "Provides-Extra: torch" in metadata

@@ -53,7 +53,7 @@ def parse_memory_budget(value: int | str | None) -> int | None:
 
 @dataclass(frozen=True, slots=True)
 class ExecutionConfig:
-    """Select exact execution capabilities available in ZADU 0.5.1."""
+    """Select the exact execution capabilities available to ZADU."""
 
     backend: str = "auto"
     device: str = "auto"

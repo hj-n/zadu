@@ -58,6 +58,7 @@ python -m pytest test/test_metric_contract.py -q
 python -m pytest
 ruff check .
 black --check src test scalability_eval benchmarks
+python -m mkdocs build --strict
 ```
 
 Keep optional frameworks lazily imported. Do not weaken exactness, stable tie

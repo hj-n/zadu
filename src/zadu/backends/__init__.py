@@ -120,7 +120,7 @@ def _create_entry_point_provider(execution):
             f"('{provider.name}' != '{execution.resolved_backend}')"
         )
     if provider.exact is not True:
-        raise ValueError("ZADU 0.5.1 accepts only exact resource providers")
+        raise ValueError("ZADU accepts only exact resource providers")
     return provider
 
 

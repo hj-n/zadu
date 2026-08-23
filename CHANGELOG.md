@@ -2,8 +2,16 @@
 
 ## Unreleased
 
+## 0.5.2
+
 ### Added
 
+- A searchable Material for MkDocs documentation site with task-oriented user
+  guides, a complete literature-linked measure reference, generated public API
+  pages, performance documentation, and maintainer guidance.
+- Strict documentation CI for pull requests and master updates, plus GitHub
+  Pages deployment from the immutable source tag whenever a GitHub Release is
+  published.
 - A three-field GitHub issue form for proposing a metric from its name, paper,
   and optional reference implementation without preparing repository files.
 - A `vis` installation extra for the optional ZADUVis plotting dependency.
@@ -24,6 +32,9 @@
 
 ### Changed
 
+- README now serves as a compact installation and quickstart entry point; the
+  detailed measure, execution, backend, visualization, and contribution
+  material has moved to the documentation site.
 - The supported-measures table now links every metric to its primary academic
   reference, including the constituent scores exposed by validation wrappers.
 - Matplotlib is no longer installed by the base `zadu` package; users of
