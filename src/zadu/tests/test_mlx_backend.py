@@ -725,7 +725,7 @@ def test_zadu_mlx_routes_all_neighbor_metrics_and_preserves_scores():
     json.dumps(runner.last_run_info)
 
 
-def test_zadu_mlx_dense_pair_plan_shares_distances_with_selected_ranks():
+def test_zadu_mlx_mixed_pair_plan_keeps_selected_ranks_blockwise():
     _mlx_provider()
     rng = np.random.default_rng(180)
     orig = rng.normal(size=(64, 6))
@@ -760,13 +760,18 @@ def test_zadu_mlx_dense_pair_plan_shares_distances_with_selected_ranks():
     assert len(rank_comparisons) == 1
     comparison = rank_comparisons[0]
     assert comparison["details"]["original_distance_source"] == (
-        "shared_distance_matrix"
+        "fused_blockwise_pairwise"
     )
     assert comparison["details"]["embedded_distance_source"] == (
-        "shared_distance_matrix"
+        "fused_blockwise_pairwise"
     )
     assert comparison["provider"] == "mlx"
     assert comparison["details"]["provider_fallback"] is False
+    assert runner.last_run_info["pair_strategy"] == "condensed"
+    assert not any(
+        resource["kind"] == "distance_matrix"
+        for resource in runner.last_run_info["resources"]
+    )
 
 
 def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
