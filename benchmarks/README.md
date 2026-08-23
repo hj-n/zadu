@@ -170,6 +170,7 @@ path's planned working bytes and block shape. The design thresholds are
 documented in the
 [post-0.5.1 exact scaling plan](../docs/development/post-0.5.1-exact-scaling-plan.md),
 with the initial [Apple M4 result](results/post-0.5.1/selected-ranks-m4-16mib.json)
+and the [production resource plus end-to-end comparison](results/post-0.5.1/selected-ranks-production-m4.json)
 kept as machine-readable evidence.
 
 ## Optional MLX pairwise provider

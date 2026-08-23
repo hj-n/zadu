@@ -1,0 +1,60 @@
+{
+  "metadata": {
+    "baseline_revision": "fa03f9a58967819bb96870ca822849ecaee7d5f3",
+    "selected_rank_revision": "8f46b3738129ee65077e52c306fa94189f9670bf",
+    "samples": 2000,
+    "dimension": 20,
+    "embedding_dimension": 2,
+    "neighbors": 20,
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "machine": "arm64",
+    "comparison_scope": "same interpreter, dependencies, data seed, and hardware"
+  },
+  "isolated_rank_resource": {
+    "memory_budget": 16777216,
+    "repeat": 5,
+    "full_ranking_seconds": 0.5430251248180866,
+    "selected_rank_seconds": 0.32856733398512006,
+    "runtime_ratio": 0.6050683826005105,
+    "full_ranking_peak_rss_mib": 342.28125,
+    "selected_rank_peak_rss_mib": 149.03125,
+    "full_ranking_persistent_bytes": 32720000,
+    "selected_rank_persistent_bytes": 720000,
+    "persistent_memory_reduction": 45.44444444444444,
+    "selected_rank_planned_working_bytes": 16752000,
+    "selected_rank_block_rows": 349,
+    "selected_rank_block_count": 6,
+    "exact_digest_match": true,
+    "maximum_score_delta": 0.0
+  },
+  "end_to_end_core_single_embedding": {
+    "repeat": 5,
+    "v0.5.1_construction_seconds": 0.2871011251118034,
+    "selected_rank_construction_seconds": 0.06626133411191404,
+    "v0.5.1_cold_total_seconds": 0.5568667501211166,
+    "selected_rank_cold_total_seconds": 0.36018862505443394,
+    "cold_speedup": 1.5460420218349746,
+    "v0.5.1_warm_seconds": 0.26406045793555677,
+    "selected_rank_warm_seconds": 0.29119787481613457,
+    "warm_speedup": 0.906807641032021,
+    "v0.5.1_peak_rss_bytes": 310263808,
+    "selected_rank_peak_rss_bytes": 234913792,
+    "peak_rss_ratio": 1.3207560329195145,
+    "maximum_score_delta": 0.0
+  },
+  "end_to_end_core_eight_embeddings": {
+    "repeat": 3,
+    "v0.5.1_cold_total_seconds": 2.4073585411533713,
+    "selected_rank_cold_total_seconds": 2.4103937500622123,
+    "cold_speedup": 0.9987407829493573,
+    "v0.5.1_warm_seconds": 2.1192265420686454,
+    "selected_rank_warm_seconds": 2.3286794170271605,
+    "warm_speedup": 0.9100550838269069,
+    "v0.5.1_peak_rss_bytes": 310558720,
+    "selected_rank_peak_rss_bytes": 235208704,
+    "peak_rss_ratio": 1.3203538590136528,
+    "maximum_score_delta": 0.0
+  }
+}
