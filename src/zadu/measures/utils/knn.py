@@ -1,10 +1,9 @@
 import numpy as np
 import numpy.typing as npt
 from scipy.sparse import csr_matrix
-from sklearn.neighbors import KDTree
 
 from .pairwise_dist import pairwise_distance_matrix
-from .validation import validate_neighbor_k
+from .validation import as_finite_2d, validate_neighbor_k
 
 
 def _validate_k(points: npt.NDArray, k: int) -> None:
@@ -74,10 +73,10 @@ def knn(
     points: npt.NDArray, k: int, distance_function: str = "euclidean"
 ) -> npt.NDArray:
     """
-    Compute the k-nearest neighbors of the points
-    If the distance function is euclidean, the computation relies on faiss-cpu.
-    Otherwise, the computation is done based on scikit-learn KD Tree algorithm
-    You can use any distance function supported by scikit-learn KD Tree or specify a callable function
+    Compute exact k-nearest neighbors with stable index-based tie handling.
+    You can use any distance function supported by SciPy ``cdist`` or specify
+    a callable function. The direct helper materializes the distance matrix;
+    scheduled ZADU execution uses the memory-bounded blockwise equivalent.
     INPUT:
         ndarray: points: list of points
         int: k: number of nearest neighbors to compute
@@ -86,36 +85,12 @@ def knn(
         ndarray: knn_indices: k-nearest neighbors of each point
     """
 
+    points = as_finite_2d(points, "points")
     _validate_k(points, k)
-
-    if callable(distance_function):
-        distance_matrix = pairwise_distance_matrix(points, distance_function)
-        return knn_from_distance_matrix(distance_matrix, k)
-    if not isinstance(distance_function, str):
+    if not callable(distance_function) and not isinstance(distance_function, str):
         raise TypeError("distance_function must be a metric name or callable")
-
-    # FAISS requires contiguous float32 input.
-    points = np.ascontiguousarray(points, dtype=np.float32)
-
-    if distance_function.lower() == "euclidean":
-        import faiss
-
-        index = faiss.IndexFlatL2(points.shape[1])
-        index.add(points)
-        candidates = index.search(points, k + 1)[1]
-        knn_indices = np.empty((points.shape[0], k), dtype=candidates.dtype)
-        for row_idx, row in enumerate(candidates):
-            without_self = row[row != row_idx]
-            knn_indices[row_idx] = without_self[:k]
-    else:
-        tree = KDTree(points, metric=distance_function)
-        candidates = tree.query(points, k=k + 1, return_distance=False)
-        knn_indices = np.empty((points.shape[0], k), dtype=candidates.dtype)
-        for row_idx, row in enumerate(candidates):
-            without_self = row[row != row_idx]
-            knn_indices[row_idx] = without_self[:k]
-
-    return knn_indices
+    distance_matrix = pairwise_distance_matrix(points, distance_function)
+    return knn_from_distance_matrix(distance_matrix, k)
 
 
 def snn(

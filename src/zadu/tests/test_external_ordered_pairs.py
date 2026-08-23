@@ -110,6 +110,37 @@ def test_auto_selects_external_only_with_an_explicit_disk_allowance(tmp_path):
         )
 
 
+def test_auto_external_selection_accounts_for_mixed_neighbor_cache(tmp_path):
+    orig, emb = _sample(n=50)
+    k = 7
+    pair_count = len(orig) * (len(orig) - 1) // 2
+    ordered_peak = pair_count * (8 + 4 + 8 + 64)
+    neighbor_cache = 2 * len(orig) * k * 4 + len(orig) * 8
+    specs = [
+        {"id": "lcmc", "params": {"k": k}},
+        {"id": "srho"},
+    ]
+    runner = ZADU(
+        specs,
+        orig,
+        execution=_external_config(
+            strategy="auto",
+            memory_budget=ordered_peak + neighbor_cache - 1,
+            temporary_budget="4MiB",
+            temporary_directory=tmp_path,
+        ),
+    )
+
+    scores = runner.measure(emb)
+
+    assert runner._execution_plan.pair_plan.strategy is PairStrategy.EXTERNAL
+    assert (
+        runner._execution_plan.planned_peak_bytes <= ordered_peak + neighbor_cache - 1
+    )
+    assert all(np.isfinite(value) for score in scores for value in score.values())
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_external_ties_cross_runs_and_multiple_merge_passes(tmp_path):
     orig = np.asarray(
         [[float(index % 3), float((index // 3) % 2)] for index in range(12)]

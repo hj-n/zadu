@@ -1,4 +1,4 @@
-"""NumPy/SciPy/FAISS provider preserving ZADU's exact 0.5.0 behavior."""
+"""Exact NumPy/SciPy resource provider."""
 
 from __future__ import annotations
 
@@ -163,10 +163,10 @@ class NumpyResourceProvider:
                 "numpy",
                 {"index_dtype": index_dtype.name},
             )
-        if key.kind is ResourceKind.STABLE_KNN:
+        if key.kind in {ResourceKind.KNN, ResourceKind.STABLE_KNN}:
             assert key.k is not None
             if working_memory_bytes is None:
-                raise RuntimeError("Stable kNN requires a working-memory plan")
+                raise RuntimeError("Exact kNN requires a working-memory plan")
             value, block_count, block_rows = self.stable_knn(
                 points,
                 key.k,
@@ -182,22 +182,11 @@ class NumpyResourceProvider:
                     "block_count": block_count,
                     "block_rows": block_rows,
                     "working_bytes": working_memory_bytes,
+                    "dtype": "float64",
+                    "stable_ties": True,
                 },
             )
-        if key.kind is not ResourceKind.KNN:
-            raise RuntimeError(f"Unsupported NumPy resource kind: {key.kind.value}")
-        assert key.k is not None
-        if distance_matrix is not None:
-            value = knn.knn_from_distance_matrix(distance_matrix, key.k)
-            return BuiltResource(
-                value.astype(compact_index_dtype(points.shape[0]), copy=False),
-                "numpy",
-            )
-        value = knn.knn(points, key.k)
-        return BuiltResource(
-            value.astype(compact_index_dtype(points.shape[0]), copy=False),
-            "faiss",
-        )
+        raise RuntimeError(f"Unsupported NumPy resource kind: {key.kind.value}")
 
     def build_densities(
         self,

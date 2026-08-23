@@ -35,7 +35,7 @@ DENSITY_WORK_BYTES_PER_CELL = 16
 # slower even though it needs fewer passes over the temporary files.
 EXTERNAL_MERGE_FAN_IN = 2
 DEFAULT_RESOURCE_WORK_BYTES = 64 * 1024**2
-STABLE_KNN_WORK_BYTES_PER_CELL = 32
+KNN_WORK_BYTES_PER_CELL = 32
 TOPOGRAPHIC_WORK_BYTES_PER_SELECTED_DISTANCE = 16
 SELECTED_RANK_WORK_BYTES_PER_CELL = 24
 RANK_WORK_BYTES_PER_COMPARISON = 1
@@ -245,24 +245,48 @@ def build_execution_plan(
         Space.PAIRED,
     ) in requested_pairs
     has_pair_resources = has_pair_statistics or has_ordered_pair_statistics
-    has_other_exact_resources = any(
-        (
-            request.space is not Space.PAIRED
-            and request.kind
-            in {
-                ResourceKind.DISTANCE_MATRIX,
-                ResourceKind.DENSITY,
-                ResourceKind.KNN,
-                ResourceKind.NEIGHBOR_RANKING,
+    rank_membership_ks = tuple(
+        sorted(
+            {
+                spec["params"].get("k", default_k)
+                for definition, spec in zip(definitions, specs, strict=True)
+                if definition.id
+                in {
+                    "trustworthiness_continuity",
+                    "class_aware_trustworthiness_continuity",
+                }
             }
         )
-        or request.kind
-        in {ResourceKind.RANK_COMPARISONS, ResourceKind.NEIGHBOR_STATISTICS}
-        for request in all_requests
+    )
+    lcmc_ks = tuple(
+        sorted(
+            {
+                spec["params"].get("k", default_k)
+                for definition, spec in zip(definitions, specs, strict=True)
+                if definition.id == "local_continuity_meta_criteria"
+            }
+        )
+    )
+    nd_ks = tuple(
+        sorted(
+            {
+                spec["params"].get("k", default_k)
+                for definition, spec in zip(definitions, specs, strict=True)
+                if definition.id == "neighbor_dissimilarity"
+            }
+        )
+    )
+    non_pair_cache_bytes = _estimate_non_pair_cache_bytes(
+        all_requests,
+        maxima,
+        n_samples=n_samples,
+        rank_membership_ks=rank_membership_ks,
+        lcmc_ks=lcmc_ks,
+        nd_ks=nd_ks,
     )
     pair_strategy = None
     if has_pair_resources:
-        dense_for_compatibility = geodesic or has_other_exact_resources
+        dense_for_compatibility = geodesic
         condensed_bytes = 2 * pair_count * np.dtype(np.float64).itemsize
         pair_index_bytes = compact_index_dtype(pair_count).itemsize
         ordered_in_memory_peak = pair_count * (
@@ -279,7 +303,7 @@ def build_execution_plan(
             and pair_order_strategy == "auto"
             and temporary_budget is not None
             and memory_budget is not None
-            and ordered_in_memory_peak > memory_budget
+            and ordered_in_memory_peak + non_pair_cache_bytes > memory_budget
         )
         if external_requested or external_needed:
             pair_strategy = PairStrategy.EXTERNAL
@@ -297,7 +321,10 @@ def build_execution_plan(
         else:
             pair_strategy = (
                 PairStrategy.CONDENSED
-                if condensed_bytes + CONDENSED_WORK_BYTES_PER_PAIR <= memory_budget
+                if condensed_bytes
+                + non_pair_cache_bytes
+                + CONDENSED_WORK_BYTES_PER_PAIR
+                <= memory_budget
                 else PairStrategy.STREAMING
             )
 
@@ -541,37 +568,6 @@ def build_execution_plan(
             }
         )
     )
-    rank_membership_ks = tuple(
-        sorted(
-            {
-                spec["params"].get("k", default_k)
-                for definition, spec in zip(definitions, specs, strict=True)
-                if definition.id
-                in {
-                    "trustworthiness_continuity",
-                    "class_aware_trustworthiness_continuity",
-                }
-            }
-        )
-    )
-    lcmc_ks = tuple(
-        sorted(
-            {
-                spec["params"].get("k", default_k)
-                for definition, spec in zip(definitions, specs, strict=True)
-                if definition.id == "local_continuity_meta_criteria"
-            }
-        )
-    )
-    nd_ks = tuple(
-        sorted(
-            {
-                spec["params"].get("k", default_k)
-                for definition, spec in zip(definitions, specs, strict=True)
-                if definition.id == "neighbor_dissimilarity"
-            }
-        )
-    )
     release_after_prepare: dict[Space, tuple[ResourceKey, ...]] = {}
     estimated_cache_bytes = _estimate_cache_bytes(
         resources,
@@ -785,9 +781,12 @@ def build_execution_plan(
             resource_working_bytes[key] = working_bytes
             peak_working_bytes = max(peak_working_bytes, working_bytes)
     for key in resources:
-        if key.kind is not ResourceKind.STABLE_KNN or key in resource_working_bytes:
+        if (
+            key.kind not in {ResourceKind.KNN, ResourceKind.STABLE_KNN}
+            or key in resource_working_bytes
+        ):
             continue
-        bytes_per_row = n_samples * STABLE_KNN_WORK_BYTES_PER_CELL
+        bytes_per_row = n_samples * KNN_WORK_BYTES_PER_CELL
         block_rows = max(
             1,
             min(n_samples, available_work_bytes // bytes_per_row),
@@ -993,6 +992,100 @@ def build_execution_plan(
         snc_plan=snc_plan,
         resource_working_bytes=resource_working_bytes,
         release_after_prepare=release_after_prepare,
+    )
+
+
+def _estimate_non_pair_cache_bytes(
+    requests: list[ResourceRequest],
+    maxima: dict[tuple[ResourceKind, Space], int],
+    *,
+    n_samples: int,
+    rank_membership_ks: tuple[int, ...],
+    lcmc_ks: tuple[int, ...],
+    nd_ks: tuple[int, ...],
+) -> int:
+    """Estimate resources that coexist with either exact pair strategy."""
+
+    requested_pairs = {(request.kind, request.space) for request in requests}
+    resources: list[ResourceKey] = []
+    for space in (Space.ORIGINAL, Space.EMBEDDED):
+        if (ResourceKind.DISTANCE_MATRIX, space) in requested_pairs:
+            resources.append(ResourceKey(ResourceKind.DISTANCE_MATRIX, space))
+
+        density_parameters = {
+            request.parameter
+            for request in requests
+            if request.kind is ResourceKind.DENSITY
+            and request.space is space
+            and request.parameter is not None
+        }
+        resources.extend(
+            ResourceKey(ResourceKind.DENSITY, space, parameter=parameter)
+            for parameter in density_parameters
+        )
+
+        ranking_k = maxima.get((ResourceKind.NEIGHBOR_RANKING, space), -1)
+        knn_k = maxima.get((ResourceKind.KNN, space), -1)
+        if ranking_k >= 0:
+            resources.append(
+                ResourceKey(
+                    ResourceKind.NEIGHBOR_RANKING,
+                    space,
+                    max(ranking_k, knn_k),
+                )
+            )
+        elif knn_k >= 0:
+            resources.append(ResourceKey(ResourceKind.KNN, space, knn_k))
+
+        stable_knn_k = maxima.get((ResourceKind.STABLE_KNN, space), -1)
+        if stable_knn_k >= 0:
+            resources.append(ResourceKey(ResourceKind.STABLE_KNN, space, stable_knn_k))
+
+    topographic_k = maxima.get(
+        (ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS, Space.PAIRED),
+        -1,
+    )
+    if topographic_k >= 0:
+        resources.append(
+            ResourceKey(
+                ResourceKind.TOPOGRAPHIC_PRODUCT_STATISTICS,
+                Space.PAIRED,
+                topographic_k,
+            )
+        )
+
+    rank_comparison_k = maxima.get(
+        (ResourceKind.RANK_COMPARISONS, Space.PAIRED),
+        -1,
+    )
+    if rank_comparison_k >= 0:
+        resources.append(
+            ResourceKey(
+                ResourceKind.RANK_COMPARISONS,
+                Space.PAIRED,
+                rank_comparison_k,
+            )
+        )
+
+    neighbor_statistics_k = maxima.get(
+        (ResourceKind.NEIGHBOR_STATISTICS, Space.PAIRED),
+        -1,
+    )
+    if neighbor_statistics_k >= 0:
+        resources.append(
+            ResourceKey(
+                ResourceKind.NEIGHBOR_STATISTICS,
+                Space.PAIRED,
+                neighbor_statistics_k,
+            )
+        )
+
+    return _estimate_cache_bytes(
+        resources,
+        n_samples,
+        rank_membership_ks=rank_membership_ks,
+        lcmc_ks=lcmc_ks,
+        nd_ks=nd_ks,
     )
 
 

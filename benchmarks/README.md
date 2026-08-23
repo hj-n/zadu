@@ -113,6 +113,22 @@ bytes, planned working bytes, block shape, and maximum density delta. The Apple
 M4 record is stored in
 [blockwise-density-m4.json](results/post-0.5.1/blockwise-density-m4.json).
 
+## Mixed pair and neighbor resources
+
+Compare the former exact dense-matrix mixed path with independent condensed
+pair reductions and memory-bounded stable float64 kNN:
+
+```bash
+python benchmarks/benchmark_mixed_resources.py \
+  --samples 2000 --dimension 20 --neighbors 20 \
+  --memory-budget 48MiB --repeat 3
+```
+
+The isolated workers evaluate LCMC, Stress, and Pearson, separating cold and
+warm time, process peak RSS, retained package resources, planned peak bytes,
+providers, and maximum score delta. The Apple M4 record is stored in
+[mixed-resources-m4.json](results/post-0.5.1/mixed-resources-m4.json).
+
 ## Topographic Product resources
 
 Compare the legacy dense distance/neighbor cache with exact blockwise stable-kNN
@@ -326,9 +342,9 @@ warm full ranking measured 23.75x faster than NumPy (`10.56 ms` versus
 versus `382.84 ms`) with a maximum absolute score delta of `1.40e-6`.
 
 Standalone ordinary kNN measured `7.64 ms` in MLX versus `4.27 ms` in FAISS, so
-the default automatic backend remains NumPy/FAISS. MLX uses a stable full-order
-prefix because an `argpartition` boundary does not define duplicate-distance
-tie order; exact tie repair was slower than MLX's stable sort in the same
-benchmark. Float32 full rankings can also differ from the float64 baseline when
-nearly equal non-tied distances cross after rounding, so score and index deltas
-are reported rather than hidden.
+FAISS was the faster historical standalone path. The current default instead
+uses memory-bounded NumPy/SciPy float64 kNN because FAISS required an implicit
+float32 conversion that could reverse nearly equal neighbors. MLX uses a stable
+full-order prefix because an `argpartition` boundary does not define
+duplicate-distance tie order; exact tie repair was slower than MLX's stable sort
+in the same benchmark. Score and index deltas are reported rather than hidden.

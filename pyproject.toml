@@ -29,7 +29,6 @@ dependencies = [
   "scipy>=1.9",
   "hdbscan>=0.8.33",
   "matplotlib>=3.7",
-  "faiss-cpu>=1.7.4",
   "numba>=0.57",
 ]
 
