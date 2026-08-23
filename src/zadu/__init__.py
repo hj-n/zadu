@@ -1,6 +1,6 @@
 from importlib.metadata import PackageNotFoundError, version
 
-from .engine import EmbeddingExecutionError, ExecutionConfig
+from .engine import EmbeddingExecutionError, EmbeddingResult, ExecutionConfig
 from .spec import MEASURE, MeasureId, Spec, make_spec
 from .zadu import ZADU
 
@@ -13,6 +13,7 @@ __all__ = [
     "MEASURE",
     "ZADU",
     "EmbeddingExecutionError",
+    "EmbeddingResult",
     "ExecutionConfig",
     "MeasureId",
     "Spec",

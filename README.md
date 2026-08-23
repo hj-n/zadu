@@ -222,6 +222,19 @@ scores = runner.measure(ld)
 print(runner.last_run_info)
 ```
 
+For a long or generated sequence, use the bounded iterator instead of retaining
+every input, result, and diagnostic record:
+
+```python
+for item in runner.iter_measure_many(embedding_generator()):
+    print(item.index, item.result, item.run_info)
+```
+
+The iterator consumes at most the memory-planned worker window and yields in
+input order. Exhausting or explicitly closing it finalizes a bounded aggregate
+in `last_run_info`; per-embedding diagnostics travel with each
+`EmbeddingResult`. The materialized `measure_many()` API remains unchanged.
+
 `last_run_info` is separate from metric scores. It records the exact backend,
 resource providers, selected pair strategy and block size, estimated cache and
 peak working memory, dtype, construction and metric timings, release/reuse, and
@@ -256,13 +269,13 @@ scores = runner.measure(ld)
 
 The MLX preview accelerates Euclidean distance matrices, condensed pair
 distances, explicit stable full/inverse rankings, exact stable neighbor prefixes,
-and Topographic Product's stable-kNN tables. A distance matrix already produced
-by MLX is shared with dependent work through unified memory instead of being
-copied back to the device. The paired selected-rank reduction currently falls
-back to the bounded NumPy implementation; unsupported derived statistics and
-geodesic resources likewise fall back individually. Each choice and fallback
-reason is recorded per resource. Importing or using the default package does not
-import MLX.
+and Topographic Product's stable-kNN tables. Paired selected-rank work for T&C
+and MRRE also stays native, transferring only compact retained results. A
+distance matrix already produced by MLX is shared with dependent work through
+unified memory instead of being copied back to the device. Unsupported derived
+statistics and geodesic resources fall back individually. Each choice and
+fallback reason is recorded per resource. Importing or using the default
+package does not import MLX.
 
 MLX GPU execution requires an explicit `dtype="float32"`. ZADU never silently
 casts to lower precision: use `device="cpu", dtype="float64"` for the MLX CPU

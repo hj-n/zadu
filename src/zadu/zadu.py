@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections import deque
+from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import replace
@@ -20,7 +21,8 @@ from .engine.config import ExecutionConfig
 from .engine.errors import EmbeddingExecutionError
 from .engine.planner import build_execution_plan
 from .engine.resources import ResourceCache, ResourceKind, Space
-from .engine.result import build_many_run_info, build_run_info
+from .engine.result import build_many_run_info, build_run_info, build_stream_run_info
+from .engine.streaming import EmbeddingResult
 from .measures.utils.validation import (
     as_finite_2d,
     validate_labels,
@@ -239,6 +241,209 @@ class ZADU:
         )
         return results
 
+    def iter_measure_many(self, embeddings, labels=None) -> Iterator[EmbeddingResult]:
+        """Lazily yield bounded, ordered results for an embedding iterable.
+
+        Each yielded :class:`EmbeddingResult` contains the input index, the
+        exact value returned by the corresponding ``measure_many()`` item, and
+        that embedding's diagnostics. At most the planned worker width is
+        consumed or evaluated concurrently. Exhaust or close the iterator to
+        finalize ``last_run_info`` and release pending execution resources.
+
+        Optional providers that require native tensor batching execute this
+        streaming surface sequentially; their materialized ``measure_many()``
+        path retains provider-native batching.
+        """
+
+        if isinstance(embeddings, (str, bytes)):
+            raise TypeError("embeddings must be an iterable of 2D arrays")
+        if isinstance(embeddings, np.ndarray) and embeddings.ndim == 2:
+            raise ValueError(
+                "embeddings must contain multiple 2D arrays; "
+                "use measure() for one embedding"
+            )
+        try:
+            embedding_iterator = iter(embeddings)
+        except TypeError as exc:
+            raise TypeError("embeddings must be an iterable of 2D arrays") from exc
+
+        label_array = self._validate_measure_label(labels)
+        self.last_run_info = None
+        return self._iter_measure_many(embedding_iterator, label_array)
+
+    def _iter_measure_many(self, embedding_iterator, label_array):
+        requested_workers = self.execution.embedding_workers
+        fallback_reason = self._parallel_fallback_reason()
+        if self._provider.supports_embedding_batching and requested_workers > 1:
+            fallback_reason = "streaming_provider_sequential"
+        batch_plan = build_batch_execution_plan(
+            self._execution_plan,
+            embedding_count=requested_workers,
+            requested_workers=requested_workers,
+            parallel_fallback_reason=fallback_reason,
+        )
+        snc_effective_workers = self._snc_workers_for_collection(
+            batch_plan.effective_workers
+        )
+        batch_started = perf_counter()
+        final_cache = self._resource_cache
+        final_embedding = None
+        consumed_count = 0
+        completed_count = 0
+        max_in_flight = 0
+        resource_seconds = 0.0
+        metric_seconds = 0.0
+        metric_timings = [0.0 for _ in self._execution_plan.metric_plans]
+        provider_timings: dict[str, float] = {}
+        original_resources_reused = True
+        stream_complete = False
+        failed = True
+
+        def read_next():
+            nonlocal consumed_count
+            index = consumed_count
+            try:
+                raw_embedding = next(embedding_iterator)
+            except StopIteration:
+                return None
+            consumed_count += 1
+            return index, self._validate_embedding(
+                raw_embedding,
+                f"embeddings[{index}]",
+            )
+
+        def observe(index, result, run_info):
+            nonlocal completed_count
+            nonlocal metric_seconds
+            nonlocal original_resources_reused
+            nonlocal resource_seconds
+
+            completed_count += 1
+            resource_seconds += run_info["resource_seconds"]
+            metric_seconds += run_info["metric_seconds"]
+            for metric_index, metric in enumerate(run_info["metrics"]):
+                metric_timings[metric_index] += metric["seconds"]
+            for name, seconds in run_info["provider_timings"].items():
+                provider_timings[name] = provider_timings.get(name, 0.0) + seconds
+            original_resources_reused = original_resources_reused and all(
+                resource["reused"]
+                for resource in run_info["resources"]
+                if resource["space"] == "orig"
+            )
+            indexed_info = {"embedding_index": index, **run_info}
+            return EmbeddingResult(index=index, result=result, run_info=indexed_info)
+
+        try:
+            if batch_plan.effective_workers <= 1:
+                while True:
+                    item = read_next()
+                    if item is None:
+                        break
+                    index, embedding = item
+                    max_in_flight = max(max_in_flight, 1)
+                    try:
+                        result, run_info = self._execute_embedding(
+                            embedding,
+                            label_array,
+                            self._resource_cache,
+                            snc_effective_workers,
+                        )
+                    except Exception as exc:
+                        raise EmbeddingExecutionError(index) from exc
+                    final_cache = self._resource_cache
+                    final_embedding = embedding
+                    yield observe(index, result, run_info)
+            else:
+                label_view = _readonly_view(label_array)
+                base_cache = self._resource_cache
+                base_cache.freeze_original()
+                pending = deque()
+                with (
+                    threadpool_limits(limits=1),
+                    ThreadPoolExecutor(
+                        max_workers=batch_plan.effective_workers,
+                        thread_name_prefix="zadu-embedding",
+                    ) as executor,
+                ):
+
+                    def submit_one():
+                        item = read_next()
+                        if item is None:
+                            return False
+                        index, embedding = item
+                        future = executor.submit(
+                            self._execute_isolated_embedding,
+                            _readonly_view(embedding),
+                            label_view,
+                            base_cache,
+                            snc_effective_workers,
+                        )
+                        pending.append((index, embedding, future))
+                        return True
+
+                    while len(pending) < batch_plan.effective_workers and submit_one():
+                        pass
+                    max_in_flight = max(max_in_flight, len(pending))
+                    try:
+                        while pending:
+                            index, embedding, future = pending.popleft()
+                            try:
+                                result, run_info, cache = future.result()
+                            except Exception as exc:
+                                raise EmbeddingExecutionError(index) from exc
+                            final_cache = cache
+                            final_embedding = embedding
+                            yield observe(index, result, run_info)
+                            submit_one()
+                            max_in_flight = max(max_in_flight, len(pending))
+                    finally:
+                        for _, _, future in pending:
+                            future.cancel()
+                        pending.clear()
+            stream_complete = True
+            failed = False
+        except GeneratorExit:
+            failed = False
+            raise
+        finally:
+            close_input = getattr(embedding_iterator, "close", None)
+            if close_input is not None:
+                close_input()
+            if not failed:
+                if final_embedding is not None:
+                    self._adopt_execution_state(
+                        final_embedding,
+                        label_array,
+                        final_cache,
+                    )
+                actual_plan = build_batch_execution_plan(
+                    self._execution_plan,
+                    embedding_count=consumed_count,
+                    requested_workers=requested_workers,
+                    parallel_fallback_reason=fallback_reason,
+                )
+                self.last_run_info = build_stream_run_info(
+                    plan=self._execution_plan,
+                    cache=self._resource_cache,
+                    backend=self._provider.name,
+                    device=self._provider.device,
+                    dtype=self._provider.dtype,
+                    batch_plan=actual_plan,
+                    embedding_count=completed_count,
+                    input_consumed_count=consumed_count,
+                    resource_seconds=resource_seconds,
+                    metric_seconds=metric_seconds,
+                    provider_timings=provider_timings,
+                    metric_timings=metric_timings,
+                    total_seconds=perf_counter() - batch_started,
+                    original_resources_reused=(
+                        original_resources_reused if completed_count else False
+                    ),
+                    max_in_flight_observed=max_in_flight,
+                    stream_complete=stream_complete,
+                    snc_effective_workers=snc_effective_workers,
+                )
+
     def _execute_provider_batches(
         self,
         embedding_arrays,
@@ -350,7 +555,7 @@ class ZADU:
         emb_array = as_finite_2d(emb, name)
         if self.orig.shape[0] != emb_array.shape[0]:
             raise ValueError(
-                "orig and emb must have the same number of rows "
+                f"orig and {name} must have the same number of rows "
                 f"(orig={self.orig.shape[0]}, emb={emb_array.shape[0]})"
             )
         return emb_array

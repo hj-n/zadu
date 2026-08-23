@@ -11,6 +11,9 @@
   sharing.
 - A development-only exact selected-rank oracle, isolated memory/time benchmark,
   and post-0.5.1 scaling plan for replacing persistent full inverse rankings.
+- Bounded `iter_measure_many()` evaluation with lazy indexed results,
+  per-result diagnostics, memory-capped concurrency, deterministic ordering,
+  indexed failures, and explicit early-close cleanup.
 
 ### Changed
 

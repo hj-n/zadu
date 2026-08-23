@@ -1,8 +1,9 @@
 # Post-0.5.1 exact scaling plan
 
 > Status: active development record. PR 10-A established the selected-rank
-> oracle and measurement gates, and PR 10-B integrated it into production
-> NumPy. PR 10-C is implementing native MLX and PyTorch providers.
+> oracle and measurement gates, PR 10-B integrated it into production NumPy,
+> and PR 10-C completed native MLX and PyTorch providers. PR 11 implements
+> bounded repeated-embedding iteration.
 
 ## Objective
 
@@ -225,6 +226,13 @@ Gates:
   width;
 - yielded values, order, errors, and diagnostics match `measure_many()`; and
 - early iterator close releases embedded/provider resources.
+
+Implementation status: `iter_measure_many()` yields
+`EmbeddingResult(index, result, run_info)` records. It incrementally aggregates
+timings without retaining every run, caps NumPy/thread-safe provider work by the
+same collection memory plan, and closes its input plus pending workers on early
+termination. Providers whose safe parallel path is native tensor batching run
+the iterator sequentially; `measure_many()` retains native batching.
 
 ### PR 12 — disk-backed exact pair ordering
 
