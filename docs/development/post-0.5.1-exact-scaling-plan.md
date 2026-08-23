@@ -6,8 +6,8 @@
 > bounded repeated-embedding iteration. PR 12 implements exact external-memory
 > ordering for globally ranked pairs. PR 13 implements exact blockwise density
 > resources. PR 14 removes mixed-workload dense coupling and makes default kNN
-> exact, stable, float64, and memory-planned. PR 15 targets Gap Index's scalar
-> triangle loop.
+> exact, stable, float64, and memory-planned. PR 15 vectorizes Gap Index's
+> scalar triangle loop in bounded exact blocks.
 
 ## Objective
 
@@ -352,8 +352,17 @@ including its stable full-matrix neighbor sorts. The raw record is
 Replace the per-triangle Python distance loop with bounded vectorized Euclidean
 and precomputed-distance kernels. Preserve the scalar SciPy/callable fallback,
 the published triangulation and Heron formula, source parity, and finite-input
-validation. Benchmark random and duplicate-heavy inputs and report exact score
-deltas before making this the default fast path.
+validation.
+
+On the maintained Apple M4 with Python 3.12.13, NumPy 2.5.2, `n=50,000`, 20
+original dimensions, 99,986 Delaunay triangles, a 16 MiB vector work bound, and
+three repetitions, scalar edge calls took 1.687 s while four vector blocks took
+0.0263 s: a 64.2x speedup. Both retained 1,599,776 bytes of final normalized
+area vectors and produced the identical Gap Index score
+`0.8004256319323559`. Isolated peak RSS was 151.0 MiB for scalar execution and
+165.5 MiB for vectorized execution; the additional 14.5 MiB is consistent with
+the bounded vector workspace. The raw record is
+[`gap-index-vectorized-m4.json`](../../benchmarks/results/post-0.5.1/gap-index-vectorized-m4.json).
 
 ## Packaging and release policy
 

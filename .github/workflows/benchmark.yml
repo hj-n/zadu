@@ -45,6 +45,9 @@ jobs:
             --samples 2000 --dimension 20 --neighbors 20 --repeat 3 \
             --memory-budget 48MiB \
             --json benchmark-results/mixed-resources.json
+          python benchmarks/benchmark_gap_index.py \
+            --samples 10000 --dimension 20 --repeat 3 \
+            --json benchmark-results/gap-index.json
           python benchmarks/benchmark_topographic_resources.py \
             --samples 2000 --dimension 20 --neighbors 20 --repeat 5 \
             --json benchmark-results/topographic-resources.json

@@ -28,6 +28,7 @@ from scipy.spatial import Delaunay, QhullError, distance
 DistanceMetric = str | Callable[[npt.NDArray, npt.NDArray], float]
 _DEFORMATION_EPSILON = 1e-6
 _TRIANGLE_TOLERANCE = 1e-12
+_AREA_WORK_BYTES = 16 * 1024**2
 
 
 @dataclass(frozen=True)
@@ -115,32 +116,110 @@ def _triangle_area_from_sides(a: float, b: float, c: float) -> float:
     return math.sqrt(max(radicand, 0.0))
 
 
+def _triangle_areas_from_sides(
+    sides: npt.NDArray,
+) -> npt.NDArray[np.float64]:
+    """Vectorized Heron areas with the scalar path's validation semantics."""
+
+    side_array = np.asarray(sides, dtype=float)
+    if side_array.ndim != 2 or side_array.shape[1] != 3:
+        raise ValueError(
+            f"Triangle sides must have shape (n, 3), got {side_array.shape}"
+        )
+    if not np.all(np.isfinite(side_array)) or np.any(side_array < 0):
+        raise ValueError("Triangle edge lengths must be finite and non-negative")
+
+    semiperimeters = np.sum(side_array, axis=1) / 2.0
+    radicands = semiperimeters * (semiperimeters - side_array[:, 0])
+    radicands *= semiperimeters - side_array[:, 1]
+    radicands *= semiperimeters - side_array[:, 2]
+    scales = np.maximum(np.max(side_array, axis=1), 1.0) ** 4
+    if np.any(radicands < -_TRIANGLE_TOLERANCE * scales):
+        raise ValueError("Triangle edge lengths do not satisfy the triangle inequality")
+    return np.sqrt(np.maximum(radicands, 0.0))
+
+
+def _area_block_rows(points: npt.NDArray) -> int:
+    dtype = np.asarray(points).dtype
+    itemsize = max(dtype.itemsize, np.dtype(np.float64).itemsize)
+    bytes_per_row = max(1, 3 * points.shape[1] * itemsize + 6 * 8)
+    return max(1, _AREA_WORK_BYTES // bytes_per_row)
+
+
+def _euclidean_triangle_areas(
+    points: npt.NDArray,
+    triangles: npt.NDArray,
+) -> npt.NDArray[np.float64]:
+    """Compute exact Euclidean triangle areas in bounded vectorized blocks."""
+
+    areas = np.empty(len(triangles), dtype=float)
+    block_rows = _area_block_rows(points)
+    edge_columns = ((0, 1), (0, 2), (1, 2))
+    for start in range(0, len(triangles), block_rows):
+        stop = min(start + block_rows, len(triangles))
+        block = triangles[start:stop]
+        sides = np.empty((len(block), 3), dtype=float)
+        for side_index, (left, right) in enumerate(edge_columns):
+            differences = points[block[:, left]] - points[block[:, right]]
+            sides[:, side_index] = np.linalg.norm(differences, axis=1)
+        areas[start:stop] = _triangle_areas_from_sides(sides)
+    return areas
+
+
+def _precomputed_triangle_areas(
+    distances: npt.NDArray,
+    triangles: npt.NDArray,
+) -> npt.NDArray[np.float64]:
+    """Gather precomputed triangle edges without Python per-triangle calls."""
+
+    areas = np.empty(len(triangles), dtype=float)
+    block_rows = max(1, _AREA_WORK_BYTES // 64)
+    for start in range(0, len(triangles), block_rows):
+        stop = min(start + block_rows, len(triangles))
+        block = triangles[start:stop]
+        sides = np.column_stack(
+            (
+                distances[block[:, 0], block[:, 1]],
+                distances[block[:, 0], block[:, 2]],
+                distances[block[:, 1], block[:, 2]],
+            )
+        )
+        areas[start:stop] = _triangle_areas_from_sides(sides)
+    return areas
+
+
+def _scalar_triangle_areas(
+    points: npt.NDArray,
+    triangles: npt.NDArray,
+    metric: DistanceMetric,
+) -> npt.NDArray[np.float64]:
+    """Compatibility path for arbitrary SciPy metrics and callables."""
+
+    metric_fn = _resolve_metric(metric)
+    return np.array(
+        [
+            _triangle_area_from_sides(
+                metric_fn(points[a], points[b]),
+                metric_fn(points[a], points[c]),
+                metric_fn(points[b], points[c]),
+            )
+            for a, b, c in triangles
+        ],
+        dtype=float,
+    )
+
+
 def _compute_areas(
     points: npt.NDArray,
     triangles: npt.NDArray,
     metric: DistanceMetric,
 ) -> npt.NDArray[np.float64]:
     if metric == "precomputed":
-        areas = np.array(
-            [
-                _triangle_area_from_sides(points[a, b], points[a, c], points[b, c])
-                for a, b, c in triangles
-            ],
-            dtype=float,
-        )
+        areas = _precomputed_triangle_areas(points, triangles)
+    elif metric == "euclidean":
+        areas = _euclidean_triangle_areas(points, triangles)
     else:
-        metric_fn = _resolve_metric(metric)
-        areas = np.array(
-            [
-                _triangle_area_from_sides(
-                    metric_fn(points[a], points[b]),
-                    metric_fn(points[a], points[c]),
-                    metric_fn(points[b], points[c]),
-                )
-                for a, b, c in triangles
-            ],
-            dtype=float,
-        )
+        areas = _scalar_triangle_areas(points, triangles, metric)
 
     total_area = float(np.sum(areas))
     if not np.isfinite(total_area) or total_area <= 0:

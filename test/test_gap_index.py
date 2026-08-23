@@ -41,6 +41,105 @@ def test_gap_index_precomputed_distances_match_coordinate_input():
     assert precomputed_score == pytest.approx(coordinate_score, abs=1e-12)
 
 
+def test_vectorized_euclidean_areas_match_scalar_oracle_exactly():
+    orig, emb = _reference_fixture()
+    triangles = gap_index.Delaunay(emb).simplices
+
+    vectorized = gap_index._compute_areas(orig, triangles, "euclidean")
+    scalar = gap_index._scalar_triangle_areas(orig, triangles, distance.euclidean)
+    scalar /= np.sum(scalar)
+
+    np.testing.assert_allclose(vectorized, scalar, rtol=0, atol=2e-18)
+
+
+def test_vectorized_euclidean_areas_preserve_duplicate_point_edges():
+    orig, emb = _reference_fixture()
+    orig[1] = orig[0]
+    orig[3] = orig[2]
+    triangles = gap_index.Delaunay(emb).simplices
+
+    vectorized = gap_index._compute_areas(orig, triangles, "euclidean")
+    scalar = gap_index._scalar_triangle_areas(orig, triangles, distance.euclidean)
+    scalar /= np.sum(scalar)
+
+    np.testing.assert_allclose(vectorized, scalar, rtol=0, atol=0)
+
+
+def test_vectorized_precomputed_areas_match_scalar_oracle():
+    orig, emb = _reference_fixture()
+    triangles = gap_index.Delaunay(emb).simplices
+    distance_matrix = squareform(pdist(orig))
+
+    vectorized = gap_index._compute_areas(
+        distance_matrix,
+        triangles,
+        "precomputed",
+    )
+    scalar = np.asarray(
+        [
+            gap_index._triangle_area_from_sides(
+                distance_matrix[a, b],
+                distance_matrix[a, c],
+                distance_matrix[b, c],
+            )
+            for a, b, c in triangles
+        ]
+    )
+    scalar /= np.sum(scalar)
+
+    np.testing.assert_allclose(vectorized, scalar, rtol=0, atol=2e-18)
+
+
+def test_euclidean_area_blocks_preserve_results(monkeypatch):
+    orig, emb = _reference_fixture()
+    triangles = gap_index.Delaunay(emb).simplices
+    expected = gap_index._compute_areas(orig, triangles, "euclidean")
+    bytes_for_one_row = 3 * orig.shape[1] * 8 + 6 * 8
+    monkeypatch.setattr(gap_index, "_AREA_WORK_BYTES", bytes_for_one_row)
+
+    actual = gap_index._compute_areas(orig, triangles, "euclidean")
+
+    assert gap_index._area_block_rows(orig) == 1
+    np.testing.assert_allclose(actual, expected, rtol=0, atol=0)
+
+
+def test_precomputed_area_blocks_preserve_results(monkeypatch):
+    orig, emb = _reference_fixture()
+    triangles = gap_index.Delaunay(emb).simplices
+    distance_matrix = squareform(pdist(orig))
+    expected = gap_index._compute_areas(distance_matrix, triangles, "precomputed")
+    monkeypatch.setattr(gap_index, "_AREA_WORK_BYTES", 64)
+
+    actual = gap_index._compute_areas(distance_matrix, triangles, "precomputed")
+
+    np.testing.assert_allclose(actual, expected, rtol=0, atol=0)
+
+
+def test_callable_metric_retains_scalar_compatibility_path():
+    orig, emb = _reference_fixture()
+    calls = 0
+
+    def counted_cityblock(left, right):
+        nonlocal calls
+        calls += 1
+        return distance.cityblock(left, right)
+
+    result = gap_index.compute(orig, emb, metric=counted_cityblock)
+
+    assert calls == 3 * len(result.triangles)
+    assert result.score == pytest.approx(
+        gap_index.gap_index(orig, emb, metric="cityblock"),
+        abs=1e-12,
+    )
+
+
+def test_vectorized_heron_validation_matches_scalar_contract():
+    with pytest.raises(ValueError, match="triangle inequality"):
+        gap_index._triangle_areas_from_sides(np.asarray([[1.0, 1.0, 3.0]]))
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        gap_index._triangle_areas_from_sides(np.asarray([[1.0, np.nan, 1.0]]))
+
+
 def test_gap_index_is_invariant_to_rigid_transform_and_uniform_scaling():
     rng = np.random.default_rng(7)
     orig = rng.normal(size=(50, 2))
