@@ -9,6 +9,7 @@ from benchmarks.benchmark_selected_ranks import (
     blockwise_selected_rank_oracle,
     full_ranking_oracle,
 )
+from zadu import ZADU
 from zadu.measures import (
     class_aware_trustworthiness_continuity,
     mean_relative_rank_error,
@@ -162,6 +163,47 @@ def test_selected_rank_oracle_enforces_one_row_memory_floor():
             3,
             max_working_bytes=24 * len(orig) - 1,
         )
+
+
+def test_numpy_production_resource_matches_full_ranking_oracle_with_ties():
+    orig = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+            [2.0, 0.0],
+            [-2.0, 0.0],
+            [0.0, 2.0],
+            [0.0, -2.0],
+            [3.0, 0.0],
+        ]
+    )
+    emb = orig[:, ::-1].copy()
+    specs = [
+        {"id": "tnc", "params": {"k": 2}},
+        {"id": "tnc", "params": {"k": 5}},
+        {"id": "mrre", "params": {"k": 4}},
+    ]
+    runner = ZADU(specs, orig)
+    plan = runner._execution_plan.rank_comparison_plan
+
+    built = runner._provider.build_rank_comparisons(
+        plan,
+        orig,
+        emb,
+        orig_knn=runner._resource_cache._values[plan.original_knn_key],
+        orig_distance_matrix=None,
+        emb_distance_matrix=None,
+    )
+    expected = full_ranking_oracle(orig, emb, 5, membership_ks=(2, 5))
+
+    _assert_same_comparisons(expected.comparisons, built.value)
+    assert built.details["algorithm"] == "blockwise_selected_ranks"
+    assert built.details["original_distance_source"] == "blockwise_scipy_cdist"
+    assert built.details["embedded_distance_source"] == "blockwise_scipy_cdist"
 
 
 def test_selected_rank_retained_bytes_meet_production_gate():

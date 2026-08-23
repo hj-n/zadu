@@ -222,7 +222,7 @@ def test_string_memory_budget_uses_existing_preallocation_guard():
         )
 
 
-def test_plan_deduplicates_resources_and_promotes_knn_to_ranking():
+def test_plan_deduplicates_resources_and_keeps_selected_ranks_paired():
     orig, _, _ = _sample()
     first = ZADU(_mixed_specs(), orig)
     second = ZADU(_mixed_specs(), orig)
@@ -233,9 +233,10 @@ def test_plan_deduplicates_resources_and_promotes_knn_to_ranking():
         (key.kind, key.space, key.k) for key in first._execution_plan.resources
     ] == [
         (ResourceKind.DISTANCE_MATRIX, Space.ORIGINAL, None),
-        (ResourceKind.NEIGHBOR_RANKING, Space.ORIGINAL, 10),
+        (ResourceKind.KNN, Space.ORIGINAL, 10),
+        (ResourceKind.STABLE_KNN, Space.ORIGINAL, 5),
         (ResourceKind.DISTANCE_MATRIX, Space.EMBEDDED, None),
-        (ResourceKind.NEIGHBOR_RANKING, Space.EMBEDDED, 10),
+        (ResourceKind.KNN, Space.EMBEDDED, 10),
         (ResourceKind.PAIR_STATISTICS, Space.PAIRED, None),
         (ResourceKind.RANK_COMPARISONS, Space.PAIRED, 5),
         (ResourceKind.NEIGHBOR_STATISTICS, Space.PAIRED, 10),
@@ -245,8 +246,8 @@ def test_plan_deduplicates_resources_and_promotes_knn_to_ranking():
     index_bytes = compact_index_dtype(n).itemsize
     expected_bytes = (
         2 * n * n * 8
-        + 2 * (n * n * index_bytes + n * 10 * index_bytes)
-        + 2 * n * 5 * index_bytes
+        + 2 * n * 10 * index_bytes
+        + 4 * n * 5 * index_bytes
         + 2 * n * 5
         + n * 8
     )
@@ -297,12 +298,6 @@ def test_mixed_k_plan_preserves_exact_results_with_duplicate_ties():
             orig,
             emb,
             k=2,
-            knn_ranking_info=(
-                runner.orig_knn_indices[:, :2],
-                runner.orig_knn_ranking,
-                runner.emb_knn_indices[:, :2],
-                runner.emb_knn_ranking,
-            ),
         ),
         local_continuity_meta_criteria.measure(
             orig,
@@ -368,47 +363,74 @@ def test_last_run_info_is_separate_json_compatible_metadata():
         "stress",
     ]
 
-    orig_ranking = next(
+    rank_comparisons = next(
         resource
         for resource in info["resources"]
-        if resource["space"] == "orig" and resource["kind"] == "neighbor_ranking"
+        if resource["space"] == "pair" and resource["kind"] == "rank_comparisons"
     )
-    emb_ranking = next(
+    orig_knn = next(
         resource
         for resource in info["resources"]
-        if resource["space"] == "emb" and resource["kind"] == "neighbor_ranking"
+        if resource["space"] == "orig" and resource["kind"] == "knn"
     )
-    assert orig_ranking["reused"] is True
-    assert orig_ranking["built_in_run"] is False
-    assert orig_ranking["consumers"] == [
-        "trustworthiness_continuity",
-        "local_continuity_meta_criteria",
-    ]
-    assert emb_ranking["built_in_run"] is True
-    assert emb_ranking["consumer_count"] == 3
-    assert emb_ranking["first_consumer"] == 0
-    assert emb_ranking["last_consumer"] == 2
+    emb_knn = next(
+        resource
+        for resource in info["resources"]
+        if resource["space"] == "emb" and resource["kind"] == "knn"
+    )
+    assert rank_comparisons["built_in_run"] is True
+    assert rank_comparisons["reused"] is False
+    assert rank_comparisons["consumers"] == ["trustworthiness_continuity"]
+    assert rank_comparisons["details"]["algorithm"] == "blockwise_selected_ranks"
+    assert orig_knn["reused"] is True
+    assert orig_knn["built_in_run"] is False
+    assert orig_knn["consumers"] == ["local_continuity_meta_criteria"]
+    orig_stable_knn = next(
+        resource
+        for resource in info["resources"]
+        if resource["space"] == "orig" and resource["kind"] == "stable_knn"
+    )
+    assert orig_stable_knn["reused"] is True
+    assert orig_stable_knn["consumers"] == ["trustworthiness_continuity"]
+    assert emb_knn["built_in_run"] is True
+    assert emb_knn["consumer_count"] == 2
+    assert emb_knn["first_consumer"] == 1
+    assert emb_knn["last_consumer"] == 2
     json.dumps(info)
 
 
 def test_original_resources_are_reused_across_measure_calls(monkeypatch):
     orig, emb, labels = _sample()
     calls = []
+    rank_calls = []
     original_build = NumpyResourceProvider.build
+    original_rank_build = NumpyResourceProvider.build_rank_comparisons
 
     def wrapped_build(self, key, points, **kwargs):
         calls.append((key.space, key.kind))
         return original_build(self, key, points, **kwargs)
 
+    def wrapped_rank_build(self, plan, orig, emb, **kwargs):
+        rank_calls.append(plan.k)
+        return original_rank_build(self, plan, orig, emb, **kwargs)
+
     monkeypatch.setattr(NumpyResourceProvider, "build", wrapped_build)
+    monkeypatch.setattr(
+        NumpyResourceProvider,
+        "build_rank_comparisons",
+        wrapped_rank_build,
+    )
     runner = ZADU(_mixed_specs(), orig)
     first = runner.measure(emb, labels)
     second = runner.measure(emb + 0.01, labels)
 
     assert len(first) == len(second) == 4
-    for kind in (ResourceKind.DISTANCE_MATRIX, ResourceKind.NEIGHBOR_RANKING):
+    for kind in (ResourceKind.DISTANCE_MATRIX, ResourceKind.KNN):
         assert calls.count((Space.ORIGINAL, kind)) == 1
         assert calls.count((Space.EMBEDDED, kind)) == 2
+    assert calls.count((Space.ORIGINAL, ResourceKind.STABLE_KNN)) == 1
+    assert calls.count((Space.EMBEDDED, ResourceKind.STABLE_KNN)) == 0
+    assert rank_calls == [5, 5]
 
 
 def test_planner_records_mixed_numpy_and_faiss_resource_providers():

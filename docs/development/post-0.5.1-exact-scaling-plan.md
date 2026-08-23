@@ -1,7 +1,8 @@
 # Post-0.5.1 exact scaling plan
 
-> Status: active development record. PR 10-A establishes the selected-rank
-> oracle and measurement gates; production execution is unchanged in that PR.
+> Status: active development record. PR 10-A established the selected-rank
+> oracle and measurement gates. PR 10-B is integrating that design into the
+> production NumPy planner and provider.
 
 ## Objective
 
@@ -66,7 +67,7 @@ Every implementation in this plan must preserve the following exact behavior:
 
 ## PR sequence
 
-### PR 10-A — selected-rank oracle and gates (current)
+### PR 10-A — selected-rank oracle and gates (complete)
 
 Add a development-only exact blockwise implementation alongside the existing
 full-ranking oracle. It performs stable row sorts, constructs an inverse for one
@@ -108,13 +109,17 @@ Acceptance gates for moving the design into production:
   budgets; and
 - no production or public-API change in PR 10-A.
 
-### PR 10-B — NumPy production selected-rank resource
+### PR 10-B — NumPy production selected-rank resource (current)
 
 Make `RANK_COMPARISONS` a direct paired-space resource for its registered
 metrics instead of creating two persistent `NEIGHBOR_RANKING` dependencies.
-Move the reviewed blockwise algorithm into `NumpyResourceProvider`, update cache
-and peak estimates, and expose its algorithm, block count, block rows, work
-budget, and retained bytes in run diagnostics.
+Cache one exact `O(nk)` stable original-space neighbor prefix, obtain it through
+stable partial selection, and count only the requested original-space target
+ranks. The embedded side uses a stable block sort plus linear inverse scatter.
+This avoids re-sorting the original neighbor prefix for every embedding without
+bringing back a quadratic cache. Update cache and peak estimates, and expose
+the algorithms, block count, block rows, work budget, and retained bytes in run
+diagnostics.
 
 Compatibility paths that explicitly call a metric with `knn_ranking_info`
 remain unchanged. If another scheduled metric later requires a genuine full

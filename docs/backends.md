@@ -13,6 +13,7 @@ rounding, not the number of pairs, neighbors, or iterations evaluated.
 | Dtype | float64 | float32/64 | float32 | float32/64 | float32 | float32/64 |
 | Dense/condensed Euclidean | Native | Native | Native | Native | Native | Common code |
 | Stable full/inverse ranking | Native | Native | Native | Native | Native | Common code |
+| Paired selected ranks | Native | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback |
 | Ordinary exact kNN | FAISS | Stable full-sort prefix | Stable full-sort prefix | Stable full-sort prefix | Stable full-sort prefix | Common code |
 | Topographic stable-kNN | SciPy blocks | Native | Native | Native | Native | Common code |
 | Derived metric reductions | Native | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback |
@@ -65,6 +66,13 @@ reasons, input/output transfers, first execution, warm execution, block sizes,
 planned package-managed peak memory, and provider-native batch width. Device
 framework allocators can retain pools outside that estimate; use isolated peak
 RSS or device-profiler measurements when capacity planning.
+
+Registered T&C, class-aware T&C, and MRRE specifications request the paired
+selected-rank resource. The NumPy provider builds it in exact bounded blocks and
+retains `O(nk)` indices, cross-space ranks, and membership masks. MLX and
+PyTorch still expose their explicit full-ranking capability, but selected-rank
+execution falls back to NumPy until a native paired implementation is available;
+the resource record makes that boundary visible.
 
 Cold time includes first framework/device initialization. Warm time measures a
 reused provider after that initialization. Neither should be substituted for

@@ -31,7 +31,6 @@ from zadu.kernels import PairAccumulator
 from zadu.measures.utils import knn
 from zadu.measures.utils import pairwise_dist as pdist
 from zadu.measures.utils.vectorized import (
-    gather_ranks,
     rowwise_intersection_count,
     rowwise_membership,
 )
@@ -176,12 +175,13 @@ class NumpyResourceProvider:
                 key.k,
                 working_memory_bytes=working_memory_bytes,
                 geodesic=geodesic,
+                distance_matrix=distance_matrix,
             )
             return BuiltResource(
                 value,
                 "scipy",
                 {
-                    "algorithm": "blockwise_stable_argsort",
+                    "algorithm": "blockwise_stable_argpartition",
                     "block_count": block_count,
                     "block_rows": block_rows,
                     "working_bytes": working_memory_bytes,
@@ -465,16 +465,85 @@ class NumpyResourceProvider:
     def build_rank_comparisons(
         self,
         plan: RankComparisonExecutionPlan,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
         *,
-        orig_ranking: NeighborRanking,
-        emb_ranking: NeighborRanking,
+        orig_knn: npt.NDArray,
+        orig_distance_matrix: npt.NDArray | None,
+        emb_distance_matrix: npt.NDArray | None,
     ) -> BuiltResource:
-        """Gather cross-space ranks once and share exact membership masks."""
+        """Build exact cross-space ranks without retaining full inverse rankings."""
 
-        orig_indices = orig_ranking.indices[:, : plan.k]
-        emb_indices = emb_ranking.indices[:, : plan.k]
-        orig_ranks_of_emb = gather_ranks(orig_ranking.ranking, emb_indices)
-        emb_ranks_of_orig = gather_ranks(emb_ranking.ranking, orig_indices)
+        n_samples = orig.shape[0]
+        bytes_per_sort_row = n_samples * 24
+        largest_membership_k = max(plan.membership_ks, default=0)
+        bytes_per_row = max(1, bytes_per_sort_row, largest_membership_k**2)
+        if plan.work_budget_bytes < bytes_per_row:
+            raise MemoryError(
+                "Selected-rank sorting requires enough working memory for one row"
+            )
+
+        index_dtype = compact_index_dtype(n_samples)
+        orig_indices = np.asarray(orig_knn)[:, : plan.k]
+        emb_indices = np.empty((n_samples, plan.k), dtype=index_dtype)
+        orig_ranks_of_emb = np.empty((n_samples, plan.k), dtype=index_dtype)
+        emb_ranks_of_orig = np.empty((n_samples, plan.k), dtype=index_dtype)
+        positions = np.arange(n_samples, dtype=np.intp)
+        block_count = 0
+
+        for start in range(0, n_samples, plan.block_rows):
+            stop = min(start + plan.block_rows, n_samples)
+            local_rows = np.arange(stop - start)[:, None]
+            global_rows = np.arange(start, stop)
+
+            emb_distances = self._rank_distance_block(
+                emb,
+                emb_distance_matrix,
+                start,
+                stop,
+                geodesic=False,
+            )
+            emb_distances[np.arange(stop - start), global_rows] = -np.inf
+            emb_order = np.argsort(emb_distances, axis=1, kind="stable")
+            emb_indices[start:stop] = emb_order[:, 1 : plan.k + 1]
+            del emb_distances
+
+            inverse = np.empty_like(emb_order)
+            inverse[local_rows, emb_order] = positions
+            emb_ranks_of_orig[start:stop] = inverse[
+                local_rows, orig_indices[start:stop]
+            ]
+            del emb_order, inverse
+
+            orig_distances = self._rank_distance_block(
+                orig,
+                orig_distance_matrix,
+                start,
+                stop,
+                geodesic=plan.geodesic,
+            )
+            orig_distances[np.arange(stop - start), global_rows] = -np.inf
+            selected_targets = emb_indices[start:stop]
+            columns = positions[None, :]
+            for rank_column in range(plan.k):
+                target_indices = selected_targets[:, rank_column]
+                target_distances = orig_distances[
+                    np.arange(stop - start), target_indices
+                ][:, None]
+                selected_ranks = np.count_nonzero(
+                    orig_distances < target_distances,
+                    axis=1,
+                )
+                tied_before_target = columns < target_indices[:, None]
+                np.logical_and(
+                    orig_distances == target_distances,
+                    tied_before_target,
+                    out=tied_before_target,
+                )
+                selected_ranks += np.count_nonzero(tied_before_target, axis=1)
+                orig_ranks_of_emb[start:stop, rank_column] = selected_ranks
+            block_count += 1
+
         emb_in_orig = {}
         orig_in_emb = {}
         for k in plan.membership_ks:
@@ -500,14 +569,56 @@ class NumpyResourceProvider:
             value,
             "numpy",
             {
-                "algorithm": "fused_gathered_ranks_and_membership",
+                "algorithm": "blockwise_selected_ranks",
                 "k": plan.k,
                 "requested_ks": list(plan.requested_ks),
                 "membership_ks": list(plan.membership_ks),
+                "block_count": block_count,
+                "block_rows": plan.block_rows,
+                "work_budget_bytes": plan.work_budget_bytes,
                 "working_bytes": plan.working_bytes,
+                "index_dtype": index_dtype.name,
+                "original_neighbor_source": "cached_stable_knn",
+                "original_rank_algorithm": "stable_distance_count",
+                "embedded_rank_algorithm": "stable_sort_inverse_scatter",
+                "original_distance_source": (
+                    "shared_distance_matrix"
+                    if orig_distance_matrix is not None
+                    else (
+                        "blockwise_geodesic"
+                        if plan.geodesic
+                        else "blockwise_scipy_cdist"
+                    )
+                ),
+                "embedded_distance_source": (
+                    "shared_distance_matrix"
+                    if emb_distance_matrix is not None
+                    else "blockwise_scipy_cdist"
+                ),
                 "fused_metrics": list(plan.metric_ids),
             },
         )
+
+    @classmethod
+    def _rank_distance_block(
+        cls,
+        points: npt.NDArray,
+        distance_matrix: npt.NDArray | None,
+        start: int,
+        stop: int,
+        *,
+        geodesic: bool,
+    ) -> npt.NDArray:
+        if distance_matrix is not None:
+            return np.array(distance_matrix[start:stop], copy=True)
+        if geodesic:
+            if points.shape[1] < 2:
+                raise ValueError(
+                    "geodesic=True requires orig[:, 0] = longitude and "
+                    "orig[:, 1] = latitude in radians"
+                )
+            return cls.geodesic_distance_block(points[start:stop], points)
+        return cdist(points[start:stop], points)
 
     def build_neighbor_statistics(
         self,
@@ -607,6 +718,7 @@ class NumpyResourceProvider:
         *,
         working_memory_bytes: int,
         geodesic: bool,
+        distance_matrix: npt.NDArray | None = None,
     ) -> tuple[npt.NDArray, int, int]:
         n_samples = points.shape[0]
         bytes_per_row = n_samples * 32
@@ -623,14 +735,47 @@ class NumpyResourceProvider:
         block_count = 0
         for start in range(0, n_samples, block_rows):
             stop = min(start + block_rows, n_samples)
-            distances = (
-                cls.geodesic_distance_block(points[start:stop], points)
-                if geodesic
-                else cdist(points[start:stop], points)
-            )
+            if distance_matrix is not None:
+                distances = np.array(distance_matrix[start:stop], copy=True)
+            else:
+                distances = (
+                    cls.geodesic_distance_block(points[start:stop], points)
+                    if geodesic
+                    else cdist(points[start:stop], points)
+                )
             distances[np.arange(stop - start), np.arange(start, stop)] = -np.inf
-            order = np.argsort(distances, axis=1, kind="stable")
-            result[start:stop] = order[:, 1 : k + 1]
+            candidates = np.argpartition(distances, k, axis=1)[:, : k + 1]
+            candidate_distances = np.take_along_axis(
+                distances,
+                candidates,
+                axis=1,
+            )
+            candidate_order = np.lexsort(
+                (candidates, candidate_distances),
+                axis=1,
+            )
+            candidates = np.take_along_axis(candidates, candidate_order, axis=1)
+            candidate_distances = np.take_along_axis(
+                candidate_distances,
+                candidate_order,
+                axis=1,
+            )
+            thresholds = candidate_distances[:, -1]
+            tie_counts = np.count_nonzero(
+                distances == thresholds[:, None],
+                axis=1,
+            )
+            for row in np.flatnonzero(tie_counts > 1):
+                below_threshold = candidates[
+                    row,
+                    candidate_distances[row] < thresholds[row],
+                ]
+                needed = k + 1 - below_threshold.size
+                stable_boundary = np.flatnonzero(distances[row] == thresholds[row])[
+                    :needed
+                ]
+                candidates[row] = np.concatenate((below_threshold, stable_boundary))
+            result[start:stop] = candidates[:, 1 : k + 1]
             block_count += 1
         return result, block_count, block_rows
 

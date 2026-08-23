@@ -531,13 +531,22 @@ def test_zadu_mlx_routes_all_neighbor_metrics_and_preserves_scores():
         for resource in neighbor_resources
     )
     assert {resource["kind"] for resource in neighbor_resources} == {
-        "neighbor_ranking",
+        "knn",
         "stable_knn",
     }
+    rank_comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert rank_comparison["provider"] == "numpy"
+    assert rank_comparison["details"]["requested_provider"] == "mlx"
+    assert rank_comparison["details"]["provider_fallback"] is True
+    assert rank_comparison["details"]["algorithm"] == "blockwise_selected_ranks"
     json.dumps(runner.last_run_info)
 
 
-def test_zadu_mlx_dense_pair_plan_shares_distance_storage_with_rankings():
+def test_zadu_mlx_dense_pair_plan_shares_distances_with_selected_ranks():
     _mlx_provider()
     rng = np.random.default_rng(180)
     orig = rng.normal(size=(64, 6))
@@ -564,20 +573,21 @@ def test_zadu_mlx_dense_pair_plan_shares_distance_storage_with_rankings():
             assert actual_score[name] == pytest.approx(
                 expected_score[name], rel=3e-5, abs=3e-6
             )
-    ranking_resources = [
+    rank_comparisons = [
         resource
         for resource in runner.last_run_info["resources"]
-        if resource["kind"] == "neighbor_ranking"
+        if resource["kind"] == "rank_comparisons"
     ]
-    assert len(ranking_resources) == 2
-    assert all(
-        resource["details"]["distance_source"] == "shared_distance_matrix"
-        for resource in ranking_resources
+    assert len(rank_comparisons) == 1
+    comparison = rank_comparisons[0]
+    assert comparison["details"]["original_distance_source"] == (
+        "shared_distance_matrix"
     )
-    assert all(
-        resource["details"]["distance_zero_copy"] is True
-        for resource in ranking_resources
+    assert comparison["details"]["embedded_distance_source"] == (
+        "shared_distance_matrix"
     )
+    assert comparison["details"]["requested_provider"] == "mlx"
+    assert comparison["details"]["provider_fallback"] is True
 
 
 def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
@@ -610,8 +620,10 @@ def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
         )
     )
 
-    ranking_bytes_per_row = orig.shape[0] * (4 * 4 + 4 * 4)
-    budget = baseline._execution_plan.estimated_cache_bytes + 2 * ranking_bytes_per_row
+    selected_rank_bytes_per_row = orig.shape[0] * 24
+    budget = (
+        baseline._execution_plan.estimated_cache_bytes + 2 * selected_rank_bytes_per_row
+    )
     bounded = ZADU(
         specs,
         orig,
@@ -622,14 +634,15 @@ def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
             memory_budget=budget,
         ),
     )
-    ranking_records = [
+    assert bounded._execution_plan.rank_comparison_plan.block_rows == 2
+    bounded.measure(rng.normal(size=(len(orig), 2)))
+    comparison = next(
         record
         for record in bounded._resource_cache.records.values()
-        if record.key.kind is ResourceKind.NEIGHBOR_RANKING
-    ]
-
-    assert ranking_records
-    assert all(record.details["block_rows"] == 2 for record in ranking_records)
+        if record.key.kind is ResourceKind.RANK_COMPARISONS
+    )
+    assert comparison.details["block_rows"] == 2
+    assert comparison.details["provider_fallback"] is True
     assert bounded._execution_plan.planned_peak_bytes <= budget
 
     with pytest.raises(MemoryError, match="peak working memory"):
@@ -646,7 +659,7 @@ def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
                         orig,
                         execution=config,
                     )._execution_plan.estimated_cache_bytes
-                    + ranking_bytes_per_row
+                    + selected_rank_bytes_per_row
                     - 1
                 ),
             ),

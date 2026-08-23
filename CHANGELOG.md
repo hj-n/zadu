@@ -12,6 +12,18 @@
 - A development-only exact selected-rank oracle, isolated memory/time benchmark,
   and post-0.5.1 scaling plan for replacing persistent full inverse rankings.
 
+### Changed
+
+- Scheduled T&C, class-aware T&C, and MRRE now build exact cross-space ranks in
+  bounded NumPy row blocks and retain `O(nk)` state instead of two persistent
+  `n x n` inverse rankings. Run diagnostics expose block bounds, distance reuse,
+  retained dtypes, and optional-provider fallback.
+
+### Fixed
+
+- Rank-based metrics now honor `geodesic=True` for the registered original
+  space even when no other metric requests a dense distance matrix.
+
 ## 0.5.1
 
 ### Added

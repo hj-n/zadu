@@ -258,6 +258,7 @@ def resource_nbytes(value: Any) -> int:
         arrays = (
             value.orig_ranks_of_emb,
             value.emb_ranks_of_orig,
+            value.emb_indices,
             *value.emb_in_orig.values(),
             *value.orig_in_emb.values(),
         )
@@ -291,6 +292,7 @@ def resource_dtype(value: Any) -> str | dict[str, str] | None:
         return value.scores.dtype.name
     if isinstance(value, RankComparisons):
         return {
+            "indices": value.orig_indices.dtype.name,
             "ranks": value.orig_ranks_of_emb.dtype.name,
             "membership": "bool",
         }
@@ -473,8 +475,11 @@ class ResourceCache:
             start = perf_counter()
             built = self.provider.build_rank_comparisons(
                 rank_plan,
-                orig_ranking=self._values[rank_plan.original_ranking_key],
-                emb_ranking=self._values[rank_plan.embedded_ranking_key],
+                orig,
+                emb,
+                orig_knn=self._values[rank_plan.original_knn_key],
+                orig_distance_matrix=orig_distance_matrix,
+                emb_distance_matrix=emb_distance_matrix,
             )
             self._store(rank_plan.statistics_key, built, perf_counter() - start)
 

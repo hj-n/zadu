@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy.typing as npt
 
-from zadu.engine.resources import NeighborRanking, PairOrder, ResourceKey, Space
+from zadu.engine.resources import PairOrder, ResourceKey, Space
 
 if TYPE_CHECKING:
     from zadu.engine.planner import (
@@ -115,9 +115,12 @@ class ExactResourceProvider(Protocol):
     def build_rank_comparisons(
         self,
         plan: RankComparisonExecutionPlan,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
         *,
-        orig_ranking: NeighborRanking,
-        emb_ranking: NeighborRanking,
+        orig_knn: npt.NDArray,
+        orig_distance_matrix: npt.NDArray | None,
+        emb_distance_matrix: npt.NDArray | None,
     ) -> BuiltResource: ...
 
     def build_neighbor_statistics(

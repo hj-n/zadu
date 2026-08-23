@@ -169,12 +169,22 @@ class ZADU(
 
 ### Exact Execution Planning
 
-ZADU plans pair reductions, distance matrices, neighbor tables, and full rankings
-as typed exact resources. Compatible requests are computed once: a larger `k`
-serves smaller prefixes, a full ranking also serves metrics that only need kNN
-indices, and Stress, Scale-Normalized Stress, and Pearson share one exact pass
-over unique point pairs. Spearman and Non-Metric Stress share one exact,
-tie-aware original-space pair order across repeated embeddings.
+ZADU plans pair reductions, distance matrices, neighbor tables, selected ranks,
+and full rankings as typed exact resources. Compatible requests are computed
+once: a larger `k` serves smaller prefixes, and Stress, Scale-Normalized Stress,
+and Pearson share one exact pass over unique point pairs. Spearman and
+Non-Metric Stress share one exact, tie-aware original-space pair order across
+repeated embeddings.
+
+T&C, class-aware T&C, and MRRE retain only the two neighbor prefixes and the
+cross-space ranks they actually consume. One exact stable original-space prefix
+is reused; selected original ranks are counted in bounded blocks, while the
+embedded side uses a stable block sort and linear inverse scatter. Persistent
+rank state is therefore `O(nk)` instead of two `n x n` inverse rankings.
+Full-ranking resources remain available for explicit compatibility paths, but
+scheduled metrics no longer allocate them merely to gather `k` values.
+Duplicate-distance ties still use original column order, and an exact row that
+cannot fit the configured memory budget raises `MemoryError` before execution.
 
 Pair-only specifications avoid two persistent `n x n` distance matrices. The
 planner uses compact upper-triangle storage when it fits, switches to bounded
@@ -245,11 +255,12 @@ scores = runner.measure(ld)
 ```
 
 The MLX preview accelerates Euclidean distance matrices, condensed pair
-distances, stable full/inverse rankings, exact stable neighbor prefixes, and
-Topographic Product's stable-kNN tables. A distance matrix already produced by
-MLX is shared with dependent ranking work through unified memory instead of
-being copied back to the device. Unsupported derived statistics and geodesic
-resources fall back individually to NumPy/SciPy/FAISS; each choice and fallback
+distances, explicit stable full/inverse rankings, exact stable neighbor prefixes,
+and Topographic Product's stable-kNN tables. A distance matrix already produced
+by MLX is shared with dependent work through unified memory instead of being
+copied back to the device. The paired selected-rank reduction currently falls
+back to the bounded NumPy implementation; unsupported derived statistics and
+geodesic resources likewise fall back individually. Each choice and fallback
 reason is recorded per resource. Importing or using the default package does not
 import MLX.
 
@@ -300,12 +311,13 @@ scores = runner.measure(ld)
 ```
 
 The PyTorch preview accelerates exact Euclidean distance matrices, condensed
-pair distances, stable full/inverse rankings, and exact stable neighbor prefixes
-with memory-planned row blocks. Unsupported derived resources and geodesic
-requests fall back individually and are identified in `last_run_info`. MPS
-supports float32 in this backend; CPU and CUDA accept float32 or float64. No
-PyTorch import occurs on the base/default path, and `backend="auto"` remains
-NumPy/FAISS.
+pair distances, explicit stable full/inverse rankings, and exact stable neighbor
+prefixes with memory-planned row blocks. The paired selected-rank reduction
+currently falls back to bounded NumPy; other unsupported derived resources and
+geodesic requests also fall back individually and are identified in
+`last_run_info`. MPS supports float32 in this backend; CPU and CUDA accept
+float32 or float64. No PyTorch import occurs on the base/default path, and
+`backend="auto"` remains NumPy/FAISS.
 
 Ranking uses `torch.argsort(..., stable=True)`, forces self to rank zero, then
 removes self from the returned neighbor prefix. It deliberately does not use

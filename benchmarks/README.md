@@ -153,8 +153,8 @@ reuse-event counts.
 
 ## Exact selected-rank design gate
 
-Compare the current full inverse-ranking representation with the development-
-only blockwise selected-rank oracle used to gate the next production resource:
+Compare the 0.5.1 full inverse-ranking representation with the production NumPy
+blockwise selected-rank resource:
 
 ```bash
 python benchmarks/benchmark_selected_ranks.py \
@@ -162,11 +162,12 @@ python benchmarks/benchmark_selected_ranks.py \
   --memory-budget 16777216 --repeat 3
 ```
 
-The two implementations run in isolated processes. The report includes exact
-array digests, metric-score delta, median construction time, process peak RSS,
-retained-array bytes, and the selected path's planned working bytes and block
-shape. PR 10-A does not change production execution; its oracle and thresholds
-are documented in the
+The two implementations run in isolated processes. The full-ranking side is an
+independent compatibility oracle; the selected side calls the installed NumPy
+provider. The report includes exact array digests, metric-score delta, median
+construction time, process peak RSS, retained-array bytes, and the selected
+path's planned working bytes and block shape. The design thresholds are
+documented in the
 [post-0.5.1 exact scaling plan](../docs/development/post-0.5.1-exact-scaling-plan.md),
 with the initial [Apple M4 result](results/post-0.5.1/selected-ranks-m4-16mib.json)
 kept as machine-readable evidence.

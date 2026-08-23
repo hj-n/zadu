@@ -31,6 +31,7 @@ ORDERED_WORK_BYTES_PER_PAIR = 64
 DEFAULT_RESOURCE_WORK_BYTES = 64 * 1024**2
 STABLE_KNN_WORK_BYTES_PER_CELL = 32
 TOPOGRAPHIC_WORK_BYTES_PER_SELECTED_DISTANCE = 16
+SELECTED_RANK_WORK_BYTES_PER_CELL = 24
 RANK_WORK_BYTES_PER_COMPARISON = 1
 NEIGHBOR_WORK_BYTES_PER_COMPARISON = 1
 NEIGHBOR_GRAPH_BYTES_PER_EDGE = 16
@@ -90,14 +91,15 @@ class TopographicExecutionPlan:
 @dataclass(frozen=True, slots=True)
 class RankComparisonExecutionPlan:
     statistics_key: ResourceKey
-    original_ranking_key: ResourceKey
-    embedded_ranking_key: ResourceKey
+    original_knn_key: ResourceKey
     k: int
     membership_ks: tuple[int, ...]
     requested_ks: tuple[int, ...]
+    block_rows: int
     work_budget_bytes: int
     working_bytes: int
     metric_ids: tuple[str, ...]
+    geodesic: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,10 +208,9 @@ def build_execution_plan(
 
     rank_comparison_k = maxima.get((ResourceKind.RANK_COMPARISONS, Space.PAIRED), -1)
     if rank_comparison_k >= 0:
-        for space in (Space.ORIGINAL, Space.EMBEDDED):
-            pair = (ResourceKind.NEIGHBOR_RANKING, space)
-            requested_pairs.add(pair)
-            maxima[pair] = max(maxima.get(pair, -1), rank_comparison_k)
+        pair = (ResourceKind.STABLE_KNN, Space.ORIGINAL)
+        requested_pairs.add(pair)
+        maxima[pair] = max(maxima.get(pair, -1), rank_comparison_k)
 
     neighbor_statistics_k = maxima.get(
         (ResourceKind.NEIGHBOR_STATISTICS, Space.PAIRED), -1
@@ -466,17 +467,12 @@ def build_execution_plan(
         if rank_comparison_statistics_key is None
         else consumer_sets[rank_comparison_statistics_key]
     )
-    rank_original_key = None
-    rank_embedded_key = None
+    rank_original_knn_key = None
     if rank_comparison_statistics_key is not None:
-        rank_original_key = canonical_by_pair[
-            (ResourceKind.NEIGHBOR_RANKING, Space.ORIGINAL)
+        rank_original_knn_key = canonical_by_pair[
+            (ResourceKind.STABLE_KNN, Space.ORIGINAL)
         ]
-        rank_embedded_key = canonical_by_pair[
-            (ResourceKind.NEIGHBOR_RANKING, Space.EMBEDDED)
-        ]
-        consumer_sets[rank_original_key].update(rank_comparison_consumers)
-        consumer_sets[rank_embedded_key].update(rank_comparison_consumers)
+        consumer_sets[rank_original_knn_key].update(rank_comparison_consumers)
 
     neighbor_statistics_consumers = (
         set()
@@ -781,12 +777,11 @@ def build_execution_plan(
 
     rank_comparison_plan = None
     if rank_comparison_statistics_key is not None:
-        assert rank_original_key is not None
-        assert rank_embedded_key is not None
+        assert rank_original_knn_key is not None
         largest_membership_k = max(rank_membership_ks, default=0)
         bytes_per_row = max(
             1,
-            2 * rank_comparison_k * compact_index_dtype(n_samples).itemsize,
+            n_samples * SELECTED_RANK_WORK_BYTES_PER_CELL,
             largest_membership_k**2 * RANK_WORK_BYTES_PER_COMPARISON,
         )
         block_rows = max(
@@ -797,17 +792,18 @@ def build_execution_plan(
         peak_working_bytes = max(peak_working_bytes, working_bytes)
         rank_comparison_plan = RankComparisonExecutionPlan(
             statistics_key=rank_comparison_statistics_key,
-            original_ranking_key=rank_original_key,
-            embedded_ranking_key=rank_embedded_key,
+            original_knn_key=rank_original_knn_key,
             k=rank_comparison_k,
             membership_ks=rank_membership_ks,
             requested_ks=rank_requested_ks,
+            block_rows=block_rows,
             work_budget_bytes=available_work_bytes,
             working_bytes=working_bytes,
             metric_ids=tuple(
                 metric_plans[index].metric_id
                 for index in sorted(rank_comparison_consumers)
             ),
+            geodesic=geodesic,
         )
 
     neighbor_statistics_plan = None
@@ -965,7 +961,7 @@ def _estimate_cache_bytes(
             total += key.k * np.dtype(np.float64).itemsize
         elif key.kind is ResourceKind.RANK_COMPARISONS:
             assert key.k is not None
-            total += 2 * n_samples * key.k * index_bytes
+            total += 3 * n_samples * key.k * index_bytes
             total += 2 * n_samples * sum(rank_membership_ks)
         elif key.kind is ResourceKind.NEIGHBOR_STATISTICS:
             total += n_samples * len(lcmc_ks) * np.dtype(np.float64).itemsize
