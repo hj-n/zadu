@@ -147,7 +147,7 @@ def test_original_pair_order_is_reused_across_embeddings(monkeypatch):
     assert order_resource["built_in_run"] is False
 
 
-def test_ordered_metrics_use_dense_sources_with_neighbor_resources():
+def test_ordered_metrics_keep_condensed_sources_with_neighbor_resources():
     orig, emb = _sample(n=60)
     specs = [
         {"id": "lcmc", "params": {"k": 7}},
@@ -157,12 +157,19 @@ def test_ordered_metrics_use_dense_sources_with_neighbor_resources():
 
     scores = runner.measure(emb)
 
-    assert runner._execution_plan.pair_plan.strategy is PairStrategy.DENSE
-    assert runner.orig_distance_matrix is not None
-    assert runner.emb_distance_matrix is not None
+    assert runner._execution_plan.pair_plan.strategy is PairStrategy.CONDENSED
+    assert runner.orig_distance_matrix is None
+    assert runner.emb_distance_matrix is None
     assert all(
-        key.kind is not ResourceKind.CONDENSED_PAIRS
+        key.kind is not ResourceKind.DISTANCE_MATRIX
         for key in runner._execution_plan.resources
+    )
+    assert (
+        sum(
+            key.kind is ResourceKind.CONDENSED_PAIRS
+            for key in runner._execution_plan.resources
+        )
+        == 1
     )
     _assert_scores_close(scores[1:], _dense_reference(orig, emb))
 

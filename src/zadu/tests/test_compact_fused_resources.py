@@ -103,11 +103,18 @@ def test_density_resources_fuse_sigma_and_avoid_distance_matrices(monkeypatch):
 
 def test_density_reuses_a_dense_matrix_required_by_other_metrics():
     orig, emb, _ = _sample(seed=2)
-    runner = ZADU([{"id": "dtm"}, {"id": "stress"}], orig)
+    runner = ZADU([{"id": "dtm"}, {"id": "stress"}], orig, geodesic=True)
 
     actual = runner.measure(emb)
 
-    _assert_result_close(actual[0], distance_to_measure.measure(orig, emb))
+    expected_densities = tuple(
+        pairwise_dist.distance_matrix_to_density(matrix, 0.1)
+        for matrix in (runner.orig_distance_matrix, runner.emb_distance_matrix)
+    )
+    _assert_result_close(
+        actual[0],
+        distance_to_measure.measure(orig, emb, densities=expected_densities),
+    )
     assert np.isfinite(actual[1]["stress"])
     densities = [
         resource

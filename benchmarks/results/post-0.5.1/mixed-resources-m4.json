@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "samples": 2000,
+    "dimension": 20,
+    "embedding_dimension": 2,
+    "neighbors": 20,
+    "memory_budget": "48MiB",
+    "repeat": 3,
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "dense": {
+    "mode": "dense",
+    "strategy": "dense-reference",
+    "cold_seconds": 0.5633087910246104,
+    "warm_seconds": 0.2897237909492105,
+    "peak_rss_mib": 417.46875,
+    "retained_bytes": 64320000,
+    "planned_peak_bytes": null,
+    "providers": [
+      "numpy",
+      "scipy"
+    ]
+  },
+  "planned": {
+    "mode": "planned",
+    "strategy": "condensed",
+    "cold_seconds": 0.09031604090705514,
+    "warm_seconds": 0.03903058310970664,
+    "peak_rss_mib": 151.421875,
+    "retained_bytes": 32320000,
+    "planned_peak_bytes": 50331616,
+    "providers": [
+      "numpy",
+      "scipy"
+    ]
+  },
+  "cold_speedup": 6.237084634880257,
+  "warm_speedup": 7.422994171899989,
+  "retained_memory_reduction": 1.99009900990099,
+  "maximum_score_delta": 9.540979117872439e-18
+}

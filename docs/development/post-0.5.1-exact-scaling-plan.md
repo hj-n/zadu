@@ -5,7 +5,9 @@
 > and PR 10-C completed native MLX and PyTorch providers. PR 11 implements
 > bounded repeated-embedding iteration. PR 12 implements exact external-memory
 > ordering for globally ranked pairs. PR 13 implements exact blockwise density
-> resources.
+> resources. PR 14 removes mixed-workload dense coupling and makes default kNN
+> exact, stable, float64, and memory-planned. PR 15 targets Gap Index's scalar
+> triangle loop.
 
 ## Objective
 
@@ -314,6 +316,44 @@ The blockwise path retained the same 80,000 bytes of final density vectors,
 used 23.9x less planned working memory, and took 1.12x the dense runtime. The
 maximum density delta was zero. The raw record is
 [`blockwise-density-m4.json`](../../benchmarks/results/post-0.5.1/blockwise-density-m4.json).
+
+### PR 14 — memory-aware mixed resources and stable float64 kNN
+
+Select pair representation from the whole resource plan rather than forcing
+`DISTANCE_MATRIX` whenever pair reductions coexist with neighbors or ranks.
+Unordered reductions may use condensed or streaming pairs; ordered reductions
+may use condensed or explicitly budgeted external ordering. A geodesic run
+retains the existing dense compatibility path.
+
+The NumPy provider now serves ordinary and topographic kNN through the same
+exact row-block algorithm: SciPy computes float64 distances, partial selection
+keeps the useful prefix, and boundary ties are repaired by original column
+index. Direct metric calls use the equivalent stable dense oracle. This removes
+FAISS's implicit float32 input conversion and its mandatory base dependency.
+
+On the maintained Apple M4 with Python 3.12.13, NumPy 2.5.2, `n=2,000`, 20
+original dimensions, `k=20`, LCMC plus Stress and Pearson, a 48 MiB plan, and
+three repetitions:
+
+| Exact mixed execution | Cold median | Warm median | Process peak RSS | Retained resources |
+| --- | ---: | ---: | ---: | ---: |
+| Legacy dense matrices and stable full sorts | 0.563 s | 0.290 s | 417.5 MiB | 64.32 MB |
+| Condensed pairs and blockwise stable kNN | 0.090 s | 0.039 s | 151.4 MiB | 32.32 MB |
+
+The planned path was 6.24x faster cold and 7.42x faster warm, retained 1.99x
+less package resource memory, and held package-planned peak memory to exactly
+48 MiB. Process peak RSS was 63.7% lower, and the maximum score delta was
+`9.54e-18`. The comparison reproduces the former mixed dense provider path,
+including its stable full-matrix neighbor sorts. The raw record is
+[`mixed-resources-m4.json`](../../benchmarks/results/post-0.5.1/mixed-resources-m4.json).
+
+### PR 15 — exact Gap Index vectorization
+
+Replace the per-triangle Python distance loop with bounded vectorized Euclidean
+and precomputed-distance kernels. Preserve the scalar SciPy/callable fallback,
+the published triangulation and Heron formula, source parity, and finite-input
+validation. Benchmark random and duplicate-heavy inputs and report exact score
+deltas before making this the default fast path.
 
 ## Packaging and release policy
 

@@ -219,7 +219,7 @@ Topographic Product keeps exact stable neighbor ordering without persistent
 metric evaluates only the `O(nk)` distances selected by the two neighbor tables,
 and multiple requested `k` values share one maximum-`k` prefix calculation.
 
-The execution configuration exposes the default exact NumPy/FAISS CPU path,
+The execution configuration exposes the default exact NumPy/SciPy CPU path,
 optional MLX and PyTorch previews, and a human-readable memory budget:
 
 ```python
@@ -305,10 +305,11 @@ index to break duplicate-distance ties. Diagnostics record unified-memory reuse,
 the distance source, block bounds, input/output boundaries, first
 compile/execution, and warm execution separately.
 
-FAISS remains faster for a standalone ordinary kNN table on the current Apple
-M4 benchmark, while MLX is substantially faster for full rankings and stable
-kNN. `backend="auto"` therefore remains on the existing NumPy/FAISS path; select
-MLX explicitly for a workload that benefits from its supported resources.
+The default NumPy scheduler computes ordinary kNN in bounded float64 distance
+blocks with stable index-based tie handling. This avoids an implicit precision
+downgrade and lets mixed pair-and-neighbor specifications stay within one
+memory plan. `backend="auto"` remains on NumPy/SciPy; select MLX explicitly for
+a workload that benefits from its supported resources.
 
 For `measure_many()`, setting `embedding_workers` above one selects native MLX
 tensor batching rather than Python worker threads. Equal-shaped embeddings are
@@ -350,7 +351,7 @@ currently falls back to bounded NumPy; other unsupported derived resources and
 geodesic requests also fall back individually and are identified in
 `last_run_info`. MPS supports float32 in this backend; CPU and CUDA accept
 float32 or float64. No PyTorch import occurs on the base/default path, and
-`backend="auto"` remains NumPy/FAISS.
+`backend="auto"` remains NumPy/SciPy.
 
 Ranking uses `torch.argsort(..., stable=True)`, forces self to rank zero, then
 removes self from the returned neighbor prefix. It deliberately does not use

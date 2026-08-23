@@ -259,10 +259,10 @@ def test_plan_deduplicates_resources_and_keeps_selected_ranks_paired():
     assert [
         (key.kind, key.space, key.k) for key in first._execution_plan.resources
     ] == [
-        (ResourceKind.DISTANCE_MATRIX, Space.ORIGINAL, None),
+        (ResourceKind.CONDENSED_PAIRS, Space.ORIGINAL, None),
         (ResourceKind.KNN, Space.ORIGINAL, 10),
         (ResourceKind.STABLE_KNN, Space.ORIGINAL, 5),
-        (ResourceKind.DISTANCE_MATRIX, Space.EMBEDDED, None),
+        (ResourceKind.CONDENSED_PAIRS, Space.EMBEDDED, None),
         (ResourceKind.KNN, Space.EMBEDDED, 10),
         (ResourceKind.PAIR_STATISTICS, Space.PAIRED, None),
         (ResourceKind.RANK_COMPARISONS, Space.PAIRED, 5),
@@ -270,9 +270,10 @@ def test_plan_deduplicates_resources_and_keeps_selected_ranks_paired():
     ]
 
     n = len(orig)
+    pair_count = n * (n - 1) // 2
     index_bytes = compact_index_dtype(n).itemsize
     expected_bytes = (
-        2 * n * n * 8
+        2 * pair_count * 8
         + 2 * n * 10 * index_bytes
         + 4 * n * 5 * index_bytes
         + 2 * n * 5
@@ -282,7 +283,7 @@ def test_plan_deduplicates_resources_and_keeps_selected_ranks_paired():
     assert first.ranking_k == 5
     assert first.knn_both_k == 10
     assert first.knn_emb_k == 7
-    assert first._execution_plan.pair_plan.strategy is PairStrategy.DENSE
+    assert first._execution_plan.pair_plan.strategy is PairStrategy.CONDENSED
 
 
 def test_mixed_k_plan_preserves_exact_results_with_duplicate_ties():
@@ -341,14 +342,7 @@ def test_mixed_k_plan_preserves_exact_results_with_duplicate_ties():
             k=1,
             knn_emb_info=runner.emb_knn_indices[:, :1],
         ),
-        stress.measure(
-            orig,
-            emb,
-            distance_matrices=(
-                runner.orig_distance_matrix,
-                runner.emb_distance_matrix,
-            ),
-        ),
+        stress.measure(orig, emb),
     ]
 
     for actual, direct in zip(planned, expected, strict=True):
@@ -452,22 +446,32 @@ def test_original_resources_are_reused_across_measure_calls(monkeypatch):
     second = runner.measure(emb + 0.01, labels)
 
     assert len(first) == len(second) == 4
-    for kind in (ResourceKind.DISTANCE_MATRIX, ResourceKind.KNN):
+    for kind in (
+        ResourceKind.CONDENSED_PAIRS,
+        ResourceKind.KNN,
+        ResourceKind.STABLE_KNN,
+    ):
         assert calls.count((Space.ORIGINAL, kind)) == 1
+    for kind in (ResourceKind.CONDENSED_PAIRS, ResourceKind.KNN):
         assert calls.count((Space.EMBEDDED, kind)) == 2
-    assert calls.count((Space.ORIGINAL, ResourceKind.STABLE_KNN)) == 1
     assert calls.count((Space.EMBEDDED, ResourceKind.STABLE_KNN)) == 0
     assert rank_calls == [5, 5]
 
 
-def test_planner_records_mixed_numpy_and_faiss_resource_providers():
+def test_planner_records_exact_stable_scipy_knn_provider():
     orig, emb, _ = _sample()
 
     knn_only = ZADU([{"id": "proc", "params": {"k": 5}}], orig)
     knn_only.measure(emb)
     assert {
         resource["provider"] for resource in knn_only.last_run_info["resources"]
-    } == {"faiss"}
+    } == {"scipy"}
+    assert all(
+        resource["details"]["algorithm"] == "blockwise_stable_argpartition"
+        and resource["details"]["dtype"] == "float64"
+        and resource["details"]["stable_ties"] is True
+        for resource in knn_only.last_run_info["resources"]
+    )
 
     selected = ZADU([{"id": "topo", "params": {"k": 5}}], orig)
     selected.measure(emb)
@@ -479,6 +483,25 @@ def test_planner_records_mixed_numpy_and_faiss_resource_providers():
         ("stable_knn", "scipy"),
         ("topographic_product_statistics", "numpy"),
     }
+
+
+def test_scheduled_knn_preserves_float64_near_neighbor_order():
+    points = np.asarray(
+        [
+            [0.0, 0.0],
+            [1.0 + 1e-8, 0.0],
+            [1.0, 0.0],
+            [3.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+    runner = ZADU([{"id": "proc", "params": {"k": 2}}], points)
+
+    assert runner.orig_knn_indices[0].tolist() == [2, 1]
+    key = runner._execution_plan.resources[0]
+    assert key.kind is ResourceKind.KNN
+    assert runner._execution_plan.resource_working_bytes[key] >= len(points) * 32
 
 
 def test_metrics_without_resources_produce_an_empty_resource_plan():

@@ -21,6 +21,14 @@
 
 ### Changed
 
+- Mixed pair-and-neighbor specifications now plan condensed, streaming, or
+  external pair resources independently of their kNN resources instead of
+  forcing two dense distance matrices. Strategy selection accounts for all
+  coexisting resource caches before accepting a memory budget.
+- Default NumPy kNN now uses exact stable float64 row blocks for direct and
+  scheduled execution. This removes the implicit FAISS float32 conversion and
+  the mandatory `faiss-cpu` dependency while preserving bounded scheduler
+  memory and deterministic duplicate-distance ties.
 - Exact external pair ordering now uses compiled binary merges instead of a
   per-record Python heap merge.
 - DTM and KL density resources now fuse multiple sigma values in exact

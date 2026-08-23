@@ -1,6 +1,6 @@
 # Exact execution backends
 
-ZADU keeps NumPy/SciPy/FAISS as the dependency-free execution baseline and
+ZADU keeps NumPy/SciPy as the dependency-light execution baseline and
 loads accelerator frameworks only after an explicit backend request. Every
 backend in 0.5.1 evaluates the full exact resource contract: `float32` changes
 rounding, not the number of pairs, neighbors, or iterations evaluated.
@@ -14,7 +14,7 @@ rounding, not the number of pairs, neighbors, or iterations evaluated.
 | Dense/condensed Euclidean | Native | Native | Native | Native | Native | Common code |
 | Stable full/inverse ranking | Native | Native | Native | Native | Native | Common code |
 | Paired selected ranks | Native | Native | Native | Native | Native | Common code |
-| Ordinary exact kNN | FAISS | Stable full-sort prefix | Stable full-sort prefix | Stable full-sort prefix | Stable full-sort prefix | Common code |
+| Ordinary exact kNN | Stable blockwise partial selection | Stable full-sort prefix | Stable full-sort prefix | Stable full-sort prefix | Stable full-sort prefix | Common code |
 | Topographic stable-kNN | SciPy blocks | Native | Native | Native | Native | Common code |
 | Derived metric reductions | Native | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback |
 | Geodesic resources | Native | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback |
@@ -36,10 +36,11 @@ resource paths.
 has explicit availability checks, but 0.5.1 was not benchmarked or parity-tested
 on real CUDA hardware. It is supported as a preview, not performance-validated.
 
-`backend="auto"` deliberately selects NumPy/FAISS. FAISS is still the strongest
-standalone small-k path on the maintained Apple machine, accelerator startup can
-dominate small jobs, and float64 is the compatibility baseline. Choose MLX or
-PyTorch explicitly after benchmarking the actual specification and data size.
+`backend="auto"` deliberately selects NumPy/SciPy. Its ordinary kNN path keeps
+float64 precision, repairs partial-selection boundary ties by original index,
+and bounds distance work by the execution memory plan. Accelerator startup can
+dominate small jobs, so choose MLX or PyTorch explicitly after benchmarking the
+actual specification and data size.
 
 ## Selection and diagnostics
 

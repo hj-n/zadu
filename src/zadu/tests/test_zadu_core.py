@@ -2,6 +2,8 @@ import numpy as np
 import pytest
 
 from zadu import MEASURE, ZADU, MeasureId, make_spec
+from zadu.backends import NumpyResourceProvider
+from zadu.engine.resources import ResourceKind
 from zadu.measures import (
     clustering_and_external_validation_measure as cevm,
 )
@@ -11,7 +13,6 @@ from zadu.measures import (
 from zadu.measures import (
     label_trustworthiness_and_continuity as ltnc,
 )
-from zadu.measures.utils import knn as knn_mod
 from zadu.registry import METRICS
 
 
@@ -54,13 +55,14 @@ def test_knn_precompute_reused_for_knn_info_measures(monkeypatch):
     emb = np.random.RandomState(1).rand(80, 2)
     call_count = {"knn": 0}
 
-    original_knn = knn_mod.knn
+    original_build = NumpyResourceProvider.build
 
-    def wrapped_knn(*args, **kwargs):
-        call_count["knn"] += 1
-        return original_knn(*args, **kwargs)
+    def wrapped_build(self, key, points, **kwargs):
+        if key.kind is ResourceKind.KNN:
+            call_count["knn"] += 1
+        return original_build(self, key, points, **kwargs)
 
-    monkeypatch.setattr(knn_mod, "knn", wrapped_knn)
+    monkeypatch.setattr(NumpyResourceProvider, "build", wrapped_build)
 
     spec = [
         {"id": "proc", "params": {"k": 10}},

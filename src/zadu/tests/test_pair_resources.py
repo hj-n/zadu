@@ -128,7 +128,7 @@ def test_large_pair_only_plan_streams_by_default_without_preallocation():
     assert runner._execution_plan.pair_plan.block_rows == 1024
 
 
-def test_mixed_neighbor_resources_keep_dense_legacy_provider_path():
+def test_mixed_neighbor_resources_keep_pair_and_knn_work_compact():
     orig, emb = _sample(n=60)
     specs = [
         {"id": "lcmc", "params": {"k": 7}},
@@ -139,18 +139,47 @@ def test_mixed_neighbor_resources_keep_dense_legacy_provider_path():
 
     scores = runner.measure(emb)
 
-    assert runner._execution_plan.pair_plan.strategy is PairStrategy.DENSE
-    assert runner.orig_distance_matrix is not None
-    assert runner.emb_distance_matrix is not None
+    assert runner._execution_plan.pair_plan.strategy is PairStrategy.CONDENSED
+    assert runner.orig_distance_matrix is None
+    assert runner.emb_distance_matrix is None
     assert {
         (resource["kind"], resource["provider"])
         for resource in runner.last_run_info["resources"]
     } == {
-        ("distance_matrix", "numpy"),
-        ("knn", "numpy"),
+        ("condensed_pairs", "scipy"),
+        ("knn", "scipy"),
         ("neighbor_statistics", "scipy"),
         ("pair_statistics", "numpy"),
     }
+    assert all(np.isfinite(value) for score in scores for value in score.values())
+
+
+def test_mixed_cache_bytes_are_considered_before_selecting_condensed_pairs():
+    orig, emb = _sample(n=200)
+    k = 7
+    pair_count = len(orig) * (len(orig) - 1) // 2
+    index_bytes = np.dtype(np.int32).itemsize
+    non_pair_cache = 2 * len(orig) * k * index_bytes + len(orig) * 8
+    budget = 2 * pair_count * 8 + non_pair_cache - 1
+    specs = [
+        {"id": "lcmc", "params": {"k": k}},
+        {"id": "stress"},
+        {"id": "pr"},
+    ]
+
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(memory_budget=budget),
+    )
+    scores = runner.measure(emb)
+
+    assert runner._execution_plan.pair_plan.strategy is PairStrategy.STREAMING
+    assert all(
+        key.kind not in {ResourceKind.DISTANCE_MATRIX, ResourceKind.CONDENSED_PAIRS}
+        for key in runner._execution_plan.resources
+    )
+    assert runner._execution_plan.planned_peak_bytes <= budget
     assert all(np.isfinite(value) for score in scores for value in score.values())
 
 

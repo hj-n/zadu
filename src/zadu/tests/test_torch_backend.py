@@ -668,7 +668,7 @@ def test_zadu_torch_routes_neighbor_metrics_and_preserves_scores(
     ("device", "dtype", "rel", "abs_"),
     [("cpu", "float64", 1e-12, 1e-12), ("mps", "float32", 4e-5, 4e-6)],
 )
-def test_zadu_torch_dense_pair_plan_shares_distances_with_selected_ranks(
+def test_zadu_torch_mixed_pair_plan_keeps_selected_ranks_blockwise(
     device, dtype, rel, abs_
 ):
     rng = np.random.default_rng(770)
@@ -701,10 +701,15 @@ def test_zadu_torch_dense_pair_plan_shares_distances_with_selected_ranks(
     assert comparison["provider"] == "torch"
     assert comparison["details"]["provider_fallback"] is False
     assert comparison["details"]["original_distance_source"] == (
-        "shared_distance_matrix"
+        "fused_blockwise_pairwise"
     )
     assert comparison["details"]["embedded_distance_source"] == (
-        "shared_distance_matrix"
+        "fused_blockwise_pairwise"
+    )
+    assert runner.last_run_info["pair_strategy"] == "condensed"
+    assert not any(
+        resource["kind"] == "distance_matrix"
+        for resource in runner.last_run_info["resources"]
     )
 
 
