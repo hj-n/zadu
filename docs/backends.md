@@ -83,14 +83,16 @@ slower cold, while the crossover appeared by the 2,000-sample representative
 suite.
 
 On the maintained Apple M4 at `n=2,000`, `k=20`, the selected-rank T&C/MRRE
-suite measured 1.73x faster warm through MLX GPU float32 and 2.81x faster
-through PyTorch CPU float64 than NumPy at a 16 MiB total budget. PyTorch MPS was
-0.86x at 16 MiB because seven blocks amplified transfers, but 2.71x at 64 MiB
-with two blocks. Cold construction plus first execution remained slower for all
-optional cases due framework startup. The float64 PyTorch CPU score delta was
-zero; float32 score deltas were at most `1.36e-6` in these runs. These are
-machine-specific observations, so benchmark the actual device, budget, and
-specification rather than treating the capability table as a speed guarantee.
+suite measured 2.91x faster warm through PyTorch CPU float64 at a 16 MiB total
+budget. MLX GPU and PyTorch MPS were sensitive to the block plan and device
+scheduling: their 16 MiB medians were 0.85x and 1.38x, while their 64 MiB
+two-block medians were 3.98x and 3.09x. MLX CPU float64 measured 0.89x at
+16 MiB. The Torch CPU samples were tightly grouped, whereas both GPU APIs had
+wide run-to-run ranges on the interactive Mac. Float64 score deltas were zero;
+float32 score deltas were at most `1.36e-6`. These are machine-specific
+observations, so benchmark the actual device, budget, and specification rather
+than treating the capability table as a speed guarantee. Cold framework time
+is reported separately and must not be inferred from warm medians.
 
 ## Third-party backend entry points
 

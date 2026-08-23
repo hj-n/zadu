@@ -140,9 +140,11 @@ def main() -> None:
         "numpy_construction_and_first_measure_seconds": numpy_cold_seconds,
         "numpy_first_measure_seconds": numpy_first_seconds,
         "numpy_warm_seconds": numpy_warm_seconds,
+        "numpy_warm_samples_seconds": numpy_durations,
         "native_construction_and_first_measure_seconds": native_cold_seconds,
         "native_first_measure_seconds": native_first_seconds,
         "native_warm_seconds": native_warm_seconds,
+        "native_warm_samples_seconds": native_durations,
         "warm_speedup": numpy_warm_seconds / native_warm_seconds,
         "cold_maximum_score_delta": _maximum_score_delta(
             numpy_cold,
@@ -153,7 +155,9 @@ def main() -> None:
             native_warm,
         ),
         "numpy_selected_rank_build_seconds": statistics.median(numpy_rank_durations),
+        "numpy_selected_rank_build_samples_seconds": numpy_rank_durations,
         "native_selected_rank_build_seconds": statistics.median(native_rank_durations),
+        "native_selected_rank_build_samples_seconds": native_rank_durations,
         "native_selected_rank_details": rank_record["details"],
     }
     rendered = json.dumps(payload, indent=2)

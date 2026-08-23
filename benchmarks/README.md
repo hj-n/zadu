@@ -179,17 +179,19 @@ T&C and MRRE, run each framework in a separate process:
 ```bash
 python benchmarks/benchmark_selected_rank_backends.py \
   --backend mlx --device gpu --dtype float32 \
-  --samples 2000 --dimension 20 --k 20 --repeat 7
+  --samples 2000 --dimension 20 --k 20 --repeat 15
 
 python benchmarks/benchmark_selected_rank_backends.py \
   --backend torch --device cpu --dtype float64 \
-  --samples 2000 --dimension 20 --k 20 --repeat 7
+  --samples 2000 --dimension 20 --k 20 --repeat 15
 ```
 
 The report separates construction/first execution, warm total time, selected-
 rank resource time, score delta, transfer time, block shape, and fixed provider
-workspace. For MPS, repeat with the budgets expected in production; transfer
-overhead can reverse the result when a tight budget creates many row blocks.
+workspace, and emits every warm timing sample so device variance stays visible.
+For GPU and MPS, repeat with the budgets expected in production; transfer and
+scheduling overhead can reverse the result when a tight budget creates many row
+blocks.
 The maintained Apple M4 measurements are stored in
 [native-selected-ranks-m4.json](results/post-0.5.1/native-selected-ranks-m4.json).
 

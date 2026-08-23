@@ -27,6 +27,8 @@
 
 - Rank-based metrics now honor `geodesic=True` for the registered original
   space even when no other metric requests a dense distance matrix.
+- MLX CPU float64 resources now create slices, casts, and workspace views on
+  the provider stream instead of inheriting the process-default GPU stream.
 
 ## 0.5.1
 

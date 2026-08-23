@@ -186,21 +186,26 @@ PyTorch batches the compact outputs into fewer host transfers and reserves a
 fixed `int64` target-index workspace in the memory plan. Geodesic execution is
 recorded as a NumPy fallback.
 
-Apple M4 measurements with Python 3.12.13, `n=2,000`, `k=20`, seven warm
+Apple M4 measurements with Python 3.12.13, `n=2,000`, `k=20`, fifteen warm
 repetitions, and T&C plus MRRE gave the following end-to-end medians:
 
 | Backend | Total budget | NumPy warm | Native warm | Speedup | Max score delta |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| MLX GPU float32 | 16 MiB | 0.284 s | 0.164 s | 1.73x | 1.36e-6 |
-| Torch CPU float64 | 16 MiB | 0.285 s | 0.101 s | 2.81x | 0 |
-| Torch MPS float32 | 16 MiB | 0.286 s | 0.333 s | 0.86x | 1.53e-7 |
-| Torch MPS float32 | 64 MiB | 0.291 s | 0.107 s | 2.71x | 1.53e-7 |
+| MLX CPU float64 | 16 MiB | 0.285 s | 0.322 s | 0.89x | 0 |
+| MLX GPU float32 | 16 MiB | 0.286 s | 0.338 s | 0.85x | 1.36e-6 |
+| MLX GPU float32 | 64 MiB | 0.287 s | 0.072 s | 3.98x | 1.36e-6 |
+| Torch CPU float64 | 16 MiB | 0.286 s | 0.098 s | 2.91x | 0 |
+| Torch MPS float32 | 16 MiB | 0.285 s | 0.206 s | 1.38x | 1.53e-7 |
+| Torch MPS float32 | 64 MiB | 0.287 s | 0.093 s | 3.09x | 1.53e-7 |
 
-At 16 MiB, the MPS plan needed seven blocks and transfer overhead dominated; at
-64 MiB it needed two. Framework startup also made construction plus the first
-measure slower than NumPy in every optional case. These results justify keeping
-NumPy as `auto` and exposing block/transfer diagnostics rather than selecting a
-device from hardware presence alone. CUDA remains unmeasured on this Mac.
+At 16 MiB, optional plans needed seven blocks; at 64 MiB, GPU plans needed two.
+The GPU sample ranges were wide (`0.059–0.409 s` for MLX at 16 MiB and
+`0.052–0.378 s` for MPS), so the medians are observations rather than stable
+service guarantees. PyTorch CPU was tightly grouped at `0.098–0.103 s`.
+Framework startup and interactive device scheduling also made cold results
+unreliable predictors of warm throughput. These results justify keeping NumPy
+as `auto` and exposing block/transfer diagnostics rather than selecting a device
+from hardware presence alone. CUDA remains unmeasured on this Mac.
 
 ### PR 11 — bounded streaming embedding evaluation
 
