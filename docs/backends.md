@@ -55,6 +55,8 @@ runner = ZADU(
         dtype="float32",
         memory_budget="4GiB",
         embedding_workers=4,
+        pair_order_strategy="auto",
+        temporary_budget=None,
     ),
 )
 scores = runner.measure_many(embeddings)
@@ -81,9 +83,21 @@ not retain every per-embedding run.
 
 Diagnostics distinguish requested and actual providers, per-resource fallback
 reasons, input/output transfers, first execution, warm execution, block sizes,
-planned package-managed peak memory, and provider-native batch width. Device
+planned package-managed peak memory, external pair run/merge shape and
+temporary peak, and provider-native batch width. Device
 framework allocators can retain pools outside that estimate; use isolated peak
 RSS or device-profiler measurements when capacity planning.
+
+Exact Spearman and Non-Metric Stress normally use the in-memory condensed pair
+order. Set `pair_order_strategy="external"` plus an explicit
+`temporary_budget`, or provide that budget with `"auto"` and a restrictive
+memory budget, to select bounded external sorting. `temporary_directory` can
+target application-owned scratch storage. The planner checks worst-case run,
+merge, rank, and PAVA files before distance construction; normal completion,
+errors, and interruption remove the per-evaluation workspace. This path is a
+NumPy fallback for optional providers and trades I/O and merge time for a
+bounded exact RAM footprint. Repeated-embedding concurrency is also capped so
+the sum of simultaneous planned workspaces stays within `temporary_budget`.
 
 Registered T&C, class-aware T&C, and MRRE specifications request the paired
 selected-rank resource. The NumPy provider builds it in exact bounded blocks and

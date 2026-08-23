@@ -14,7 +14,7 @@ from time import perf_counter
 import numpy as np
 from scipy.spatial.distance import cdist
 
-from zadu import ZADU
+from zadu import ZADU, ExecutionConfig
 from zadu.measures import non_metric_stress, spearman_rho
 
 try:
@@ -33,9 +33,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--embedding-dimension", type=int, default=2)
     parser.add_argument("--repeat", type=int, default=5)
     parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument("--memory-budget", default="64MiB")
+    parser.add_argument("--temporary-budget", default="512MiB")
     parser.add_argument("--json", type=Path)
     parser.add_argument(
-        "--worker", choices=("dense", "planned"), help=argparse.SUPPRESS
+        "--worker",
+        choices=("dense", "planned", "external"),
+        help=argparse.SUPPRESS,
     )
     return parser
 
@@ -85,7 +89,7 @@ def _worker(args):
         strategy = "dense-reference"
         estimated_cache_bytes = 2 * args.samples**2 * 8
         planned_peak_bytes = None
-    else:
+    elif args.worker == "planned":
         ZADU(ORDERED_SPECS, orig[:20]).measure(emb[:20])
         cold_seconds, scores = _median(
             lambda: ZADU(ORDERED_SPECS, orig).measure(emb),
@@ -96,6 +100,35 @@ def _worker(args):
         strategy = runner.last_run_info["pair_strategy"]
         estimated_cache_bytes = runner.estimated_cache_bytes
         planned_peak_bytes = runner.last_run_info["planned_peak_bytes"]
+        planned_temporary_bytes = 0
+        temporary_bytes_peak = 0
+    else:
+        config = ExecutionConfig(
+            memory_budget=args.memory_budget,
+            pair_order_strategy="external",
+            temporary_budget=args.temporary_budget,
+        )
+        ZADU(ORDERED_SPECS, orig[:20], execution=config).measure(emb[:20])
+        cold_seconds, scores = _median(
+            lambda: ZADU(ORDERED_SPECS, orig, execution=config).measure(emb),
+            args.repeat,
+        )
+        runner = ZADU(ORDERED_SPECS, orig, execution=config)
+        warm_seconds, scores = _median(lambda: runner.measure(emb), args.repeat)
+        strategy = runner.last_run_info["pair_strategy"]
+        estimated_cache_bytes = runner.estimated_cache_bytes
+        planned_peak_bytes = runner.last_run_info["planned_peak_bytes"]
+        ordered = next(
+            resource
+            for resource in runner.last_run_info["resources"]
+            if resource["kind"] == "ordered_pair_statistics"
+        )
+        planned_temporary_bytes = ordered["details"]["planned_temporary_bytes"]
+        temporary_bytes_peak = ordered["details"]["temporary_bytes_peak"]
+
+    if args.worker == "dense":
+        planned_temporary_bytes = None
+        temporary_bytes_peak = None
 
     return {
         "mode": args.worker,
@@ -105,6 +138,8 @@ def _worker(args):
         "peak_rss_mib": _peak_rss_mib(),
         "estimated_cache_bytes": estimated_cache_bytes,
         "planned_peak_bytes": planned_peak_bytes,
+        "planned_temporary_bytes": planned_temporary_bytes,
+        "temporary_bytes_peak": temporary_bytes_peak,
         "scores": scores,
     }
 
@@ -123,6 +158,10 @@ def _run_worker(args, mode):
         str(args.repeat),
         "--seed",
         str(args.seed),
+        "--memory-budget",
+        args.memory_budget,
+        "--temporary-budget",
+        args.temporary_budget,
         "--worker",
         mode,
     ]
@@ -138,6 +177,18 @@ def _score_delta(left, right):
     return max(deltas)
 
 
+def _revision() -> str | None:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip() or None
+
+
 def main() -> None:
     args = _parser().parse_args()
     if args.samples < 2 or args.dimension < 1 or args.embedding_dimension < 1:
@@ -150,22 +201,32 @@ def main() -> None:
 
     dense = _run_worker(args, "dense")
     planned = _run_worker(args, "planned")
+    external = _run_worker(args, "external")
     payload = {
         "metadata": {
             "samples": args.samples,
             "dimension": args.dimension,
             "embedding_dimension": args.embedding_dimension,
             "repeat": args.repeat,
+            "memory_budget": args.memory_budget,
+            "temporary_budget": args.temporary_budget,
             "python": platform.python_version(),
             "numpy": np.__version__,
             "platform": platform.platform(),
             "machine": platform.machine(),
+            "revision": _revision(),
         },
         "dense": dense,
         "planned": planned,
+        "external": external,
         "cold_speedup": dense["cold_seconds"] / planned["cold_seconds"],
         "warm_speedup": dense["warm_seconds"] / planned["warm_seconds"],
         "maximum_score_delta": _score_delta(dense["scores"], planned["scores"]),
+        "external_cold_slowdown": external["cold_seconds"] / planned["cold_seconds"],
+        "external_warm_slowdown": external["warm_seconds"] / planned["warm_seconds"],
+        "maximum_external_score_delta": _score_delta(
+            planned["scores"], external["scores"]
+        ),
     }
     print(json.dumps(payload, indent=2))
     if args.json is not None:

@@ -84,11 +84,16 @@ condensed/order resources:
 
 ```bash
 python benchmarks/benchmark_ordered_pair_resources.py \
-  --samples 2000 --dimension 20 --repeat 5
+  --samples 2000 --dimension 20 --repeat 5 \
+  --memory-budget 64MiB --temporary-budget 512MiB
 ```
 
-The isolated JSON report separates cold construction from a warm repeated
-embedding, process peak RSS, planned cache/peak bytes, and maximum score delta.
+The three isolated modes are the legacy dense reference, the default in-memory
+condensed order, and exact external ordering. The JSON report separates cold
+construction from a warm repeated embedding, process peak RSS, planned RAM and
+temporary bytes, observed temporary peak, slowdown from disk I/O, and maximum
+score delta. The external mode deliberately recomputes and cleans its pair
+workspace for each embedding instead of retaining unbounded order files.
 
 ## Topographic Product resources
 

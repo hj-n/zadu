@@ -279,11 +279,28 @@ class NumpyResourceProvider:
     def build_ordered_pair_statistics(
         self,
         plan: PairExecutionPlan,
-        pair_order: PairOrder,
+        pair_order: PairOrder | None,
         *,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
         emb_distance_matrix: npt.NDArray | None,
         emb_condensed: npt.NDArray | None,
+        geodesic: bool,
     ) -> BuiltResource:
+        if plan.strategy is PairStrategy.EXTERNAL:
+            from zadu.kernels.external_order import (
+                build_external_ordered_pair_statistics,
+            )
+
+            statistics, details = build_external_ordered_pair_statistics(
+                plan,
+                orig,
+                emb,
+                geodesic=geodesic,
+            )
+            return BuiltResource(statistics, "numpy", details)
+        if pair_order is None:
+            raise RuntimeError("Ordered pair statistics require a pair order")
         emb_distances = self._pair_distances(
             emb_distance_matrix,
             emb_condensed,

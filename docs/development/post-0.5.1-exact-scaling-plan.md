@@ -3,7 +3,8 @@
 > Status: active development record. PR 10-A established the selected-rank
 > oracle and measurement gates, PR 10-B integrated it into production NumPy,
 > and PR 10-C completed native MLX and PyTorch providers. PR 11 implements
-> bounded repeated-embedding iteration.
+> bounded repeated-embedding iteration. PR 12 implements exact external-memory
+> ordering for globally ranked pairs.
 
 ## Objective
 
@@ -254,6 +255,16 @@ Gates:
 - the planner uses disk only when requested or when the exact in-memory strategy
   cannot meet the configured budget. It never guesses an unsafe system-wide
   disk allowance.
+
+Implementation status: `PairStrategy.EXTERNAL` creates deterministic
+distance/index runs within the RAM plan, performs bounded 32-way merges, stores
+tie-average original ranks in a disk map for Spearman, and evaluates
+Non-Metric Stress with a disk-backed weighted PAVA stack. The planner requires
+an explicit `temporary_budget`, checks its worst-case file topology before any
+distance work, and accepts an application-owned `temporary_directory`.
+Workspaces are evaluation-scoped and cleaned after success, errors, and
+interruption; unlike the faster condensed path, external original ordering is
+therefore recomputed for repeated embeddings.
 
 ## Packaging and release policy
 

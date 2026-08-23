@@ -14,6 +14,10 @@
 - Bounded `iter_measure_many()` evaluation with lazy indexed results,
   per-result diagnostics, memory-capped concurrency, deterministic ordering,
   indexed failures, and explicit early-close cleanup.
+- Opt-in exact external-memory ordering for Spearman and Non-Metric Stress,
+  including deterministic sorted runs, bounded-fan-in merge, disk-backed
+  tie-average ranks and PAVA, explicit RAM/disk budgets, and exception-safe
+  workspace cleanup.
 
 ### Changed
 

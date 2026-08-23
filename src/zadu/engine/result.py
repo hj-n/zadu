@@ -53,6 +53,18 @@ def _plan_info(
         "pair_strategy": (
             plan.pair_plan.strategy.value if plan.pair_plan is not None else None
         ),
+        "pair_temporary_budget_bytes": (
+            plan.pair_plan.temporary_budget_bytes
+            if plan.pair_plan is not None
+            and plan.pair_plan.strategy.value == "external"
+            else None
+        ),
+        "pair_planned_temporary_bytes": (
+            plan.pair_plan.planned_temporary_bytes
+            if plan.pair_plan is not None
+            and plan.pair_plan.strategy.value == "external"
+            else 0
+        ),
         "topographic_strategy": (
             "blockwise_selected_distances"
             if plan.topographic_plan is not None
@@ -202,6 +214,9 @@ def build_many_run_info(
         "native_threads_per_worker": batch_plan.native_threads_per_worker,
         "provider_batching": batch_plan.provider_batching,
         "native_batch_size": batch_plan.native_batch_size,
+        "per_embedding_temporary_bytes": (batch_plan.per_embedding_temporary_bytes),
+        "planned_temporary_bytes": batch_plan.planned_temporary_bytes,
+        "temporary_budget_bytes": batch_plan.temporary_budget_bytes,
         "embedding_count": len(run_infos),
         "per_embedding_planned_peak_bytes": plan.planned_peak_bytes,
         "shared_original_bytes": batch_plan.shared_original_bytes,
@@ -273,6 +288,9 @@ def build_stream_run_info(
         "native_threads_per_worker": batch_plan.native_threads_per_worker,
         "provider_batching": False,
         "native_batch_size": 1 if embedding_count else 0,
+        "per_embedding_temporary_bytes": (batch_plan.per_embedding_temporary_bytes),
+        "planned_temporary_bytes": batch_plan.planned_temporary_bytes,
+        "temporary_budget_bytes": batch_plan.temporary_budget_bytes,
         "embedding_count": embedding_count,
         "input_consumed_count": input_consumed_count,
         "stream_complete": stream_complete,

@@ -28,6 +28,8 @@ DEFAULT_PAIR_WORK_BYTES = 64 * 1024**2
 PAIR_WORK_BYTES_PER_CELL = 64
 CONDENSED_WORK_BYTES_PER_PAIR = 48
 ORDERED_WORK_BYTES_PER_PAIR = 64
+EXTERNAL_ORDER_WORK_BYTES_PER_PAIR = 64
+EXTERNAL_MERGE_FAN_IN = 32
 DEFAULT_RESOURCE_WORK_BYTES = 64 * 1024**2
 STABLE_KNN_WORK_BYTES_PER_CELL = 32
 TOPOGRAPHIC_WORK_BYTES_PER_SELECTED_DISTANCE = 16
@@ -72,6 +74,10 @@ class PairExecutionPlan:
     working_bytes: int
     metric_ids: tuple[str, ...]
     ordered_metric_ids: tuple[str, ...]
+    temporary_directory: str | None = None
+    temporary_budget_bytes: int | None = None
+    planned_temporary_bytes: int = 0
+    merge_fan_in: int = EXTERNAL_MERGE_FAN_IN
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +173,9 @@ def build_execution_plan(
     provider_working_memory: (
         Callable[[ResourceKey, int, int], int | None] | None
     ) = None,
+    pair_order_strategy: str = "auto",
+    temporary_directory: str | None = None,
+    temporary_budget: int | None = None,
 ) -> ExecutionPlan:
     """Build one deterministic plan and collapse compatible kNN requests."""
 
@@ -251,7 +260,26 @@ def build_execution_plan(
     if has_pair_resources:
         dense_for_compatibility = geodesic or has_other_exact_resources
         condensed_bytes = 2 * pair_count * np.dtype(np.float64).itemsize
-        if dense_for_compatibility:
+        pair_index_bytes = compact_index_dtype(pair_count).itemsize
+        ordered_in_memory_peak = pair_count * (
+            np.dtype(np.float64).itemsize
+            + pair_index_bytes
+            + np.dtype(np.float64).itemsize
+            + ORDERED_WORK_BYTES_PER_PAIR
+        )
+        external_requested = (
+            has_ordered_pair_statistics and pair_order_strategy == "external"
+        )
+        external_needed = (
+            has_ordered_pair_statistics
+            and pair_order_strategy == "auto"
+            and temporary_budget is not None
+            and memory_budget is not None
+            and ordered_in_memory_peak > memory_budget
+        )
+        if external_requested or external_needed:
+            pair_strategy = PairStrategy.EXTERNAL
+        elif dense_for_compatibility:
             pair_strategy = PairStrategy.DENSE
         elif has_ordered_pair_statistics:
             # Exact rank and isotonic metrics require all pairs to be materialized.
@@ -335,7 +363,7 @@ def build_execution_plan(
             canonical_by_pair[stable_knn_pair] = key
 
     order_key = None
-    if has_ordered_pair_statistics:
+    if has_ordered_pair_statistics and pair_strategy is not PairStrategy.EXTERNAL:
         order_key = ResourceKey(ResourceKind.PAIR_ORDER, Space.ORIGINAL)
         resources.append(order_key)
 
@@ -627,11 +655,59 @@ def build_execution_plan(
                     ),
                 )
                 statistics_working_bytes = PAIR_WORK_BYTES_PER_CELL * block_rows**2
-        ordered_working_bytes = (
-            pair_count * ORDERED_WORK_BYTES_PER_PAIR
-            if ordered_statistics_key is not None
-            else 0
-        )
+        planned_temporary_bytes = 0
+        if (
+            ordered_statistics_key is not None
+            and pair_strategy is PairStrategy.EXTERNAL
+        ):
+            chunk_pairs = max(
+                1,
+                min(
+                    pair_count,
+                    pair_work_bytes // EXTERNAL_ORDER_WORK_BYTES_PER_PAIR,
+                ),
+            )
+            ordered_working_bytes = chunk_pairs * EXTERNAL_ORDER_WORK_BYTES_PER_PAIR
+            record_bytes = pair_count * (
+                2 * np.dtype(np.float64).itemsize
+                + compact_index_dtype(pair_count).itemsize
+            )
+            rank_bytes = (
+                pair_count * np.dtype(np.float64).itemsize
+                if "spearman_rho"
+                in tuple(
+                    metric_plans[index].metric_id
+                    for index in sorted(ordered_pair_consumers)
+                )
+                else 0
+            )
+            pava_bytes = (
+                pair_count
+                * (np.dtype(np.int64).itemsize + 2 * np.dtype(np.float64).itemsize)
+                if "non_metric_stress"
+                in tuple(
+                    metric_plans[index].metric_id
+                    for index in sorted(ordered_pair_consumers)
+                )
+                else 0
+            )
+            planned_temporary_bytes = max(
+                2 * record_bytes,
+                record_bytes + rank_bytes + pava_bytes,
+                2 * record_bytes + rank_bytes,
+            )
+            if temporary_budget is None or planned_temporary_bytes > temporary_budget:
+                raise MemoryError(
+                    "Estimated exact external pair ordering exceeds "
+                    "temporary_budget "
+                    f"({planned_temporary_bytes} > {temporary_budget})"
+                )
+        else:
+            ordered_working_bytes = (
+                pair_count * ORDERED_WORK_BYTES_PER_PAIR
+                if ordered_statistics_key is not None
+                else 0
+            )
         working_bytes = max(statistics_working_bytes, ordered_working_bytes)
         peak_working_bytes = max(peak_working_bytes, working_bytes)
         pair_plan = PairExecutionPlan(
@@ -652,6 +728,9 @@ def build_execution_plan(
                 metric_plans[index].metric_id
                 for index in sorted(ordered_pair_consumers)
             ),
+            temporary_directory=temporary_directory,
+            temporary_budget_bytes=temporary_budget,
+            planned_temporary_bytes=planned_temporary_bytes,
         )
 
     resource_working_bytes = {}

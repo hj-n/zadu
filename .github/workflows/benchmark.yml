@@ -33,6 +33,10 @@ jobs:
           python benchmarks/benchmark_pair_resources.py \
             --samples 2000 --dimension 20 --repeat 5 \
             --json benchmark-results/pair-resources.json
+          python benchmarks/benchmark_ordered_pair_resources.py \
+            --samples 1000 --dimension 20 --repeat 3 \
+            --memory-budget 32MiB --temporary-budget 128MiB \
+            --json benchmark-results/ordered-pair-resources.json
           python benchmarks/benchmark_topographic_resources.py \
             --samples 2000 --dimension 20 --neighbors 20 --repeat 5 \
             --json benchmark-results/topographic-resources.json

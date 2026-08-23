@@ -40,6 +40,7 @@ class PairStrategy(str, Enum):
     DENSE = "dense"
     CONDENSED = "condensed"
     STREAMING = "streaming"
+    EXTERNAL = "external"
 
 
 def compact_index_dtype(n_samples: int) -> np.dtype:
@@ -437,14 +438,24 @@ class ResourceCache:
                 )
                 self._store(pair_plan.statistics_key, built, perf_counter() - start)
             if pair_plan.ordered_statistics_key is not None:
-                if pair_plan.order_key is None:
+                if (
+                    pair_plan.order_key is None
+                    and pair_plan.strategy is not PairStrategy.EXTERNAL
+                ):
                     raise RuntimeError("Ordered pair statistics require a pair order")
                 start = perf_counter()
                 built = self.provider.build_ordered_pair_statistics(
                     pair_plan,
-                    self._values[pair_plan.order_key],
+                    (
+                        self._values[pair_plan.order_key]
+                        if pair_plan.order_key is not None
+                        else None
+                    ),
+                    orig=orig,
+                    emb=emb,
                     emb_distance_matrix=emb_distance_matrix,
                     emb_condensed=emb_condensed,
+                    geodesic=self.geodesic,
                 )
                 self._store(
                     pair_plan.ordered_statistics_key,
