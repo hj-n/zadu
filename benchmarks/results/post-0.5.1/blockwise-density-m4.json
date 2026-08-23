@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "samples": 5000,
+    "dimension": 20,
+    "sigmas": [
+      0.1,
+      0.3
+    ],
+    "memory_budget": "16MiB",
+    "repeat": 3,
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "dense": {
+    "mode": "dense",
+    "seconds": 0.26348354085348547,
+    "peak_rss_mib": 527.109375,
+    "retained_bytes": 80000,
+    "working_bytes": 400000000,
+    "block_rows": 5000,
+    "block_count": 1
+  },
+  "blockwise": {
+    "mode": "blockwise",
+    "seconds": 0.29560195887461305,
+    "peak_rss_mib": 145.578125,
+    "retained_bytes": 80000,
+    "working_bytes": 16720000,
+    "block_rows": 209,
+    "block_count": 24
+  },
+  "runtime_ratio": 1.1218991437457095,
+  "working_memory_reduction": 23.923444976076556,
+  "maximum_density_delta": 0.0
+}

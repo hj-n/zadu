@@ -512,8 +512,13 @@ class ResourceCache:
                 self._records.pop(key)
 
     def _prepare(self, space: Space, points: npt.NDArray) -> None:
+        density_keys = tuple(
+            key
+            for key in self.plan.resources_for(space)
+            if key.kind is ResourceKind.DENSITY and key not in self._values
+        )
         for key in self.plan.resources_for(space):
-            if key in self._values:
+            if key in self._values or key.kind is ResourceKind.DENSITY:
                 continue
             distance_matrix = self.distance_matrix(space)
             start = perf_counter()
@@ -526,6 +531,35 @@ class ResourceCache:
                 geodesic=self.geodesic and space is Space.ORIGINAL,
             )
             self._store(key, built, perf_counter() - start)
+        if density_keys:
+            distance_matrix = self.distance_matrix(space)
+            working_memory_bytes = max(
+                self.plan.resource_working_bytes[key] for key in density_keys
+            )
+            start = perf_counter()
+            if self.provider.name == "numpy":
+                built_densities = self.provider.build_densities(
+                    density_keys,
+                    points,
+                    distance_matrix=distance_matrix,
+                    working_memory_bytes=working_memory_bytes,
+                    geodesic=self.geodesic and space is Space.ORIGINAL,
+                )
+            else:
+                built_densities = [
+                    self.provider.build(
+                        key,
+                        points,
+                        distance_matrix=distance_matrix,
+                        condensed_pairs=self.condensed_pairs(space),
+                        working_memory_bytes=working_memory_bytes,
+                        geodesic=self.geodesic and space is Space.ORIGINAL,
+                    )
+                    for key in density_keys
+                ]
+            elapsed_share = (perf_counter() - start) / len(density_keys)
+            for key, built in zip(density_keys, built_densities, strict=True):
+                self._store(key, built, elapsed_share)
         for key in self.plan.release_after_prepare.get(space, ()):
             self._release(key)
 

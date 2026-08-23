@@ -29,6 +29,7 @@ PAIR_WORK_BYTES_PER_CELL = 64
 CONDENSED_WORK_BYTES_PER_PAIR = 48
 ORDERED_WORK_BYTES_PER_PAIR = 64
 EXTERNAL_ORDER_WORK_BYTES_PER_PAIR = 64
+DENSITY_WORK_BYTES_PER_CELL = 16
 # Binary merges stay inside the compiled NumPy/Numba kernel. Wider fan-in falls
 # back to a Python heap operation for every pair record and is substantially
 # slower even though it needs fewer passes over the temporary files.
@@ -305,12 +306,7 @@ def build_execution_plan(
     parameterized_keys: dict[ResourceRequest, ResourceKey] = {}
     for space in (Space.ORIGINAL, Space.EMBEDDED):
         distance_pair = (ResourceKind.DISTANCE_MATRIX, space)
-        density_pair = (ResourceKind.DENSITY, space)
-        if (
-            distance_pair in requested_pairs
-            or density_pair in requested_pairs
-            or pair_strategy is PairStrategy.DENSE
-        ):
+        if distance_pair in requested_pairs or pair_strategy is PairStrategy.DENSE:
             key = ResourceKey(ResourceKind.DISTANCE_MATRIX, space)
             resources.append(key)
             canonical_by_pair[distance_pair] = key
@@ -489,10 +485,11 @@ def build_execution_plan(
 
     for density_key in parameterized_keys.values():
         density_consumers = consumer_sets[density_key]
-        distance_key = canonical_by_pair[
+        distance_key = canonical_by_pair.get(
             (ResourceKind.DISTANCE_MATRIX, density_key.space)
-        ]
-        consumer_sets[distance_key].update(density_consumers)
+        )
+        if distance_key is not None:
+            consumer_sets[distance_key].update(density_consumers)
 
     rank_comparison_consumers = (
         set()
@@ -575,29 +572,13 @@ def build_execution_plan(
             }
         )
     )
-    explicitly_requested_distance_spaces = {
-        request.space
-        for request in all_requests
-        if request.kind is ResourceKind.DISTANCE_MATRIX
-    }
     release_after_prepare: dict[Space, tuple[ResourceKey, ...]] = {}
-    for space in (Space.ORIGINAL, Space.EMBEDDED):
-        if (
-            (ResourceKind.DENSITY, space) in requested_pairs
-            and space not in explicitly_requested_distance_spaces
-            and pair_strategy is not PairStrategy.DENSE
-        ):
-            release_after_prepare[space] = (
-                canonical_by_pair[(ResourceKind.DISTANCE_MATRIX, space)],
-            )
-    transient_keys = {key for keys in release_after_prepare.values() for key in keys}
     estimated_cache_bytes = _estimate_cache_bytes(
         resources,
         n_samples,
         rank_membership_ks=rank_membership_ks,
         lcmc_ks=lcmc_ks,
         nd_ks=nd_ks,
-        excluded_keys=transient_keys,
     )
     original_cache_bytes = _estimate_cache_bytes(
         [key for key in resources if key.space is Space.ORIGINAL],
@@ -605,28 +586,9 @@ def build_execution_plan(
         rank_membership_ks=rank_membership_ks,
         lcmc_ks=lcmc_ks,
         nd_ks=nd_ks,
-        excluded_keys=transient_keys,
-    )
-    transient_resource_bytes = max(
-        (
-            _estimate_cache_bytes(
-                [key],
-                n_samples,
-                rank_membership_ks=(),
-                lcmc_ks=(),
-                nd_ks=(),
-            )
-            for key in transient_keys
-        ),
-        default=0,
     )
     pair_plan = None
-    density_working_bytes = (
-        n_samples * n_samples * np.dtype(np.float64).itemsize
-        if any(key.kind is ResourceKind.DENSITY for key in resources)
-        else 0
-    )
-    peak_working_bytes = transient_resource_bytes + density_working_bytes
+    peak_working_bytes = 0
     available_work_bytes = (
         DEFAULT_RESOURCE_WORK_BYTES
         if memory_budget is None
@@ -737,6 +699,21 @@ def build_execution_plan(
         )
 
     resource_working_bytes = {}
+    for key in resources:
+        if key.kind is not ResourceKind.DENSITY:
+            continue
+        distance_key = canonical_by_pair.get((ResourceKind.DISTANCE_MATRIX, key.space))
+        if distance_key is not None:
+            working_bytes = n_samples * n_samples * np.dtype(np.float64).itemsize
+        else:
+            bytes_per_row = n_samples * DENSITY_WORK_BYTES_PER_CELL
+            block_rows = max(
+                1,
+                min(n_samples, available_work_bytes // bytes_per_row),
+            )
+            working_bytes = block_rows * bytes_per_row
+        resource_working_bytes[key] = working_bytes
+        peak_working_bytes = max(peak_working_bytes, working_bytes)
     if backend in {"mlx", "torch"}:
         for key in resources:
             if key.kind in {

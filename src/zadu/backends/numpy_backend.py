@@ -30,6 +30,7 @@ from zadu.engine.resources import (
 from zadu.kernels import PairAccumulator
 from zadu.measures.utils import knn
 from zadu.measures.utils import pairwise_dist as pdist
+from zadu.measures.utils.validation import validate_positive_real
 from zadu.measures.utils.vectorized import (
     rowwise_intersection_count,
     rowwise_membership,
@@ -114,17 +115,13 @@ class NumpyResourceProvider:
             )
             return BuiltResource(value, "numpy")
         if key.kind is ResourceKind.DENSITY:
-            if distance_matrix is None or key.parameter is None:
-                raise RuntimeError("Density requires a distance matrix and sigma")
-            value = pdist.distance_matrix_to_density(
-                distance_matrix,
-                key.parameter,
-            )
-            return BuiltResource(
-                value,
-                "numpy",
-                {"sigma": key.parameter, "source": "distance_matrix"},
-            )
+            return self.build_densities(
+                (key,),
+                points,
+                distance_matrix=distance_matrix,
+                working_memory_bytes=working_memory_bytes,
+                geodesic=geodesic,
+            )[0]
         if key.kind is ResourceKind.CONDENSED_PAIRS:
             value = self.condensed_distances(points, geodesic=geodesic)
             return BuiltResource(value, "scipy")
@@ -201,6 +198,126 @@ class NumpyResourceProvider:
             value.astype(compact_index_dtype(points.shape[0]), copy=False),
             "faiss",
         )
+
+    def build_densities(
+        self,
+        keys: tuple[ResourceKey, ...],
+        points: npt.NDArray,
+        *,
+        distance_matrix: npt.NDArray | None,
+        working_memory_bytes: int | None,
+        geodesic: bool,
+    ) -> list[BuiltResource]:
+        """Build every requested Gaussian density in one exact distance pass pair."""
+
+        parameters = tuple(key.parameter for key in keys)
+        if not keys or any(
+            key.kind is not ResourceKind.DENSITY or parameter is None
+            for key, parameter in zip(keys, parameters, strict=True)
+        ):
+            raise RuntimeError("Density resources require positive sigma parameters")
+        sigmas = tuple(
+            validate_positive_real(parameter, "sigma") for parameter in parameters
+        )
+        if distance_matrix is not None:
+            return [
+                BuiltResource(
+                    pdist.distance_matrix_to_density(distance_matrix, sigma),
+                    "numpy",
+                    {
+                        "algorithm": "dense_distance_matrix_density",
+                        "sigma": sigma,
+                        "source": "distance_matrix",
+                        "fused_sigmas": list(sigmas),
+                    },
+                )
+                for sigma in sigmas
+            ]
+        if working_memory_bytes is None:
+            raise RuntimeError("Blockwise density requires a working-memory plan")
+
+        values, details = self.blockwise_densities(
+            points,
+            sigmas,
+            working_memory_bytes=working_memory_bytes,
+            geodesic=geodesic,
+        )
+        return [
+            BuiltResource(
+                values[sigma],
+                "scipy",
+                {**details, "sigma": sigma},
+            )
+            for sigma in sigmas
+        ]
+
+    @classmethod
+    def blockwise_densities(
+        cls,
+        points: npt.NDArray,
+        sigmas: tuple[float, ...],
+        *,
+        working_memory_bytes: int,
+        geodesic: bool,
+    ) -> tuple[dict[float, npt.NDArray], dict[str, object]]:
+        """Return normalized exact densities without retaining a dense matrix."""
+
+        n_samples = points.shape[0]
+        bytes_per_row = n_samples * 2 * np.dtype(np.float64).itemsize
+        if working_memory_bytes < bytes_per_row:
+            raise MemoryError("Blockwise density requires at least one distance row")
+        block_rows = max(
+            1,
+            min(n_samples, working_memory_bytes // bytes_per_row),
+        )
+
+        maximum = 0.0
+        block_count = 0
+        for start in range(0, n_samples, block_rows):
+            stop = min(start + block_rows, n_samples)
+            distances = (
+                cls.geodesic_distance_block(points[start:stop], points)
+                if geodesic
+                else cdist(points[start:stop], points)
+            )
+            maximum = max(maximum, float(np.max(distances)))
+            block_count += 1
+            del distances
+        if maximum <= 0:
+            raise ValueError(
+                "Density-based measures are undefined when all pairwise "
+                "distances are zero"
+            )
+
+        values = {sigma: np.empty(n_samples, dtype=np.float64) for sigma in sigmas}
+        for start in range(0, n_samples, block_rows):
+            stop = min(start + block_rows, n_samples)
+            squared = (
+                cls.geodesic_distance_block(points[start:stop], points)
+                if geodesic
+                else cdist(points[start:stop], points)
+            )
+            squared /= maximum
+            np.square(squared, out=squared)
+            for sigma in sigmas:
+                kernel = np.empty_like(squared)
+                np.divide(squared, -sigma, out=kernel)
+                np.exp(kernel, out=kernel)
+                values[sigma][start:stop] = np.sum(kernel, axis=1)
+            del kernel, squared
+
+        for density in values.values():
+            density /= np.sum(density)
+        return values, {
+            "algorithm": "blockwise_two_pass_gaussian_density",
+            "source": "points",
+            "distance_passes": 2,
+            "block_rows": block_rows,
+            "block_count": block_count,
+            "working_bytes": block_rows * bytes_per_row,
+            "maximum_distance": maximum,
+            "fused_sigmas": list(sigmas),
+        }
 
     def build_pair_statistics(
         self,

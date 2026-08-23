@@ -4,7 +4,8 @@
 > oracle and measurement gates, PR 10-B integrated it into production NumPy,
 > and PR 10-C completed native MLX and PyTorch providers. PR 11 implements
 > bounded repeated-embedding iteration. PR 12 implements exact external-memory
-> ordering for globally ranked pairs.
+> ordering for globally ranked pairs. PR 13 implements exact blockwise density
+> resources.
 
 ## Objective
 
@@ -49,6 +50,14 @@ Exact Spearman and Non-Metric Stress require a global order over all
 `n(n-1)/2` pairs. The current condensed representation is smaller than two
 dense matrices but is still memory-resident, so it eventually becomes the next
 exact scaling ceiling.
+
+### Resolved bottleneck: Gaussian densities
+
+DTM and KL retain only one density value per sample, but previously constructed
+an `n x n` distance matrix and another full Gaussian-kernel copy. PR 13 computes
+the global normalization maximum in one row-block pass and fuses every requested
+sigma in a second pass. A dense matrix is consumed only when another metric has
+already made it part of the exact plan.
 
 ## Semantic contract
 
@@ -257,7 +266,7 @@ Gates:
   disk allowance.
 
 Implementation status: `PairStrategy.EXTERNAL` creates deterministic
-distance/index runs within the RAM plan, performs bounded 32-way merges, stores
+distance/index runs within the RAM plan, performs compiled binary merges, stores
 tie-average original ranks in a disk map for Spearman, and evaluates
 Non-Metric Stress with a disk-backed weighted PAVA stack. The planner requires
 an explicit `temporary_budget`, checks its worst-case file topology before any
@@ -284,6 +293,27 @@ an exact capacity path rather than the default strategy. Cold and warm external
 times were similar because its evaluation-scoped workspace is intentionally
 recomputed and removed. The raw record is
 [`external-pair-ordering-m4.json`](../../benchmarks/results/post-0.5.1/external-pair-ordering-m4.json).
+
+### PR 13 — exact blockwise multi-sigma densities
+
+Build DTM and KL density vectors directly from point blocks. Multiple sigma
+values share the same two distance passes, while original-space vectors remain
+reusable across embeddings. Dense distance matrices remain a valid DAG source
+when another scheduled metric requires them.
+
+On the maintained Apple M4 with Python 3.12.13, NumPy 2.5.2, `n=5,000`, 20
+dimensions, sigma values 0.1 and 0.3, a 16 MiB work budget, and three
+repetitions:
+
+| Density construction | Median | Process peak RSS | Planned working memory |
+| --- | ---: | ---: | ---: |
+| Dense distance plus kernel | 0.263 s | 527.1 MiB | 381.5 MiB |
+| Two-pass blockwise | 0.296 s | 145.6 MiB | 15.9 MiB |
+
+The blockwise path retained the same 80,000 bytes of final density vectors,
+used 23.9x less planned working memory, and took 1.12x the dense runtime. The
+maximum density delta was zero. The raw record is
+[`blockwise-density-m4.json`](../../benchmarks/results/post-0.5.1/blockwise-density-m4.json).
 
 ## Packaging and release policy
 
