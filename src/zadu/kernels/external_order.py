@@ -204,6 +204,9 @@ def build_external_ordered_pair_statistics(
         "initial_original_run_count": initial_original_runs,
         "initial_embedded_run_count": initial_embedded_runs,
         "merge_fan_in": plan.merge_fan_in,
+        "merge_algorithm": (
+            "numba_binary" if plan.merge_fan_in == 2 else "python_k_way"
+        ),
         "merge_passes": merge_passes,
         "tie_group_count": tie_group_count,
         "pava_block_count": pava_block_count,
