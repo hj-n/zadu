@@ -21,6 +21,8 @@
 
 ### Changed
 
+- Exact external pair ordering now uses compiled binary merges instead of a
+  per-record Python heap merge.
 - Scheduled T&C, class-aware T&C, and MRRE now build exact cross-space ranks in
   bounded NumPy row blocks and retain `O(nk)` state instead of two persistent
   `n x n` inverse rankings. Run diagnostics expose block bounds, distance reuse,

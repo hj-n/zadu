@@ -10,14 +10,14 @@
     "numpy": "2.5.2",
     "platform": "macOS-26.4-arm64-arm-64bit",
     "machine": "arm64",
-    "revision": "ab32c5c6cbed9ae75b46271da77bd3a5d5c4007b"
+    "revision": "528a091f8c16801f616db1f8d3266c9af12a6ebd"
   },
   "dense": {
     "mode": "dense",
     "strategy": "dense-reference",
-    "cold_seconds": 1.092259292025119,
-    "warm_seconds": 1.0704240421764553,
-    "peak_rss_mib": 480.34375,
+    "cold_seconds": 1.074533540988341,
+    "warm_seconds": 1.0589650410693139,
+    "peak_rss_mib": 480.375,
     "estimated_cache_bytes": 64000000,
     "planned_peak_bytes": null,
     "planned_temporary_bytes": null,
@@ -34,9 +34,9 @@
   "planned": {
     "mode": "planned",
     "strategy": "condensed",
-    "cold_seconds": 1.0490174579899758,
-    "warm_seconds": 0.6727984580211341,
-    "peak_rss_mib": 361.671875,
+    "cold_seconds": 1.0366512909531593,
+    "warm_seconds": 0.6748680421151221,
+    "peak_rss_mib": 361.859375,
     "estimated_cache_bytes": 39980000,
     "planned_peak_bytes": 167916000,
     "planned_temporary_bytes": 0,
@@ -53,9 +53,9 @@
   "external": {
     "mode": "external",
     "strategy": "external",
-    "cold_seconds": 5.499641041038558,
-    "warm_seconds": 5.506163500016555,
-    "peak_rss_mib": 336.140625,
+    "cold_seconds": 0.8613579592201859,
+    "warm_seconds": 0.8729097091127187,
+    "peak_rss_mib": 338.28125,
     "estimated_cache_bytes": 0,
     "planned_peak_bytes": 33554432,
     "planned_temporary_bytes": 103948000,
@@ -69,10 +69,10 @@
       }
     ]
   },
-  "cold_speedup": 1.0412212720634784,
-  "warm_speedup": 1.591002520018901,
+  "cold_speedup": 1.0365429053779023,
+  "warm_speedup": 1.5691438547754952,
   "maximum_score_delta": 2.8440791388639752e-15,
-  "external_cold_slowdown": 5.242659213295106,
-  "external_warm_slowdown": 8.183971640201937,
+  "external_cold_slowdown": 0.8309042459477398,
+  "external_warm_slowdown": 1.2934524301623602,
   "maximum_external_score_delta": 8.113908850360119e-14
 }

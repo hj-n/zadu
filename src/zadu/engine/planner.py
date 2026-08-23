@@ -29,7 +29,10 @@ PAIR_WORK_BYTES_PER_CELL = 64
 CONDENSED_WORK_BYTES_PER_PAIR = 48
 ORDERED_WORK_BYTES_PER_PAIR = 64
 EXTERNAL_ORDER_WORK_BYTES_PER_PAIR = 64
-EXTERNAL_MERGE_FAN_IN = 32
+# Binary merges stay inside the compiled NumPy/Numba kernel. Wider fan-in falls
+# back to a Python heap operation for every pair record and is substantially
+# slower even though it needs fewer passes over the temporary files.
+EXTERNAL_MERGE_FAN_IN = 2
 DEFAULT_RESOURCE_WORK_BYTES = 64 * 1024**2
 STABLE_KNN_WORK_BYTES_PER_CELL = 32
 TOPOGRAPHIC_WORK_BYTES_PER_SELECTED_DISTANCE = 16

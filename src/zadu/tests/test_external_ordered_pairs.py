@@ -133,7 +133,9 @@ def test_external_ties_cross_runs_and_multiple_merge_passes(tmp_path):
     assert details["run_pairs"] == 1
     assert details["initial_original_run_count"] == 66
     assert details["initial_embedded_run_count"] == 66
-    assert details["merge_passes"] == 4
+    assert details["merge_fan_in"] == 2
+    assert details["merge_algorithm"] == "numba_binary"
+    assert details["merge_passes"] == 14
     assert details["tie_group_count"] < 66
     assert list(tmp_path.iterdir()) == []
 
