@@ -190,6 +190,8 @@ The report separates construction/first execution, warm total time, selected-
 rank resource time, score delta, transfer time, block shape, and fixed provider
 workspace. For MPS, repeat with the budgets expected in production; transfer
 overhead can reverse the result when a tight budget creates many row blocks.
+The maintained Apple M4 measurements are stored in
+[native-selected-ranks-m4.json](results/post-0.5.1/native-selected-ranks-m4.json).
 
 ## Optional MLX pairwise provider
 

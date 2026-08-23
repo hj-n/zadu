@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "implementation_revision": "c43aaead1c7d58a59fce35102f929b9a7a68491d",
+    "date": "2026-08-23",
+    "samples": 2000,
+    "dimension": 20,
+    "embedding_dimension": 2,
+    "neighbors": 20,
+    "repeat": 7,
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "mlx": "0.32.1",
+    "torch": "2.13.0",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "machine": "Apple M4 arm64",
+    "metrics": [
+      "trustworthiness_continuity",
+      "mean_relative_rank_error"
+    ],
+    "comparison_scope": "same interpreter, data seed, hardware, metric specification, and total memory budget within each run"
+  },
+  "mlx_gpu_float32_16mib": {
+    "memory_budget_bytes": 16777216,
+    "numpy_construction_and_first_measure_seconds": 0.33050158410333097,
+    "native_construction_and_first_measure_seconds": 0.3669442920945585,
+    "numpy_warm_seconds": 0.2841213750652969,
+    "native_warm_seconds": 0.16415466694161296,
+    "warm_speedup": 1.7308150926123476,
+    "numpy_selected_rank_build_seconds": 0.2837902919854969,
+    "native_selected_rank_build_seconds": 0.1622475830372423,
+    "block_rows": 334,
+    "block_count": 6,
+    "maximum_score_delta": 1.3582701064995817e-06,
+    "provider_fallback": false
+  },
+  "torch_cpu_float64_16mib": {
+    "memory_budget_bytes": 16777216,
+    "numpy_construction_and_first_measure_seconds": 0.33212483394891024,
+    "native_construction_and_first_measure_seconds": 0.5362184590194374,
+    "numpy_warm_seconds": 0.284910042071715,
+    "native_warm_seconds": 0.10139083303511143,
+    "warm_speedup": 2.8100177653442424,
+    "numpy_selected_rank_build_seconds": 0.2845600829459727,
+    "native_selected_rank_build_seconds": 0.10097274999134243,
+    "block_rows": 321,
+    "block_count": 7,
+    "planned_fixed_working_bytes": 640000,
+    "actual_device_input_bytes": 320000,
+    "maximum_score_delta": 0.0,
+    "provider_fallback": false
+  },
+  "torch_mps_float32_16mib": {
+    "memory_budget_bytes": 16777216,
+    "numpy_construction_and_first_measure_seconds": 0.33071879111230373,
+    "native_construction_and_first_measure_seconds": 0.8638717501889914,
+    "numpy_warm_seconds": 0.28561174985952675,
+    "native_warm_seconds": 0.33285316708497703,
+    "warm_speedup": 0.858071300209712,
+    "numpy_selected_rank_build_seconds": 0.2852452090010047,
+    "native_selected_rank_build_seconds": 0.3316242501605302,
+    "block_rows": 321,
+    "block_count": 7,
+    "planned_fixed_working_bytes": 640000,
+    "actual_device_input_bytes": 640000,
+    "maximum_score_delta": 1.531458281300857e-07,
+    "provider_fallback": false
+  },
+  "torch_mps_float32_64mib": {
+    "memory_budget_bytes": 67108864,
+    "numpy_construction_and_first_measure_seconds": 0.3419476659037173,
+    "native_construction_and_first_measure_seconds": 0.8518484169617295,
+    "numpy_warm_seconds": 0.2912346669472754,
+    "native_warm_seconds": 0.10743049997836351,
+    "warm_speedup": 2.7109123294216264,
+    "numpy_selected_rank_build_seconds": 0.2907957078423351,
+    "native_selected_rank_build_seconds": 0.10642670886591077,
+    "block_rows": 1369,
+    "block_count": 2,
+    "planned_fixed_working_bytes": 640000,
+    "actual_device_input_bytes": 640000,
+    "maximum_score_delta": 1.531458281300857e-07,
+    "provider_fallback": false
+  },
+  "semantic_validation": {
+    "duplicate_and_equidistant_array_parity": true,
+    "mlx_cpu_float64_tested": true,
+    "mlx_gpu_float32_tested": true,
+    "torch_cpu_float64_tested": true,
+    "torch_mps_float32_tested": true,
+    "geodesic_fallback_tested": true,
+    "cuda_hardware_tested": false
+  }
+}
