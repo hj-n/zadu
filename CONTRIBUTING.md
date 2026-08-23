@@ -36,10 +36,11 @@ credited, and adaptations must be described.
 
 ## Development setup
 
-Use Python 3.10 or newer and install the development dependencies:
+Use Python 3.10 or newer and install the development and documentation
+dependencies:
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,docs]"
 ```
 
 Before opening a pull request, run:
@@ -48,9 +49,11 @@ Before opening a pull request, run:
 python -m pytest
 ruff check .
 black --check src test scalability_eval benchmarks
+python -m mkdocs build --strict
 ```
 
-Coding agents should also follow [AGENTS.md](AGENTS.md), which contains the
-repository-specific metric integration checklist. Pull requests should explain
-the user-visible change, the verification performed, and any compatibility,
-performance, numerical, citation, or licensing implications.
+Coding agents should also follow
+[AGENTS.md](https://github.com/hj-n/zadu/blob/master/AGENTS.md), which contains
+the repository-specific metric integration checklist. Pull requests should
+explain the user-visible change, the verification performed, and any
+compatibility, performance, numerical, citation, or licensing implications.

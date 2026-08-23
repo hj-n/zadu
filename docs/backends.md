@@ -2,7 +2,7 @@
 
 ZADU keeps NumPy/SciPy as the dependency-light execution baseline and
 loads accelerator frameworks only after an explicit backend request. Every
-backend in 0.5.1 evaluates the full exact resource contract: `float32` changes
+backend in 0.5.2 evaluates the full exact resource contract: `float32` changes
 rounding, not the number of pairs, neighbors, or iterations evaluated.
 
 ## Capability table
@@ -33,7 +33,7 @@ documented Apple GPU backend; ZADU's maintained job tests its supported float32
 resource paths.
 
 “Common code” means the CUDA branch uses the same tested tensor operations and
-has explicit availability checks, but 0.5.1 was not benchmarked or parity-tested
+has explicit availability checks, but 0.5.2 was not benchmarked or parity-tested
 on real CUDA hardware. It is supported as a preview, not performance-validated.
 
 `backend="auto"` deliberately selects NumPy/SciPy. Its ordinary kNN path keeps
@@ -129,7 +129,7 @@ is reported separately and must not be inferred from warm medians.
 
 ## Third-party backend entry points
 
-0.5.1 exposes the provisional `zadu.backends` entry-point group. An external
+ZADU 0.5.1 introduced the provisional `zadu.backends` entry-point group. An external
 package registers one unique lowercase backend name and points it at a factory:
 
 ```toml
@@ -163,5 +163,5 @@ preallocation guard and is passed back to `build()`/`build_batch()`.
 External providers must preserve stable self exclusion and duplicate-distance
 tie behavior, fall back explicitly for unsupported exact resources, keep score
 results unchanged, and put execution details only in diagnostics. The entry
-point API is intentionally narrow and provisional in 0.5.1; providers should pin
+point API remains intentionally narrow and provisional in 0.5.x; providers should pin
 the ZADU minor series they test against.

@@ -3,6 +3,7 @@
 .coverage.*
 .venv/
 htmlcov/
+site/
 uv.lock
 benchmarks/result/
 

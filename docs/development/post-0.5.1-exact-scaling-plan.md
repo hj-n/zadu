@@ -294,7 +294,7 @@ fell about 30%. The maximum score delta from condensed was `8.11e-14`. This is
 an exact capacity path rather than the default strategy. Cold and warm external
 times were similar because its evaluation-scoped workspace is intentionally
 recomputed and removed. The raw record is
-[`external-pair-ordering-m4.json`](../../benchmarks/results/post-0.5.1/external-pair-ordering-m4.json).
+[`external-pair-ordering-m4.json`](https://github.com/hj-n/zadu/blob/master/benchmarks/results/post-0.5.1/external-pair-ordering-m4.json).
 
 ### PR 13 — exact blockwise multi-sigma densities
 
@@ -315,7 +315,7 @@ repetitions:
 The blockwise path retained the same 80,000 bytes of final density vectors,
 used 23.9x less planned working memory, and took 1.12x the dense runtime. The
 maximum density delta was zero. The raw record is
-[`blockwise-density-m4.json`](../../benchmarks/results/post-0.5.1/blockwise-density-m4.json).
+[`blockwise-density-m4.json`](https://github.com/hj-n/zadu/blob/master/benchmarks/results/post-0.5.1/blockwise-density-m4.json).
 
 ### PR 14 — memory-aware mixed resources and stable float64 kNN
 
@@ -345,7 +345,7 @@ less package resource memory, and held package-planned peak memory to exactly
 48 MiB. Process peak RSS was 63.7% lower, and the maximum score delta was
 `9.54e-18`. The comparison reproduces the former mixed dense provider path,
 including its stable full-matrix neighbor sorts. The raw record is
-[`mixed-resources-m4.json`](../../benchmarks/results/post-0.5.1/mixed-resources-m4.json).
+[`mixed-resources-m4.json`](https://github.com/hj-n/zadu/blob/master/benchmarks/results/post-0.5.1/mixed-resources-m4.json).
 
 ### PR 15 — exact Gap Index vectorization
 
@@ -362,7 +362,7 @@ area vectors and produced the identical Gap Index score
 `0.8004256319323559`. Isolated peak RSS was 151.0 MiB for scalar execution and
 165.5 MiB for vectorized execution; the additional 14.5 MiB is consistent with
 the bounded vector workspace. The raw record is
-[`gap-index-vectorized-m4.json`](../../benchmarks/results/post-0.5.1/gap-index-vectorized-m4.json).
+[`gap-index-vectorized-m4.json`](https://github.com/hj-n/zadu/blob/master/benchmarks/results/post-0.5.1/gap-index-vectorized-m4.json).
 
 ## Packaging and release policy
 
