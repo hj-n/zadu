@@ -17,7 +17,7 @@ from zaduvis import zaduvis
 
 specs = [{"id": "tnc", "params": {"k": 25}}]
 runner = ZADU(specs, original, return_local=True)
-_, local_scores = runner.measure(embedding)
+_, local_scores = runner.measure(projection)
 
 local = local_scores[0]
 trustworthiness = local["local_trustworthiness"]
@@ -25,13 +25,13 @@ continuity = local["local_continuity"]
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 zaduvis.checkviz(
-    embedding,
+    projection,
     trustworthiness,
     continuity,
     ax=axes[0],
 )
 zaduvis.reliability_map(
-    embedding,
+    projection,
     trustworthiness,
     continuity,
     k=10,

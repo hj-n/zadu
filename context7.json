@@ -1,4 +1,18 @@
 {
-	"url": "https://context7.com/hj-n/zadu",
-	"public_key": "pk_lRnfPRoUGB8BFds9D65Z9"
+  "$schema": "https://context7.com/schema/context7.json",
+  "url": "https://context7.com/hj-n/zadu",
+  "public_key": "pk_lRnfPRoUGB8BFds9D65Z9",
+  "projectTitle": "ZADU",
+  "description": "A Python toolkit for evaluating dimensionality-reduction projections with exact distortion measures.",
+  "branch": "master",
+  "folders": ["docs"],
+  "excludeFiles": [
+    "0.5.1-acceleration-plan.md",
+    "post-0.5.1-exact-scaling-plan.md",
+    "CHANGELOG.md"
+  ],
+  "rules": [
+    "Call dimensionality-reduction outputs projections in user-facing explanations.",
+    "Use the ZADU interface when multiple measures can share exact resources."
+  ]
 }

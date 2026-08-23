@@ -60,14 +60,14 @@ runner = ZADU(
         temporary_budget=None,
     ),
 )
-scores = runner.measure_many(embeddings)
+scores = runner.measure_many(projections)
 print(runner.last_run_info)
 ```
 
 For a generated or very long input, keep both values and diagnostics bounded:
 
 ```python
-stream = runner.iter_measure_many(generate_embeddings())
+stream = runner.iter_measure_many(generate_projections())
 try:
     for item in stream:
         consume(item.index, item.result, item.run_info)
@@ -77,10 +77,10 @@ finally:
 
 The stream is lazy and ordered. NumPy and thread-safe external providers use the
 memory-planned in-flight width. MLX and PyTorch currently execute this iterator
-sequentially because their repeated-embedding acceleration is native tensor
+sequentially because their repeated-projection acceleration is native tensor
 batching; the materialized `measure_many()` API retains that batching path.
 `last_run_info` becomes a bounded aggregate after exhaustion or close and does
-not retain every per-embedding run.
+not retain every per-projection run.
 
 Diagnostics distinguish requested and actual providers, per-resource fallback
 reasons, input/output transfers, first execution, warm execution, block sizes,
@@ -97,7 +97,7 @@ target application-owned scratch storage. The planner checks worst-case run,
 merge, rank, and PAVA files before distance construction; normal completion,
 errors, and interruption remove the per-evaluation workspace. This path is a
 NumPy fallback for optional providers and trades I/O and merge time for a
-bounded exact RAM footprint. Repeated-embedding concurrency is also capped so
+bounded exact RAM footprint. Repeated-projection concurrency is also capped so
 the sum of simultaneous planned workspaces stays within `temporary_budget`.
 
 Registered T&C, class-aware T&C, and MRRE specifications request the paired

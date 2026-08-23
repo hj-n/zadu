@@ -1,6 +1,6 @@
 # Choose measures
 
-There is no universally best embedding-quality score. Start from the
+There is no universally best projection-quality score. Start from the
 scientific structure you need to preserve, then use complementary measures
 rather than selecting only the most favorable result.
 
@@ -43,7 +43,7 @@ claim you intend to make.
 - `k` defines the neighborhood scale. Report it with the score and, when
   possible, examine more than one scientifically meaningful scale.
 - Label-based visual-quality measures assume that the labels describe
-  meaningful structure in the original space. A visually separated embedding
+  meaningful structure in the original space. A visually separated projection
   is not automatically faithful if those labels overlap before projection.
 - Scores from different measures do not share a common unit. Do not average
   them without a justified model.

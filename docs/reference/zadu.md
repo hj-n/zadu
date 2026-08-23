@@ -2,7 +2,7 @@
 
 `ZADU` is the scheduled interface for one or more exact distortion measures.
 Use it when multiple metrics can share work, when evaluating repeated
-embeddings, or when execution diagnostics and memory planning matter.
+projections, or when execution diagnostics and memory planning matter.
 
 ::: zadu.ZADU
     options:

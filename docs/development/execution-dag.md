@@ -34,7 +34,7 @@ a dense matrix is not introduced merely because it would be convenient.
 
 The execution plan also records consumers and lifetimes. Resources can be
 released after their final consumer, and immutable original-space resources
-can be reused across embeddings.
+can be reused across projections.
 
 ## Provider boundaries
 

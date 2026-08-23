@@ -3,7 +3,7 @@
 ## Execution configuration
 
 `ExecutionConfig` is immutable and validates backend, device, dtype, memory,
-temporary-storage, and repeated-embedding settings when it is created.
+temporary-storage, and repeated-projection settings when it is created.
 
 ::: zadu.ExecutionConfig
     options:

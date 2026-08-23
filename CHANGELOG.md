@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.3
+
+### Changed
+
+- Context7 now indexes the canonical `docs/` sources while excluding internal
+  planning archives, and the public documentation consistently uses
+  “projection” except for established API identifiers and publication titles.
+- Removed the maintainer archive from the public documentation site.
+
 ## 0.5.2
 
 ### Added

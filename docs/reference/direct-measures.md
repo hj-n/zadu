@@ -8,9 +8,9 @@ metrics can share exact resources.
 ```python
 from zadu.measures import mean_relative_rank_error, neighborhood_hit, pearson_r
 
-mrre = mean_relative_rank_error.measure(original, embedding, k=20)
-pearson = pearson_r.measure(original, embedding)
-hit = neighborhood_hit.measure(embedding, labels, k=20)
+mrre = mean_relative_rank_error.measure(original, projection, k=20)
+pearson = pearson_r.measure(original, projection)
+hit = neighborhood_hit.measure(projection, labels, k=20)
 ```
 
 Direct functions validate public inputs and return the same scalar score

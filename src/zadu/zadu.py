@@ -34,7 +34,7 @@ from .registry import METRIC_BY_ALIAS, METRIC_BY_ID, MetricDefinition
 
 
 class ZADU:
-    """Evaluate one or more embeddings with registered exact metrics."""
+    """Evaluate one or more projections with registered exact metrics."""
 
     ABBREVIATIONS: ClassVar[dict[str, str]] = {
         alias: metric.id for alias, metric in METRIC_BY_ALIAS.items()
@@ -141,9 +141,9 @@ class ZADU:
         return result
 
     def measure_many(self, embeddings, labels=None):
-        """Compute every metric for an ordered collection of embeddings.
+        """Compute every metric for an ordered collection of projections.
 
-        Immutable original-space resources are shared across every embedding.
+        Immutable original-space resources are shared across every projection.
         Collection concurrency is opt-in through ``embedding_workers`` and is
         capped by the configured memory budget. ``labels`` is one optional
         label vector shared by the collection.
@@ -245,11 +245,11 @@ class ZADU:
         return results
 
     def iter_measure_many(self, embeddings, labels=None) -> Iterator[EmbeddingResult]:
-        """Lazily yield bounded, ordered results for an embedding iterable.
+        """Lazily yield bounded, ordered results for a projection iterable.
 
         Each yielded :class:`EmbeddingResult` contains the input index, the
         exact value returned by the corresponding ``measure_many()`` item, and
-        that embedding's diagnostics. At most the planned worker width is
+        that projection's diagnostics. At most the planned worker width is
         consumed or evaluated concurrently. Exhaust or close the iterator to
         finalize ``last_run_info`` and release pending execution resources.
 
@@ -454,7 +454,7 @@ class ZADU:
         batch_plan: BatchExecutionPlan,
         snc_effective_workers: dict[int, int] | None,
     ):
-        """Build embedded resources in native batches, then score in order."""
+        """Build projection-space resources in native batches, then score in order."""
 
         results = []
         run_infos = []
@@ -576,7 +576,7 @@ class ZADU:
         return validate_labels(label, self.orig.shape[0])
 
     def _measure_validated(self, emb_array, label_array):
-        """Measure one validated embedding and return its result and diagnostics."""
+        """Measure one validated projection and return its result and diagnostics."""
 
         snc_effective_workers = self._snc_workers_for_collection(1)
         result, run_info = self._execute_embedding(
@@ -595,7 +595,7 @@ class ZADU:
         cache: ResourceCache,
         snc_effective_workers: dict[int, int] | None,
     ):
-        """Execute one embedding without mutating collection-level state."""
+        """Execute one projection without mutating collection-level state."""
 
         preparation_started = perf_counter()
         cache.begin_run()
@@ -617,7 +617,7 @@ class ZADU:
         *,
         preparation_seconds: float = 0.0,
     ):
-        """Finish paired resources and metrics after embedded preparation."""
+        """Finish paired resources and metrics after projection preparation."""
 
         run_started = perf_counter()
         cache.prepare_paired(self.orig, emb_array)
@@ -888,7 +888,7 @@ class ZADU:
         self._sync_resource_views()
 
     def _estimate_cache_bytes(self) -> int:
-        """Estimate persistent original+embedded cache storage."""
+        """Estimate persistent original and projection cache storage."""
 
         return self._execution_plan.estimated_cache_bytes
 

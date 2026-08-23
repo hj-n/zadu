@@ -1,7 +1,8 @@
 # AI coding assistants
 
-ZADU is indexed for Context7 so coding assistants can retrieve current API
-documentation and examples. The library path is:
+ZADU configures Context7 to index the canonical `docs/` sources behind this
+site, so coding assistants can retrieve current API documentation and examples.
+The library path is:
 
 ```text
 /hj-n/zadu
