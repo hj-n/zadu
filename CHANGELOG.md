@@ -9,6 +9,8 @@
 - Repository-wide metric contract tests covering registry, enum, exports,
   signatures, direct-versus-scheduled score parity, and execution-DAG resource
   sharing.
+- A development-only exact selected-rank oracle, isolated memory/time benchmark,
+  and post-0.5.1 scaling plan for replacing persistent full inverse rankings.
 
 ## 0.5.1
 
