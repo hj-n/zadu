@@ -13,7 +13,7 @@ rounding, not the number of pairs, neighbors, or iterations evaluated.
 | Dtype | float64 | float32/64 | float32 | float32/64 | float32 | float32/64 |
 | Dense/condensed Euclidean | Native | Native | Native | Native | Native | Common code |
 | Stable full/inverse ranking | Native | Native | Native | Native | Native | Common code |
-| Paired selected ranks | Native | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback |
+| Paired selected ranks | Native | Native | Native | Native | Native | Common code |
 | Ordinary exact kNN | FAISS | Stable full-sort prefix | Stable full-sort prefix | Stable full-sort prefix | Stable full-sort prefix | Common code |
 | Topographic stable-kNN | SciPy blocks | Native | Native | Native | Native | Common code |
 | Derived metric reductions | Native | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback | NumPy fallback |
@@ -70,15 +70,27 @@ RSS or device-profiler measurements when capacity planning.
 Registered T&C, class-aware T&C, and MRRE specifications request the paired
 selected-rank resource. The NumPy provider builds it in exact bounded blocks and
 retains `O(nk)` indices, cross-space ranks, and membership masks. MLX and
-PyTorch still expose their explicit full-ranking capability, but selected-rank
-execution falls back to NumPy until a native paired implementation is available;
-the resource record makes that boundary visible.
+PyTorch keep block distances, stable sorting, inverse scatter, rank gathers, and
+membership reductions on the selected device, then transfer only the compact
+retained result. PyTorch plans a fixed target-index conversion/transfer buffer
+in addition to row-block work. Geodesic selected ranks remain an explicit NumPy
+fallback because neither optional provider implements geodesic distances.
 
 Cold time includes first framework/device initialization. Warm time measures a
 reused provider after that initialization. Neither should be substituted for
 the other: on the release machine, small MLX jobs were much faster warm but
 slower cold, while the crossover appeared by the 2,000-sample representative
 suite.
+
+On the maintained Apple M4 at `n=2,000`, `k=20`, the selected-rank T&C/MRRE
+suite measured 1.73x faster warm through MLX GPU float32 and 2.81x faster
+through PyTorch CPU float64 than NumPy at a 16 MiB total budget. PyTorch MPS was
+0.86x at 16 MiB because seven blocks amplified transfers, but 2.71x at 64 MiB
+with two blocks. Cold construction plus first execution remained slower for all
+optional cases due framework startup. The float64 PyTorch CPU score delta was
+zero; float32 score deltas were at most `1.36e-6` in these runs. These are
+machine-specific observations, so benchmark the actual device, budget, and
+specification rather than treating the capability table as a speed guarantee.
 
 ## Third-party backend entry points
 

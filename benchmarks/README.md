@@ -173,6 +173,24 @@ with the initial [Apple M4 result](results/post-0.5.1/selected-ranks-m4-16mib.js
 and the [production resource plus end-to-end comparison](results/post-0.5.1/selected-ranks-production-m4.json)
 kept as machine-readable evidence.
 
+To compare the production NumPy path with one native optional provider through
+T&C and MRRE, run each framework in a separate process:
+
+```bash
+python benchmarks/benchmark_selected_rank_backends.py \
+  --backend mlx --device gpu --dtype float32 \
+  --samples 2000 --dimension 20 --k 20 --repeat 7
+
+python benchmarks/benchmark_selected_rank_backends.py \
+  --backend torch --device cpu --dtype float64 \
+  --samples 2000 --dimension 20 --k 20 --repeat 7
+```
+
+The report separates construction/first execution, warm total time, selected-
+rank resource time, score delta, transfer time, block shape, and fixed provider
+workspace. For MPS, repeat with the budgets expected in production; transfer
+overhead can reverse the result when a tight budget creates many row blocks.
+
 ## Optional MLX pairwise provider
 
 Install `zadu[mlx]` on Apple Silicon, then compare cold and warm distance

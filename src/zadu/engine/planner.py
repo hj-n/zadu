@@ -100,6 +100,7 @@ class RankComparisonExecutionPlan:
     working_bytes: int
     metric_ids: tuple[str, ...]
     geodesic: bool
+    fixed_working_bytes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -784,11 +785,17 @@ def build_execution_plan(
             n_samples * SELECTED_RANK_WORK_BYTES_PER_CELL,
             largest_membership_k**2 * RANK_WORK_BYTES_PER_COMPARISON,
         )
+        fixed_working_bytes = (
+            16 * n_samples * rank_comparison_k
+            if backend == "torch" and not geodesic
+            else 0
+        )
+        block_work_budget = max(0, available_work_bytes - fixed_working_bytes)
         block_rows = max(
             1,
-            min(n_samples, available_work_bytes // bytes_per_row),
+            min(n_samples, block_work_budget // bytes_per_row),
         )
-        working_bytes = block_rows * bytes_per_row
+        working_bytes = fixed_working_bytes + block_rows * bytes_per_row
         peak_working_bytes = max(peak_working_bytes, working_bytes)
         rank_comparison_plan = RankComparisonExecutionPlan(
             statistics_key=rank_comparison_statistics_key,
@@ -804,6 +811,7 @@ def build_execution_plan(
                 for index in sorted(rank_comparison_consumers)
             ),
             geodesic=geodesic,
+            fixed_working_bytes=fixed_working_bytes,
         )
 
     neighbor_statistics_plan = None

@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -9,6 +10,7 @@ from scipy.spatial.distance import cdist, pdist
 from zadu import ZADU, EmbeddingExecutionError, ExecutionConfig
 from zadu.backends import torch_backend
 from zadu.backends.base import BatchResourceError
+from zadu.backends.numpy_backend import NumpyResourceProvider
 from zadu.engine.resources import NeighborRanking, ResourceKey, ResourceKind, Space
 from zadu.measures import (
     local_continuity_meta_criteria,
@@ -457,6 +459,124 @@ def test_torch_ranking_reuses_planned_distance_matrix(device):
     assert ranked.details["distance_zero_copy"] is False
 
 
+@pytest.mark.parametrize("device", ["cpu", "mps"])
+def test_torch_selected_ranks_match_numpy_on_ties_and_bounded_blocks(device):
+    orig = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+            [2.0, 2.0],
+            [-2.0, -2.0],
+        ],
+        dtype=np.float32,
+    )
+    emb = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [2.0, -2.0],
+            [-2.0, 2.0],
+        ],
+        dtype=np.float32,
+    )
+    template = ZADU(
+        [
+            {"id": "tnc", "params": {"k": 3}},
+            {"id": "mrre", "params": {"k": 4}},
+        ],
+        orig,
+    )._execution_plan.rank_comparison_plan
+    assert template is not None
+    bytes_per_row = orig.shape[0] * 24
+    fixed_working_bytes = 16 * orig.shape[0] * template.k
+    plan = replace(
+        template,
+        block_rows=2,
+        work_budget_bytes=fixed_working_bytes + 2 * bytes_per_row,
+        working_bytes=fixed_working_bytes + 2 * bytes_per_row,
+        fixed_working_bytes=fixed_working_bytes,
+    )
+    orig_knn = knn.knn_from_distance_matrix(cdist(orig, orig), plan.k).astype(np.int32)
+    expected = (
+        NumpyResourceProvider()
+        .build_rank_comparisons(
+            plan,
+            orig,
+            emb,
+            orig_knn=orig_knn,
+            orig_distance_matrix=None,
+            emb_distance_matrix=None,
+        )
+        .value
+    )
+    dtype = "float32" if device == "mps" else "float64"
+    built = _torch_provider(device=device, dtype=dtype).build_rank_comparisons(
+        plan,
+        orig,
+        emb,
+        orig_knn=orig_knn,
+        orig_distance_matrix=None,
+        emb_distance_matrix=None,
+    )
+
+    for name in (
+        "orig_ranks_of_emb",
+        "emb_ranks_of_orig",
+        "orig_indices",
+        "emb_indices",
+    ):
+        np.testing.assert_array_equal(
+            getattr(built.value, name), getattr(expected, name)
+        )
+    for requested_k in plan.membership_ks:
+        np.testing.assert_array_equal(
+            built.value.emb_in_orig[requested_k],
+            expected.emb_in_orig[requested_k],
+        )
+        np.testing.assert_array_equal(
+            built.value.orig_in_emb[requested_k],
+            expected.orig_in_emb[requested_k],
+        )
+    assert built.implementation == "torch"
+    assert built.details["provider_fallback"] is False
+    assert built.details["block_rows"] == 2
+    assert built.details["block_count"] == 4
+    assert built.details["tie_break"] == "stable_column_index"
+    assert built.details["working_bytes"] == (fixed_working_bytes + 2 * bytes_per_row)
+    json.dumps(built.details)
+
+
+def test_torch_selected_ranks_record_geodesic_fallback():
+    orig = np.asarray([[0.0, 0.0], [0.1, 0.2], [-0.2, 0.1], [0.3, -0.1], [-0.1, -0.3]])
+    emb = np.asarray([[0.0], [1.0], [2.0], [3.0], [4.0]])
+    runner = ZADU(
+        [{"id": "tnc", "params": {"k": 1}}],
+        orig,
+        geodesic=True,
+        execution=ExecutionConfig(backend="torch", device="cpu", dtype="float64"),
+    )
+
+    runner.measure(emb)
+
+    comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert comparison["provider"] == "numpy"
+    assert comparison["details"]["requested_provider"] == "torch"
+    assert comparison["details"]["provider_fallback"] is True
+    assert comparison["details"]["fallback_reason"] == "geodesic_not_supported"
+
+
 @pytest.mark.parametrize(
     ("device", "dtype", "rel", "abs_"),
     [("cpu", "float64", 1e-12, 1e-12), ("mps", "float32", 4e-5, 4e-6)],
@@ -511,10 +631,53 @@ def test_zadu_torch_routes_neighbor_metrics_and_preserves_scores(
         for resource in runner.last_run_info["resources"]
         if resource["kind"] == "rank_comparisons"
     )
-    assert rank_comparison["provider"] == "numpy"
-    assert rank_comparison["details"]["requested_provider"] == "torch"
-    assert rank_comparison["details"]["provider_fallback"] is True
-    assert rank_comparison["details"]["algorithm"] == "blockwise_selected_ranks"
+    assert rank_comparison["provider"] == "torch"
+    assert rank_comparison["details"]["provider_fallback"] is False
+    assert rank_comparison["details"]["algorithm"] == ("torch_blockwise_selected_ranks")
+
+
+@pytest.mark.parametrize(
+    ("device", "dtype", "rel", "abs_"),
+    [("cpu", "float64", 1e-12, 1e-12), ("mps", "float32", 4e-5, 4e-6)],
+)
+def test_zadu_torch_dense_pair_plan_shares_distances_with_selected_ranks(
+    device, dtype, rel, abs_
+):
+    rng = np.random.default_rng(770)
+    orig = rng.normal(size=(64, 6))
+    emb = orig @ rng.normal(size=(6, 2))
+    specs = [
+        {"id": "stress"},
+        {"id": "tnc", "params": {"k": 5}},
+    ]
+    expected = ZADU(specs, orig).measure(emb)
+    _torch_provider(device=device, dtype=dtype)
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(backend="torch", device=device, dtype=dtype),
+    )
+
+    actual = runner.measure(emb)
+
+    for actual_score, expected_score in zip(actual, expected, strict=True):
+        for name in actual_score:
+            assert actual_score[name] == pytest.approx(
+                expected_score[name], rel=rel, abs=abs_
+            )
+    comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert comparison["provider"] == "torch"
+    assert comparison["details"]["provider_fallback"] is False
+    assert comparison["details"]["original_distance_source"] == (
+        "shared_distance_matrix"
+    )
+    assert comparison["details"]["embedded_distance_source"] == (
+        "shared_distance_matrix"
+    )
 
 
 def test_torch_plan_accounts_for_neighbor_working_memory():
@@ -544,6 +707,35 @@ def test_torch_plan_accounts_for_neighbor_working_memory():
         plan.estimated_cache_bytes
         + max(plan.resource_working_bytes[key] for key in neighbor_keys)
     )
+    rank_plan = plan.rank_comparison_plan
+    assert rank_plan is not None
+    rank_bytes_per_row = orig.shape[0] * 24
+    assert rank_plan.fixed_working_bytes == 16 * orig.shape[0] * rank_plan.k
+    assert rank_plan.working_bytes == (
+        rank_plan.fixed_working_bytes + rank_plan.block_rows * rank_bytes_per_row
+    )
+
+    bounded_budget = (
+        plan.estimated_cache_bytes
+        + rank_plan.fixed_working_bytes
+        + 2 * rank_bytes_per_row
+    )
+    bounded = ZADU(
+        [
+            {"id": "tnc", "params": {"k": 5}},
+            {"id": "lcmc", "params": {"k": 7}},
+            {"id": "topo", "params": {"k": 4}},
+        ],
+        orig,
+        execution=ExecutionConfig(
+            backend="torch",
+            device="cpu",
+            dtype="float64",
+            memory_budget=bounded_budget,
+        ),
+    )
+    assert bounded._execution_plan.rank_comparison_plan.block_rows == 2
+    assert bounded._execution_plan.planned_peak_bytes <= bounded_budget
 
 
 @pytest.mark.parametrize("device", ["cpu", "mps"])

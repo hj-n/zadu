@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -9,6 +10,7 @@ from scipy.spatial.distance import cdist, pdist
 from zadu import ZADU, EmbeddingExecutionError, ExecutionConfig
 from zadu.backends import mlx_backend
 from zadu.backends.base import BatchResourceError
+from zadu.backends.numpy_backend import NumpyResourceProvider
 from zadu.engine.resources import NeighborRanking, ResourceKey, ResourceKind, Space
 from zadu.measures.utils import knn
 
@@ -487,6 +489,124 @@ def test_mlx_workspace_invalidation_refreshes_reused_mutable_input():
     assert second.details["input_cast_copy"] is True
 
 
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    [("cpu", "float64"), ("gpu", "float32")],
+)
+def test_mlx_selected_ranks_match_numpy_on_ties_and_bounded_blocks(device, dtype):
+    orig = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+            [2.0, 2.0],
+            [-2.0, -2.0],
+        ],
+        dtype=np.float32,
+    )
+    emb = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [2.0, -2.0],
+            [-2.0, 2.0],
+        ],
+        dtype=np.float32,
+    )
+    template = ZADU(
+        [
+            {"id": "tnc", "params": {"k": 3}},
+            {"id": "mrre", "params": {"k": 4}},
+        ],
+        orig,
+    )._execution_plan.rank_comparison_plan
+    assert template is not None
+    bytes_per_row = orig.shape[0] * 24
+    plan = replace(
+        template,
+        block_rows=2,
+        work_budget_bytes=2 * bytes_per_row,
+        working_bytes=2 * bytes_per_row,
+    )
+    orig_knn = knn.knn_from_distance_matrix(cdist(orig, orig), plan.k).astype(np.int32)
+    expected = (
+        NumpyResourceProvider()
+        .build_rank_comparisons(
+            plan,
+            orig,
+            emb,
+            orig_knn=orig_knn,
+            orig_distance_matrix=None,
+            emb_distance_matrix=None,
+        )
+        .value
+    )
+    built = _mlx_provider(device=device, dtype=dtype).build_rank_comparisons(
+        plan,
+        orig,
+        emb,
+        orig_knn=orig_knn,
+        orig_distance_matrix=None,
+        emb_distance_matrix=None,
+    )
+
+    for name in (
+        "orig_ranks_of_emb",
+        "emb_ranks_of_orig",
+        "orig_indices",
+        "emb_indices",
+    ):
+        np.testing.assert_array_equal(
+            getattr(built.value, name), getattr(expected, name)
+        )
+    for requested_k in plan.membership_ks:
+        np.testing.assert_array_equal(
+            built.value.emb_in_orig[requested_k],
+            expected.emb_in_orig[requested_k],
+        )
+        np.testing.assert_array_equal(
+            built.value.orig_in_emb[requested_k],
+            expected.orig_in_emb[requested_k],
+        )
+    assert built.implementation == "mlx"
+    assert built.details["provider_fallback"] is False
+    assert built.details["block_rows"] == 2
+    assert built.details["block_count"] == 4
+    assert built.details["tie_break"] == "stable_column_index"
+    assert built.details["working_bytes"] == 2 * bytes_per_row
+    json.dumps(built.details)
+
+
+def test_mlx_selected_ranks_record_geodesic_fallback():
+    orig = np.asarray([[0.0, 0.0], [0.1, 0.2], [-0.2, 0.1], [0.3, -0.1], [-0.1, -0.3]])
+    emb = np.asarray([[0.0], [1.0], [2.0], [3.0], [4.0]])
+    runner = ZADU(
+        [{"id": "tnc", "params": {"k": 1}}],
+        orig,
+        geodesic=True,
+        execution=ExecutionConfig(backend="mlx", device="cpu", dtype="float64"),
+    )
+
+    runner.measure(emb)
+
+    comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert comparison["provider"] == "numpy"
+    assert comparison["details"]["requested_provider"] == "mlx"
+    assert comparison["details"]["provider_fallback"] is True
+    assert comparison["details"]["fallback_reason"] == "geodesic_not_supported"
+
+
 def test_zadu_mlx_routes_all_neighbor_metrics_and_preserves_scores():
     _mlx_provider()
     rng = np.random.default_rng(18)
@@ -539,10 +659,11 @@ def test_zadu_mlx_routes_all_neighbor_metrics_and_preserves_scores():
         for resource in runner.last_run_info["resources"]
         if resource["kind"] == "rank_comparisons"
     )
-    assert rank_comparison["provider"] == "numpy"
-    assert rank_comparison["details"]["requested_provider"] == "mlx"
-    assert rank_comparison["details"]["provider_fallback"] is True
-    assert rank_comparison["details"]["algorithm"] == "blockwise_selected_ranks"
+    assert rank_comparison["provider"] == "mlx"
+    assert rank_comparison["details"]["provider_fallback"] is False
+    assert rank_comparison["details"]["algorithm"] == (
+        "compiled_blockwise_selected_ranks"
+    )
     json.dumps(runner.last_run_info)
 
 
@@ -586,8 +707,8 @@ def test_zadu_mlx_dense_pair_plan_shares_distances_with_selected_ranks():
     assert comparison["details"]["embedded_distance_source"] == (
         "shared_distance_matrix"
     )
-    assert comparison["details"]["requested_provider"] == "mlx"
-    assert comparison["details"]["provider_fallback"] is True
+    assert comparison["provider"] == "mlx"
+    assert comparison["details"]["provider_fallback"] is False
 
 
 def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
@@ -642,7 +763,8 @@ def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
         if record.key.kind is ResourceKind.RANK_COMPARISONS
     )
     assert comparison.details["block_rows"] == 2
-    assert comparison.details["provider_fallback"] is True
+    assert comparison.provider == "mlx"
+    assert comparison.details["provider_fallback"] is False
     assert bounded._execution_plan.planned_peak_bytes <= budget
 
     with pytest.raises(MemoryError, match="peak working memory"):

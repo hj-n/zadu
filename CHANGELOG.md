@@ -18,6 +18,10 @@
   bounded NumPy row blocks and retain `O(nk)` state instead of two persistent
   `n x n` inverse rankings. Run diagnostics expose block bounds, distance reuse,
   retained dtypes, and optional-provider fallback.
+- MLX and PyTorch now execute the paired selected-rank resource natively with
+  device-side stable sorting, inverse scatter, rank gather, and membership
+  reductions. Geodesic rank resources retain an explicit NumPy fallback, and
+  PyTorch planning reserves its fixed target-index transfer workspace.
 
 ### Fixed
 
