@@ -1,8 +1,8 @@
 # Post-0.5.1 exact scaling plan
 
 > Status: active development record. PR 10-A established the selected-rank
-> oracle and measurement gates. PR 10-B is integrating that design into the
-> production NumPy planner and provider.
+> oracle and measurement gates, and PR 10-B integrated it into production
+> NumPy. PR 10-C is implementing native MLX and PyTorch providers.
 
 ## Objective
 
@@ -21,10 +21,10 @@ remaining per-embedding quadratic resources are fixed.
 
 ## Current bottlenecks
 
-### Full neighbor rankings
+### Resolved bottleneck: full neighbor rankings
 
-T&C, class-aware T&C, and MRRE currently retain one `n x n` inverse ranking in
-each space. The fused metric kernels only read:
+Before PR 10-B, T&C, class-aware T&C, and MRRE retained one `n x n` inverse
+ranking in each space. The fused metric kernels only read:
 
 - the first `k` neighbor indices in both spaces;
 - the original-space ranks of the embedded `k` neighbors;
@@ -109,7 +109,7 @@ Acceptance gates for moving the design into production:
   budgets; and
 - no production or public-API change in PR 10-A.
 
-### PR 10-B — NumPy production selected-rank resource (current)
+### PR 10-B — NumPy production selected-rank resource (complete)
 
 Make `RANK_COMPARISONS` a direct paired-space resource for its registered
 metrics instead of creating two persistent `NEIGHBOR_RANKING` dependencies.
@@ -155,7 +155,7 @@ partial selection reduce this repeated-run cost from the initial direct-paired
 prototype's roughly 23% slowdown; PR 10-C can target the remaining rank-count
 work on MLX and PyTorch without restoring a quadratic cache.
 
-### PR 10-C — MLX and PyTorch selected-rank providers
+### PR 10-C — MLX and PyTorch selected-rank providers (current)
 
 Implement the same paired resource natively on optional providers. Keep row
 blocks, distance calculation, stable sorting, inverse scatter, rank gather, and
@@ -177,6 +177,35 @@ Provider gates:
   tolerance checks; and
 - diagnostics separate compile/cold time, warm execution, transfer, block size,
   and fallback reason.
+
+The implementation uses the existing paired-resource contract: no public API,
+metric, or optional dependency changes are required. Both providers compute two
+stable block orders, inverse-scatter ranks, gather only the cross-space targets,
+and reduce the requested membership masks before transferring `O(nk)` output.
+PyTorch batches the compact outputs into fewer host transfers and reserves a
+fixed `int64` target-index workspace in the memory plan. Geodesic execution is
+recorded as a NumPy fallback.
+
+Apple M4 measurements with Python 3.12.13, `n=2,000`, `k=20`, fifteen warm
+repetitions, and T&C plus MRRE gave the following end-to-end medians:
+
+| Backend | Total budget | NumPy warm | Native warm | Speedup | Max score delta |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MLX CPU float64 | 16 MiB | 0.285 s | 0.322 s | 0.89x | 0 |
+| MLX GPU float32 | 16 MiB | 0.286 s | 0.338 s | 0.85x | 1.36e-6 |
+| MLX GPU float32 | 64 MiB | 0.287 s | 0.072 s | 3.98x | 1.36e-6 |
+| Torch CPU float64 | 16 MiB | 0.286 s | 0.098 s | 2.91x | 0 |
+| Torch MPS float32 | 16 MiB | 0.285 s | 0.206 s | 1.38x | 1.53e-7 |
+| Torch MPS float32 | 64 MiB | 0.287 s | 0.093 s | 3.09x | 1.53e-7 |
+
+At 16 MiB, optional plans needed seven blocks; at 64 MiB, GPU plans needed two.
+The GPU sample ranges were wide (`0.059–0.409 s` for MLX at 16 MiB and
+`0.052–0.378 s` for MPS), so the medians are observations rather than stable
+service guarantees. PyTorch CPU was tightly grouped at `0.098–0.103 s`.
+Framework startup and interactive device scheduling also made cold results
+unreliable predictors of warm throughput. These results justify keeping NumPy
+as `auto` and exposing block/transfer diagnostics rather than selecting a device
+from hardware presence alone. CUDA remains unmeasured on this Mac.
 
 ### PR 11 — bounded streaming embedding evaluation
 

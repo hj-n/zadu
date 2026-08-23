@@ -18,11 +18,17 @@
   bounded NumPy row blocks and retain `O(nk)` state instead of two persistent
   `n x n` inverse rankings. Run diagnostics expose block bounds, distance reuse,
   retained dtypes, and optional-provider fallback.
+- MLX and PyTorch now execute the paired selected-rank resource natively with
+  device-side stable sorting, inverse scatter, rank gather, and membership
+  reductions. Geodesic rank resources retain an explicit NumPy fallback, and
+  PyTorch planning reserves its fixed target-index transfer workspace.
 
 ### Fixed
 
 - Rank-based metrics now honor `geodesic=True` for the registered original
   space even when no other metric requests a dense distance matrix.
+- MLX CPU float64 resources now create slices, casts, and workspace views on
+  the provider stream instead of inheriting the process-default GPU stream.
 
 ## 0.5.1
 

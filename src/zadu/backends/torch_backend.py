@@ -6,13 +6,14 @@ from dataclasses import dataclass
 from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.typing as npt
 
 from zadu.engine.resources import (
     NeighborRanking,
+    RankComparisons,
     ResourceKey,
     ResourceKind,
     Space,
@@ -21,6 +22,9 @@ from zadu.engine.resources import (
 
 from .base import BatchResourceError, BuiltResource
 from .numpy_backend import NumpyResourceProvider
+
+if TYPE_CHECKING:
+    from zadu.engine.planner import RankComparisonExecutionPlan
 
 
 @dataclass(slots=True)
@@ -868,10 +872,335 @@ class TorchResourceProvider(NumpyResourceProvider):
             "unsupported_resource",
         )
 
-    def build_rank_comparisons(self, *args, **kwargs) -> BuiltResource:
-        return self._fallback(
-            super().build_rank_comparisons(*args, **kwargs),
-            "unsupported_resource",
+    def build_rank_comparisons(
+        self,
+        plan: RankComparisonExecutionPlan,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
+        *,
+        orig_knn: npt.NDArray,
+        orig_distance_matrix: npt.NDArray | None,
+        emb_distance_matrix: npt.NDArray | None,
+    ) -> BuiltResource:
+        if plan.geodesic:
+            return self._fallback(
+                super().build_rank_comparisons(
+                    plan,
+                    orig,
+                    emb,
+                    orig_knn=orig_knn,
+                    orig_distance_matrix=orig_distance_matrix,
+                    emb_distance_matrix=emb_distance_matrix,
+                ),
+                "geodesic_not_supported",
+            )
+        return self._build_rank_comparisons(
+            plan,
+            orig,
+            emb,
+            orig_knn=orig_knn,
+            orig_distance_matrix=orig_distance_matrix,
+            emb_distance_matrix=emb_distance_matrix,
+        )
+
+    def _build_rank_comparisons(
+        self,
+        plan: RankComparisonExecutionPlan,
+        orig: npt.NDArray,
+        emb: npt.NDArray,
+        *,
+        orig_knn: npt.NDArray,
+        orig_distance_matrix: npt.NDArray | None,
+        emb_distance_matrix: npt.NDArray | None,
+    ) -> BuiltResource:
+        """Build exact paired selected ranks with PyTorch block workspaces."""
+
+        torch = self._torch
+        n_samples = orig.shape[0]
+        largest_membership_k = max(plan.membership_ks, default=0)
+        bytes_per_row = max(1, n_samples * 24 + largest_membership_k**2)
+        fixed_working_bytes = max(
+            plan.fixed_working_bytes,
+            16 * n_samples * plan.k,
+        )
+        block_work_budget = plan.work_budget_bytes - fixed_working_bytes
+        if block_work_budget < bytes_per_row:
+            raise MemoryError(
+                "PyTorch selected-rank execution needs enough memory for one row"
+            )
+        block_rows = max(
+            1,
+            min(
+                n_samples,
+                plan.block_rows,
+                block_work_budget // bytes_per_row,
+            ),
+        )
+        index_dtype = compact_index_dtype(n_samples)
+        orig_indices = np.asarray(orig_knn)[:, : plan.k]
+        emb_indices = np.empty((n_samples, plan.k), dtype=index_dtype)
+        orig_ranks_of_emb = np.empty((n_samples, plan.k), dtype=index_dtype)
+        emb_ranks_of_orig = np.empty((n_samples, plan.k), dtype=index_dtype)
+        emb_in_orig = {
+            k: np.empty((n_samples, k), dtype=np.bool_) for k in plan.membership_ks
+        }
+        orig_in_emb = {
+            k: np.empty((n_samples, k), dtype=np.bool_) for k in plan.membership_ks
+        }
+
+        orig_workspace = None
+        emb_workspace = None
+        input_seconds = 0.0
+        if orig_distance_matrix is None:
+            orig_workspace, orig_input_reused = self._workspace(
+                Space.ORIGINAL,
+                orig,
+            )
+            if not orig_input_reused:
+                input_seconds += orig_workspace.input_seconds
+            orig_input_zero_copy = (
+                self.device == "cpu" and not orig_workspace.device_copy
+            )
+            orig_input_cast_copy = orig_workspace.cast_copy
+            orig_distance_source = "fused_blockwise_pairwise"
+        else:
+            orig_input_reused = False
+            orig_input_zero_copy = False
+            orig_input_cast_copy = (
+                np.asarray(orig_distance_matrix).dtype != self._numpy_dtype
+            )
+            orig_distance_source = "shared_distance_matrix"
+
+        if emb_distance_matrix is None:
+            emb_workspace, emb_input_reused = self._workspace(
+                Space.EMBEDDED,
+                emb,
+            )
+            if not emb_input_reused:
+                input_seconds += emb_workspace.input_seconds
+            emb_input_zero_copy = self.device == "cpu" and not emb_workspace.device_copy
+            emb_input_cast_copy = emb_workspace.cast_copy
+            emb_distance_source = "fused_blockwise_pairwise"
+        else:
+            emb_input_reused = False
+            emb_input_zero_copy = False
+            emb_input_cast_copy = (
+                np.asarray(emb_distance_matrix).dtype != self._numpy_dtype
+            )
+            emb_distance_source = "shared_distance_matrix"
+
+        cold_seconds = 0.0
+        warm_seconds = 0.0
+        output_transfer_seconds = 0.0
+        block_count = 0
+
+        target_started = perf_counter()
+        target_array = np.asarray(orig_indices, dtype=np.int64).copy()
+        torch_all_orig_targets = torch.from_numpy(target_array).to(
+            self._device,
+            dtype=torch.int64,
+            copy=self.device != "cpu",
+        )
+        self._synchronize()
+        input_seconds += perf_counter() - target_started
+
+        def distance_block(matrix, start, stop):
+            transfer_started = perf_counter()
+            raw = np.asarray(matrix)[start:stop]
+            with np.errstate(over="ignore", invalid="ignore"):
+                distances = np.ascontiguousarray(raw, dtype=self._numpy_dtype)
+            if not np.all(np.isfinite(distances)):
+                raise ValueError("distance matrix must contain only finite values")
+            if np.any(distances < 0):
+                raise ValueError("distance matrix must be non-negative")
+            tensor = torch.from_numpy(distances).to(
+                self._device,
+                dtype=self._torch_dtype,
+                copy=True,
+            )
+            self._synchronize()
+            return tensor, perf_counter() - transfer_started
+
+        def record_execution(started):
+            nonlocal cold_seconds, warm_seconds
+            self._synchronize()
+            elapsed = perf_counter() - started
+            if "rank_comparisons" in self._executed:
+                warm_seconds += elapsed
+            else:
+                cold_seconds += elapsed
+                self._executed.add("rank_comparisons")
+
+        with torch.inference_mode():
+            for start in range(0, n_samples, block_rows):
+                stop = min(start + block_rows, n_samples)
+                torch_orig_targets = torch_all_orig_targets[start:stop]
+                local_rows = torch.arange(stop - start, device=self._device)
+                self_columns = torch.arange(start, stop, device=self._device)
+
+                execution_started = perf_counter()
+                if emb_distance_matrix is None:
+                    assert emb_workspace is not None
+                    emb_sortable = torch.cdist(
+                        emb_workspace.tensor[start:stop],
+                        emb_workspace.tensor,
+                        p=2.0,
+                        compute_mode="use_mm_for_euclid_dist",
+                    )
+                else:
+                    emb_sortable, elapsed = distance_block(
+                        emb_distance_matrix,
+                        start,
+                        stop,
+                    )
+                    input_seconds += elapsed
+                    execution_started = perf_counter()
+                emb_sortable[local_rows, self_columns] = -torch.inf
+                emb_order = torch.argsort(
+                    emb_sortable,
+                    dim=1,
+                    stable=True,
+                )
+                emb_inverse = torch.empty_like(emb_order)
+                positions = torch.arange(n_samples, device=self._device).expand_as(
+                    emb_order
+                )
+                emb_inverse.scatter_(1, emb_order, positions)
+                torch_emb_indices = emb_order[:, 1 : plan.k + 1].clone()
+                torch_emb_ranks = emb_inverse.gather(1, torch_orig_targets)
+                record_execution(execution_started)
+                del emb_sortable, emb_order, emb_inverse, positions
+
+                execution_started = perf_counter()
+                if orig_distance_matrix is None:
+                    assert orig_workspace is not None
+                    orig_sortable = torch.cdist(
+                        orig_workspace.tensor[start:stop],
+                        orig_workspace.tensor,
+                        p=2.0,
+                        compute_mode="use_mm_for_euclid_dist",
+                    )
+                else:
+                    orig_sortable, elapsed = distance_block(
+                        orig_distance_matrix,
+                        start,
+                        stop,
+                    )
+                    input_seconds += elapsed
+                    execution_started = perf_counter()
+                orig_sortable[local_rows, self_columns] = -torch.inf
+                orig_order = torch.argsort(
+                    orig_sortable,
+                    dim=1,
+                    stable=True,
+                )
+                orig_inverse = torch.empty_like(orig_order)
+                positions = torch.arange(n_samples, device=self._device).expand_as(
+                    orig_order
+                )
+                orig_inverse.scatter_(1, orig_order, positions)
+                torch_orig_ranks = orig_inverse.gather(1, torch_emb_indices)
+                torch_emb_memberships = []
+                torch_orig_memberships = []
+                for requested_k in plan.membership_ks:
+                    selected_emb = torch_emb_indices[:, :requested_k]
+                    selected_orig = torch_orig_targets[:, :requested_k]
+                    torch_emb_memberships.append(
+                        torch.any(
+                            selected_emb[:, :, None] == selected_orig[:, None, :],
+                            dim=2,
+                        )
+                    )
+                    torch_orig_memberships.append(
+                        torch.any(
+                            selected_orig[:, :, None] == selected_emb[:, None, :],
+                            dim=2,
+                        )
+                    )
+                record_execution(execution_started)
+                del orig_sortable, orig_order, orig_inverse, positions
+
+                output_started = perf_counter()
+                compact_indices = (
+                    torch.stack(
+                        (torch_emb_indices, torch_emb_ranks, torch_orig_ranks),
+                        dim=0,
+                    )
+                    .to("cpu")
+                    .numpy()
+                    .astype(index_dtype, copy=False)
+                )
+                emb_indices[start:stop] = compact_indices[0]
+                emb_ranks_of_orig[start:stop] = compact_indices[1]
+                orig_ranks_of_emb[start:stop] = compact_indices[2]
+                for requested_k, emb_membership, orig_membership in zip(
+                    plan.membership_ks,
+                    torch_emb_memberships,
+                    torch_orig_memberships,
+                    strict=True,
+                ):
+                    compact_memberships = (
+                        torch.stack((emb_membership, orig_membership), dim=0)
+                        .to("cpu")
+                        .numpy()
+                    )
+                    emb_in_orig[requested_k][start:stop] = compact_memberships[0]
+                    orig_in_emb[requested_k][start:stop] = compact_memberships[1]
+                output_transfer_seconds += perf_counter() - output_started
+                block_count += 1
+
+        value = RankComparisons(
+            orig_ranks_of_emb=orig_ranks_of_emb,
+            emb_ranks_of_orig=emb_ranks_of_orig,
+            orig_indices=orig_indices,
+            emb_indices=emb_indices,
+            emb_in_orig=emb_in_orig,
+            orig_in_emb=orig_in_emb,
+        )
+        return BuiltResource(
+            value,
+            "torch",
+            {
+                "algorithm": "torch_blockwise_selected_ranks",
+                "device": self.device,
+                "compute_dtype": self.dtype,
+                "index_dtype": index_dtype.name,
+                "k": plan.k,
+                "requested_ks": list(plan.requested_ks),
+                "membership_ks": list(plan.membership_ks),
+                "block_rows": block_rows,
+                "block_count": block_count,
+                "work_budget_bytes": plan.work_budget_bytes,
+                "working_bytes": fixed_working_bytes + block_rows * bytes_per_row,
+                "fixed_working_bytes": fixed_working_bytes,
+                "device_input_bytes": int(
+                    target_array.nbytes * (2 if self.device != "cpu" else 1)
+                ),
+                "torch_version": self._torch_version(),
+                "input_zero_copy": (orig_input_zero_copy and emb_input_zero_copy),
+                "input_cast_copy": (orig_input_cast_copy or emb_input_cast_copy),
+                "input_reused": orig_input_reused and emb_input_reused,
+                "original_input_reused": orig_input_reused,
+                "embedded_input_reused": emb_input_reused,
+                "original_distance_zero_copy": False,
+                "embedded_distance_zero_copy": False,
+                "output_zero_copy": False,
+                "original_neighbor_source": "cached_stable_knn",
+                "original_rank_algorithm": "stable_sort_inverse_scatter",
+                "embedded_rank_algorithm": "stable_sort_inverse_scatter",
+                "original_distance_source": orig_distance_source,
+                "embedded_distance_source": emb_distance_source,
+                "tie_break": "stable_column_index",
+                "self_exclusion": "forced_rank_zero_then_removed",
+                "fused_metrics": list(plan.metric_ids),
+                "provider_fallback": False,
+                "timings": {
+                    "input_transfer_seconds": float(input_seconds),
+                    "compile_and_first_execution_seconds": float(cold_seconds),
+                    "warm_execution_seconds": float(warm_seconds),
+                    "output_transfer_seconds": float(output_transfer_seconds),
+                },
+            },
         )
 
     def build_neighbor_statistics(self, *args, **kwargs) -> BuiltResource:
