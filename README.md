@@ -565,6 +565,13 @@ The above code snippet demonstrates how to visualize local pointwise distortions
 
 For more information about the available distortion measures, their use cases, and examples, please refer to our paper (IEEE VIS 2023 Short).
 
+## Contributing
+
+To propose a new distortion metric, you only need to share its paper and, when
+available, a reference implementation. You do not need to learn ZADU's internal
+registry or prepare a specification file. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the short contribution path.
+
 ## Citation
 
 > Hyeon Jeon, Aeri Cho, Jinhwa Jang, Soohyun Lee, Jake Hyun, Hyung-Kwon Ko, Jaemin Jo, and Jinwook Seo. Zadu: A python library for evaluating the reliability of dimensionality reduction embeddings. In 2023 IEEE Visualization and Visual Analytics (VIS), pages 196–200, 2023.
