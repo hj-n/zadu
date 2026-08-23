@@ -59,7 +59,7 @@ def _plan_info(
             else None
         ),
         "rank_comparison_strategy": (
-            "fused_gathered_ranks_and_membership"
+            "blockwise_selected_ranks"
             if plan.rank_comparison_plan is not None
             else None
         ),

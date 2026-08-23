@@ -1,7 +1,8 @@
 # Post-0.5.1 exact scaling plan
 
-> Status: active development record. PR 10-A establishes the selected-rank
-> oracle and measurement gates; production execution is unchanged in that PR.
+> Status: active development record. PR 10-A established the selected-rank
+> oracle and measurement gates. PR 10-B is integrating that design into the
+> production NumPy planner and provider.
 
 ## Objective
 
@@ -66,7 +67,7 @@ Every implementation in this plan must preserve the following exact behavior:
 
 ## PR sequence
 
-### PR 10-A — selected-rank oracle and gates (current)
+### PR 10-A — selected-rank oracle and gates (complete)
 
 Add a development-only exact blockwise implementation alongside the existing
 full-ranking oracle. It performs stable row sorts, constructs an inverse for one
@@ -108,13 +109,17 @@ Acceptance gates for moving the design into production:
   budgets; and
 - no production or public-API change in PR 10-A.
 
-### PR 10-B — NumPy production selected-rank resource
+### PR 10-B — NumPy production selected-rank resource (current)
 
 Make `RANK_COMPARISONS` a direct paired-space resource for its registered
 metrics instead of creating two persistent `NEIGHBOR_RANKING` dependencies.
-Move the reviewed blockwise algorithm into `NumpyResourceProvider`, update cache
-and peak estimates, and expose its algorithm, block count, block rows, work
-budget, and retained bytes in run diagnostics.
+Cache one exact `O(nk)` stable original-space neighbor prefix, obtain it through
+stable partial selection, and count only the requested original-space target
+ranks. The embedded side uses a stable block sort plus linear inverse scatter.
+This avoids re-sorting the original neighbor prefix for every embedding without
+bringing back a quadratic cache. Update cache and peak estimates, and expose
+the algorithms, block count, block rows, work budget, and retained bytes in run
+diagnostics.
 
 Compatibility paths that explicitly call a metric with `knn_ranking_info`
 remain unchanged. If another scheduled metric later requires a genuine full
@@ -131,6 +136,24 @@ Production gates:
   raises a clear `MemoryError`; and
 - the isolated benchmark shows no unexplained regression from the reviewed
   oracle.
+
+Production measurement on the same Apple M4 environment and `n=2,000, k=20`
+confirmed the standalone resource result: with a 16 MiB work budget, five-run
+median construction was 0.329 s instead of 0.543 s, process peak RSS was
+149.0 MiB instead of 342.3 MiB, retained arrays were 0.72 MB instead of
+32.72 MB, digests matched, and the maximum score delta was zero.
+
+The end-to-end core suite (`T&C`, MRRE, LCMC, and Neighborhood Hit) exposes the
+intentional reuse tradeoff. Against v0.5.1 in the same environment, one cold
+embedding improved from 0.557 s to 0.360 s and peak RSS fell from 310.3 MB to
+234.9 MB. A warm embedding took 0.291 s instead of 0.264 s because selected
+original ranks must be counted for each new embedding. Across eight embeddings,
+cold total time was effectively equal (2.410 s versus 2.407 s), warm total time
+was 9.9% slower (2.329 s versus 2.119 s), and peak RSS remained 24.3% lower.
+All scores were identical. The cached exact `O(nk)` original prefix and stable
+partial selection reduce this repeated-run cost from the initial direct-paired
+prototype's roughly 23% slowdown; PR 10-C can target the remaining rank-count
+work on MLX and PyTorch without restoring a quadratic cache.
 
 ### PR 10-C — MLX and PyTorch selected-rank providers
 

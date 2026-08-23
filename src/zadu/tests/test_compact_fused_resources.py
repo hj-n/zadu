@@ -13,7 +13,7 @@ from zadu.measures import (
     neighborhood_hit,
     trustworthiness_continuity,
 )
-from zadu.measures.utils import pairwise_dist
+from zadu.measures.utils import knn, pairwise_dist
 
 
 def _sample(seed=0, n=60):
@@ -122,10 +122,121 @@ def test_rank_comparisons_fuse_mixed_k_metrics_exactly():
         "mean_relative_rank_error",
         "class_aware_trustworthiness_continuity",
     ]
-    assert comparison["dtype"] == {"ranks": "int32", "membership": "bool"}
+    assert comparison["dtype"] == {
+        "indices": "int32",
+        "ranks": "int32",
+        "membership": "bool",
+    }
+    assert comparison["details"]["algorithm"] == "blockwise_selected_ranks"
+    assert comparison["details"]["block_count"] == 1
+    assert comparison["details"]["block_rows"] == len(orig)
+    assert comparison["bytes"] == 3 * len(orig) * 7 * 4 + 2 * len(orig) * (3 + 7)
+    original_knn = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "stable_knn" and resource["space"] == "orig"
+    )
+    assert original_knn["bytes"] + comparison["bytes"] == (
+        4 * len(orig) * 7 * 4 + 2 * len(orig) * (3 + 7)
+    )
     assert comparison["released"] is True
+    assert all(
+        resource["kind"] != "neighbor_ranking"
+        for resource in runner.last_run_info["resources"]
+    )
     assert runner.last_run_info["rank_comparison_strategy"] == (
-        "fused_gathered_ranks_and_membership"
+        "blockwise_selected_ranks"
+    )
+
+
+def test_selected_rank_resource_respects_blockwise_memory_plan():
+    orig, emb, _ = _sample(seed=5, n=100)
+    k = 10
+    specs = [{"id": "tnc", "params": {"k": k}}]
+    baseline = ZADU(specs, orig)
+    bytes_per_row = len(orig) * 24
+    budget = baseline.estimated_cache_bytes + 2 * bytes_per_row
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(memory_budget=budget),
+    )
+
+    actual = runner.measure(emb)[0]
+    expected = trustworthiness_continuity.measure(orig, emb, k=k)
+    assert actual == pytest.approx(expected, abs=1e-14)
+    comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert comparison["details"]["block_rows"] == 2
+    assert comparison["details"]["block_count"] == 50
+    assert comparison["details"]["working_bytes"] == 2 * bytes_per_row
+    assert comparison["details"]["work_budget_bytes"] == 2 * bytes_per_row
+    assert runner._execution_plan.planned_peak_bytes == budget
+
+    with pytest.raises(MemoryError, match="peak working memory"):
+        ZADU(
+            specs,
+            orig,
+            execution=ExecutionConfig(
+                memory_budget=baseline.estimated_cache_bytes + bytes_per_row - 1
+            ),
+        )
+
+
+def test_selected_rank_resource_uses_geodesic_original_space():
+    orig = np.asarray(
+        [
+            [-2.4, 0.4],
+            [-1.7, -0.2],
+            [-0.8, 0.7],
+            [-0.1, -0.6],
+            [0.5, 0.3],
+            [1.1, -0.4],
+            [1.8, 0.6],
+            [2.5, -0.1],
+        ]
+    )
+    emb = np.column_stack((np.sin(orig[:, 0]), orig[:, 1]))
+    k = 2
+    runner = ZADU([{"id": "tnc", "params": {"k": k}}], orig, geodesic=True)
+
+    actual = runner.measure(emb)[0]
+    orig_distances = runner._provider.pairwise_geodesic_distance_matrix(orig)
+    emb_distances = pairwise_dist.pairwise_distance_matrix(emb)
+    orig_indices, orig_ranking = knn.knn_with_ranking(
+        orig,
+        k,
+        orig_distances,
+    )
+    emb_indices, emb_ranking = knn.knn_with_ranking(
+        emb,
+        k,
+        emb_distances,
+    )
+    expected = trustworthiness_continuity.measure(
+        orig,
+        emb,
+        k=k,
+        knn_ranking_info=(
+            orig_indices,
+            orig_ranking,
+            emb_indices,
+            emb_ranking,
+        ),
+    )
+
+    assert actual == pytest.approx(expected, abs=1e-14)
+    comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert comparison["details"]["original_distance_source"] == ("blockwise_geodesic")
+    assert comparison["details"]["embedded_distance_source"] == (
+        "blockwise_scipy_cdist"
     )
 
 

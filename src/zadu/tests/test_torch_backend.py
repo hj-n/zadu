@@ -10,6 +10,13 @@ from zadu import ZADU, EmbeddingExecutionError, ExecutionConfig
 from zadu.backends import torch_backend
 from zadu.backends.base import BatchResourceError
 from zadu.engine.resources import NeighborRanking, ResourceKey, ResourceKind, Space
+from zadu.measures import (
+    local_continuity_meta_criteria,
+    neighborhood_hit,
+    procrustes,
+    topographic_product,
+    trustworthiness_continuity,
+)
 from zadu.measures.utils import knn
 
 
@@ -60,6 +67,59 @@ def _build_batch(
         working_memory_bytes=working_memory_bytes,
         geodesic=False,
     )
+
+
+def _neighbor_metric_reference_scores(orig, emb, labels):
+    orig_distances = cdist(orig, orig)
+    emb_distances = cdist(emb, emb)
+    orig_indices, orig_ranking = knn.knn_with_ranking(
+        orig,
+        7,
+        distance_matrix=orig_distances,
+    )
+    emb_indices, emb_ranking = knn.knn_with_ranking(
+        emb,
+        7,
+        distance_matrix=emb_distances,
+    )
+    return [
+        trustworthiness_continuity.measure(
+            orig,
+            emb,
+            k=5,
+            knn_ranking_info=(
+                orig_indices[:, :5],
+                orig_ranking,
+                emb_indices[:, :5],
+                emb_ranking,
+            ),
+        ),
+        local_continuity_meta_criteria.measure(
+            orig,
+            emb,
+            k=7,
+            knn_info=(orig_indices, emb_indices),
+        ),
+        neighborhood_hit.measure(
+            emb,
+            labels,
+            k=4,
+            knn_emb_info=emb_indices[:, :4],
+        ),
+        procrustes.measure(
+            orig,
+            emb,
+            k=3,
+            knn_info=(orig_indices[:, :3], emb_indices[:, :3]),
+        ),
+        topographic_product.measure(
+            orig,
+            emb,
+            k=4,
+            distance_matrices=(orig_distances, emb_distances),
+            knn_info=(orig_indices[:, :4], emb_indices[:, :4]),
+        ),
+    ]
 
 
 def test_importing_base_package_does_not_import_torch():
@@ -404,7 +464,6 @@ def test_torch_ranking_reuses_planned_distance_matrix(device):
 def test_zadu_torch_routes_neighbor_metrics_and_preserves_scores(
     device, dtype, rel, abs_
 ):
-    _torch_provider(device=device, dtype=dtype)
     rng = np.random.default_rng(77)
     orig = rng.normal(size=(72, 8))
     emb = orig @ rng.normal(size=(8, 2)) + rng.normal(scale=0.05, size=(72, 2))
@@ -416,7 +475,8 @@ def test_zadu_torch_routes_neighbor_metrics_and_preserves_scores(
         {"id": "proc", "params": {"k": 3}},
         {"id": "topo", "params": {"k": 4}},
     ]
-    expected = ZADU(specs, orig).measure(emb, labels)
+    expected = _neighbor_metric_reference_scores(orig, emb, labels)
+    _torch_provider(device=device, dtype=dtype)
     runner = ZADU(
         specs,
         orig,
@@ -442,6 +502,19 @@ def test_zadu_torch_routes_neighbor_metrics_and_preserves_scores(
         resource["details"]["provider_fallback"] is False
         for resource in neighbor_resources
     )
+    assert {resource["kind"] for resource in neighbor_resources} == {
+        "knn",
+        "stable_knn",
+    }
+    rank_comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert rank_comparison["provider"] == "numpy"
+    assert rank_comparison["details"]["requested_provider"] == "torch"
+    assert rank_comparison["details"]["provider_fallback"] is True
+    assert rank_comparison["details"]["algorithm"] == "blockwise_selected_ranks"
 
 
 def test_torch_plan_accounts_for_neighbor_working_memory():

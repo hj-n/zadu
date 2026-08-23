@@ -1,8 +1,8 @@
-"""Compare full inverse rankings with an exact blockwise selected-rank oracle.
+"""Compare full inverse rankings with production blockwise selected ranks.
 
-This benchmark is the executable design gate for the post-0.5.1 rank-resource
-work.  The blockwise implementation intentionally lives outside the installed
-package until its exactness and performance have been reviewed.
+The independent blockwise implementation remains available in this module as
+an exactness oracle, while the timed ``selected`` worker exercises the installed
+NumPy resource provider.
 """
 
 from __future__ import annotations
@@ -22,7 +22,15 @@ import numpy as np
 import numpy.typing as npt
 from scipy.spatial.distance import cdist
 
-from zadu.engine.resources import RankComparisons, compact_index_dtype
+from zadu.backends import NumpyResourceProvider
+from zadu.engine.planner import RankComparisonExecutionPlan
+from zadu.engine.resources import (
+    RankComparisons,
+    ResourceKey,
+    ResourceKind,
+    Space,
+    compact_index_dtype,
+)
 from zadu.measures import (
     class_aware_trustworthiness_continuity,
     mean_relative_rank_error,
@@ -226,6 +234,72 @@ def blockwise_selected_rank_oracle(
     )
 
 
+def production_selected_ranks(
+    orig: npt.ArrayLike,
+    emb: npt.ArrayLike,
+    k: int,
+    *,
+    membership_ks: tuple[int, ...] = (),
+    max_working_bytes: int = 64 * 1024**2,
+) -> OracleResult:
+    """Exercise the production NumPy provider with the benchmark work budget."""
+
+    original, embedded, membership_ks = _validate_inputs(orig, emb, k, membership_ks)
+    n_samples = original.shape[0]
+    bytes_per_row = max(
+        n_samples * _BYTES_PER_BLOCK_CELL,
+        max(membership_ks, default=0) ** 2,
+    )
+    if max_working_bytes < bytes_per_row:
+        raise MemoryError(
+            "selected-rank sorting requires enough working memory for one row"
+        )
+    block_rows = max(1, min(n_samples, max_working_bytes // bytes_per_row))
+    original_knn_key = ResourceKey(
+        ResourceKind.STABLE_KNN,
+        Space.ORIGINAL,
+        k,
+    )
+    plan = RankComparisonExecutionPlan(
+        statistics_key=ResourceKey(ResourceKind.RANK_COMPARISONS, Space.PAIRED, k),
+        original_knn_key=original_knn_key,
+        k=k,
+        membership_ks=membership_ks,
+        requested_ks=(k,),
+        block_rows=block_rows,
+        work_budget_bytes=max_working_bytes,
+        working_bytes=block_rows * bytes_per_row,
+        metric_ids=(
+            "trustworthiness_continuity",
+            "class_aware_trustworthiness_continuity",
+            "mean_relative_rank_error",
+        ),
+        geodesic=False,
+    )
+    provider = NumpyResourceProvider()
+    orig_knn, _, _ = provider.stable_knn(
+        original,
+        k,
+        working_memory_bytes=max_working_bytes,
+        geodesic=False,
+    )
+    built = provider.build_rank_comparisons(
+        plan,
+        original,
+        embedded,
+        orig_knn=orig_knn,
+        orig_distance_matrix=None,
+        emb_distance_matrix=None,
+    )
+    return OracleResult(
+        comparisons=built.value,
+        persistent_bytes=_comparison_nbytes(built.value),
+        planned_working_bytes=plan.working_bytes,
+        block_count=built.details["block_count"],
+        block_rows=built.details["block_rows"],
+    )
+
+
 def _scores(result: OracleResult, orig, emb, labels, k):
     comparisons = result.comparisons
     return {
@@ -304,7 +378,7 @@ def _worker(args):
     )
     labels = np.arange(args.samples) % 10
     function = (
-        full_ranking_oracle if args.worker == "full" else blockwise_selected_rank_oracle
+        full_ranking_oracle if args.worker == "full" else production_selected_ranks
     )
     warmup_samples = min(args.samples, 30)
     warmup_k = min(args.neighbors, warmup_samples - 1)
