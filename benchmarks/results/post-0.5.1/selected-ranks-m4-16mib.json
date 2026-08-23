@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "samples": 2000,
+    "dimension": 20,
+    "embedding_dimension": 2,
+    "neighbors": 20,
+    "memory_budget": 16777216,
+    "repeat": 3,
+    "python": "3.12.13",
+    "numpy": "2.5.2",
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "full_ranking": {
+    "mode": "full",
+    "seconds": 0.5535672921687365,
+    "peak_rss_mib": 341.890625,
+    "persistent_bytes": 32720000,
+    "planned_working_bytes": null,
+    "block_count": 1,
+    "block_rows": null,
+    "digest": "8e881c441cafe8ddf349d6b1993e34d43ad9ccf4f63c3f0f920f61b03b089974",
+    "scores": {
+      "trustworthiness": 0.6062618558009647,
+      "continuity": 0.7220291952272151,
+      "ca_trustworthiness": 0.6440622112211221,
+      "ca_continuity": 0.9723903021071337,
+      "mrre_false": 0.6045961691675747,
+      "mrre_missing": 0.7437077871321823
+    }
+  },
+  "selected_rank": {
+    "mode": "selected",
+    "seconds": 0.3302121660672128,
+    "peak_rss_mib": 150.65625,
+    "persistent_bytes": 720000,
+    "planned_working_bytes": 16752000,
+    "block_count": 6,
+    "block_rows": 349,
+    "digest": "8e881c441cafe8ddf349d6b1993e34d43ad9ccf4f63c3f0f920f61b03b089974",
+    "scores": {
+      "trustworthiness": 0.6062618558009647,
+      "continuity": 0.7220291952272151,
+      "ca_trustworthiness": 0.6440622112211221,
+      "ca_continuity": 0.9723903021071337,
+      "mrre_false": 0.6045961691675747,
+      "mrre_missing": 0.7437077871321823
+    }
+  },
+  "runtime_ratio": 0.5965167572916478,
+  "persistent_memory_reduction": 45.44444444444444,
+  "exact_digest_match": true,
+  "maximum_score_delta": 0.0
+}
