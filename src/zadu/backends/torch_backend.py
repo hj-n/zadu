@@ -918,7 +918,7 @@ class TorchResourceProvider(NumpyResourceProvider):
         torch = self._torch
         n_samples = orig.shape[0]
         largest_membership_k = max(plan.membership_ks, default=0)
-        bytes_per_row = max(1, n_samples * 24, largest_membership_k**2)
+        bytes_per_row = max(1, n_samples * 24 + largest_membership_k**2)
         fixed_working_bytes = max(
             plan.fixed_working_bytes,
             16 * n_samples * plan.k,

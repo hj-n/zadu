@@ -174,6 +174,29 @@ def test_mlx_cpu_float64_does_not_downgrade_precision():
     )
 
 
+def test_mlx_cpu_float64_neighbors_work_in_a_fresh_default_gpu_process():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import numpy as np; "
+            "from zadu.backends.mlx_backend import MlxResourceProvider; "
+            "from zadu.engine.resources import ResourceKey, ResourceKind, Space; "
+            "p=np.arange(24, dtype=np.float64).reshape(8, 3); "
+            "r=MlxResourceProvider(device='cpu', dtype='float64').build("
+            "ResourceKey(ResourceKind.STABLE_KNN, Space.ORIGINAL, 3), p, "
+            "distance_matrix=None, condensed_pairs=None, "
+            "working_memory_bytes=8192, geodesic=False); "
+            "assert r.implementation == 'mlx'; assert r.value.shape == (8, 3)",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_mlx_float32_rejects_values_that_overflow_during_explicit_cast():
     provider = _mlx_provider()
     points = np.array([[0.0, 0.0], [np.finfo(np.float64).max, 1.0]])
@@ -528,7 +551,7 @@ def test_mlx_selected_ranks_match_numpy_on_ties_and_bounded_blocks(device, dtype
         orig,
     )._execution_plan.rank_comparison_plan
     assert template is not None
-    bytes_per_row = orig.shape[0] * 24
+    bytes_per_row = orig.shape[0] * 24 + max(template.membership_ks) ** 2
     plan = replace(
         template,
         block_rows=2,
@@ -605,6 +628,35 @@ def test_mlx_selected_ranks_record_geodesic_fallback():
     assert comparison["details"]["requested_provider"] == "mlx"
     assert comparison["details"]["provider_fallback"] is True
     assert comparison["details"]["fallback_reason"] == "geodesic_not_supported"
+
+
+def test_mlx_selected_ranks_support_mrre_without_membership_masks():
+    rng = np.random.default_rng(181)
+    orig = rng.normal(size=(40, 5))
+    emb = orig @ rng.normal(size=(5, 2))
+    specs = [{"id": "mrre", "params": {"k": 5}}]
+    expected = ZADU(specs, orig).measure(emb)
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(backend="mlx", device="gpu", dtype="float32"),
+    )
+
+    actual = runner.measure(emb)
+
+    assert actual[0]["mrre_false"] == pytest.approx(
+        expected[0]["mrre_false"], rel=3e-5, abs=3e-6
+    )
+    assert actual[0]["mrre_missing"] == pytest.approx(
+        expected[0]["mrre_missing"], rel=3e-5, abs=3e-6
+    )
+    comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert comparison["provider"] == "mlx"
+    assert comparison["details"]["membership_ks"] == []
 
 
 def test_zadu_mlx_routes_all_neighbor_metrics_and_preserves_scores():
@@ -741,7 +793,7 @@ def test_mlx_plan_accounts_for_neighbor_working_memory_and_budget():
         )
     )
 
-    selected_rank_bytes_per_row = orig.shape[0] * 24
+    selected_rank_bytes_per_row = orig.shape[0] * 24 + 5**2
     budget = (
         baseline._execution_plan.estimated_cache_bytes + 2 * selected_rank_bytes_per_row
     )

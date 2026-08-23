@@ -495,7 +495,7 @@ def test_torch_selected_ranks_match_numpy_on_ties_and_bounded_blocks(device):
         orig,
     )._execution_plan.rank_comparison_plan
     assert template is not None
-    bytes_per_row = orig.shape[0] * 24
+    bytes_per_row = orig.shape[0] * 24 + max(template.membership_ks) ** 2
     fixed_working_bytes = 16 * orig.shape[0] * template.k
     plan = replace(
         template,
@@ -575,6 +575,30 @@ def test_torch_selected_ranks_record_geodesic_fallback():
     assert comparison["details"]["requested_provider"] == "torch"
     assert comparison["details"]["provider_fallback"] is True
     assert comparison["details"]["fallback_reason"] == "geodesic_not_supported"
+
+
+def test_torch_selected_ranks_support_mrre_without_membership_masks():
+    rng = np.random.default_rng(771)
+    orig = rng.normal(size=(40, 5))
+    emb = orig @ rng.normal(size=(5, 2))
+    specs = [{"id": "mrre", "params": {"k": 5}}]
+    expected = ZADU(specs, orig).measure(emb)
+    runner = ZADU(
+        specs,
+        orig,
+        execution=ExecutionConfig(backend="torch", device="cpu", dtype="float64"),
+    )
+
+    actual = runner.measure(emb)
+
+    assert actual == expected
+    comparison = next(
+        resource
+        for resource in runner.last_run_info["resources"]
+        if resource["kind"] == "rank_comparisons"
+    )
+    assert comparison["provider"] == "torch"
+    assert comparison["details"]["membership_ks"] == []
 
 
 @pytest.mark.parametrize(
@@ -709,7 +733,7 @@ def test_torch_plan_accounts_for_neighbor_working_memory():
     )
     rank_plan = plan.rank_comparison_plan
     assert rank_plan is not None
-    rank_bytes_per_row = orig.shape[0] * 24
+    rank_bytes_per_row = orig.shape[0] * 24 + max(rank_plan.membership_ks) ** 2
     assert rank_plan.fixed_working_bytes == 16 * orig.shape[0] * rank_plan.k
     assert rank_plan.working_bytes == (
         rank_plan.fixed_working_bytes + rank_plan.block_rows * rank_bytes_per_row

@@ -357,7 +357,8 @@ class MlxResourceProvider(NumpyResourceProvider):
         condensed_offset = 0
         for start in range(0, n_samples, block_rows):
             stop = min(start + block_rows, n_samples)
-            left = workspace.mlx_points[start:stop]
+            with self._mx.stream(self._device):
+                left = workspace.mlx_points[start:stop]
             distances, cold_seconds, warm_seconds = self._execute_compiled(
                 "pairwise",
                 self._compiled_pairwise,
@@ -465,16 +466,16 @@ class MlxResourceProvider(NumpyResourceProvider):
                 dtype=self._numpy_dtype,
             )
             distance_zero_copy = np.shares_memory(raw_distances, distances)
-            try:
-                mlx_distances = mx.asarray(
-                    distances,
-                    dtype=self._mlx_dtype,
-                    copy=False,
-                )
-            except ValueError:
-                mlx_distances = mx.array(distances, dtype=self._mlx_dtype)
-                distance_zero_copy = False
             with mx.stream(self._device):
+                try:
+                    mlx_distances = mx.asarray(
+                        distances,
+                        dtype=self._mlx_dtype,
+                        copy=False,
+                    )
+                except ValueError:
+                    mlx_distances = mx.array(distances, dtype=self._mlx_dtype)
+                    distance_zero_copy = False
                 mx.eval(mlx_distances)
                 mx.synchronize(self._device)
             input_seconds = perf_counter() - distance_started
@@ -499,14 +500,19 @@ class MlxResourceProvider(NumpyResourceProvider):
         block_count = 0
         for start in range(0, n_samples, block_rows):
             stop = min(start + block_rows, n_samples)
-            self_indices = mx.arange(start, stop, dtype=mx.uint32)
+            with mx.stream(self._device):
+                self_indices = mx.arange(start, stop, dtype=mx.uint32)
+                if distance_matrix is None:
+                    assert workspace is not None
+                    arguments = (
+                        workspace.mlx_points[start:stop],
+                        workspace.mlx_points,
+                        self_indices,
+                    )
+                else:
+                    assert mlx_distances is not None
+                    arguments = (mlx_distances[start:stop], self_indices)
             if distance_matrix is None:
-                assert workspace is not None
-                arguments = (
-                    workspace.mlx_points[start:stop],
-                    workspace.mlx_points,
-                    self_indices,
-                )
                 if ranking_requested:
                     compiled_name = "ranking_from_points"
                     compiled = self._compiled_ranking_from_points
@@ -514,8 +520,6 @@ class MlxResourceProvider(NumpyResourceProvider):
                     compiled_name = "order_from_points"
                     compiled = self._compiled_order_from_points
             else:
-                assert mlx_distances is not None
-                arguments = (mlx_distances[start:stop], self_indices)
                 if ranking_requested:
                     compiled_name = "ranking_from_distances"
                     compiled = self._compiled_ranking_from_distances
@@ -537,12 +541,12 @@ class MlxResourceProvider(NumpyResourceProvider):
                 inverse = None
 
             output_started = perf_counter()
-            mlx_indices = order[:, 1 : key.k + 1].astype(mlx_index_dtype)
-            outputs = [mlx_indices]
-            if inverse is not None:
-                mlx_ranking = inverse.astype(mlx_index_dtype)
-                outputs.append(mlx_ranking)
             with mx.stream(self._device):
+                mlx_indices = order[:, 1 : key.k + 1].astype(mlx_index_dtype)
+                outputs = [mlx_indices]
+                if inverse is not None:
+                    mlx_ranking = inverse.astype(mlx_index_dtype)
+                    outputs.append(mlx_ranking)
                 mx.eval(*outputs)
                 mx.synchronize(self._device)
             indices_block = np.array(mlx_indices, dtype=index_dtype, copy=False)
@@ -644,10 +648,12 @@ class MlxResourceProvider(NumpyResourceProvider):
         condensed_offset = 0
         for start in range(0, n_samples, block_rows):
             stop = min(start + block_rows, n_samples)
+            with self._mx.stream(self._device):
+                left = workspace.mlx_points[:, start:stop]
             distances, cold_seconds, warm_seconds = self._execute_compiled(
                 "batched_pairwise",
                 self._compiled_batched_pairwise,
-                workspace.mlx_points[:, start:stop],
+                left,
                 workspace.mlx_points,
             )
             compile_seconds += cold_seconds
@@ -760,13 +766,15 @@ class MlxResourceProvider(NumpyResourceProvider):
         block_count = 0
         for start in range(0, n_samples, block_rows):
             stop = min(start + block_rows, n_samples)
-            self_indices = mx.arange(start, stop, dtype=mx.uint32)
+            with mx.stream(self._device):
+                self_indices = mx.arange(start, stop, dtype=mx.uint32)
             if workspace is not None:
-                arguments = (
-                    workspace.mlx_points[:, start:stop],
-                    workspace.mlx_points,
-                    self_indices,
-                )
+                with mx.stream(self._device):
+                    arguments = (
+                        workspace.mlx_points[:, start:stop],
+                        workspace.mlx_points,
+                        self_indices,
+                    )
                 if ranking_requested:
                     compiled_name = "batched_ranking_from_points"
                     compiled = self._compiled_batched_ranking_from_points
@@ -781,18 +789,18 @@ class MlxResourceProvider(NumpyResourceProvider):
                     ),
                     dtype=self._numpy_dtype,
                 )
-                try:
-                    mlx_distances = mx.asarray(
-                        distance_block,
-                        dtype=self._mlx_dtype,
-                        copy=False,
-                    )
-                except ValueError:
-                    mlx_distances = mx.array(
-                        distance_block,
-                        dtype=self._mlx_dtype,
-                    )
                 with mx.stream(self._device):
+                    try:
+                        mlx_distances = mx.asarray(
+                            distance_block,
+                            dtype=self._mlx_dtype,
+                            copy=False,
+                        )
+                    except ValueError:
+                        mlx_distances = mx.array(
+                            distance_block,
+                            dtype=self._mlx_dtype,
+                        )
                     mx.eval(mlx_distances)
                     mx.synchronize(self._device)
                 input_seconds += perf_counter() - input_started
@@ -818,12 +826,12 @@ class MlxResourceProvider(NumpyResourceProvider):
                 inverse = None
 
             output_started = perf_counter()
-            mlx_indices = order[:, :, 1 : key.k + 1].astype(mlx_index_dtype)
-            outputs = [mlx_indices]
-            if inverse is not None:
-                mlx_ranking = inverse.astype(mlx_index_dtype)
-                outputs.append(mlx_ranking)
             with mx.stream(self._device):
+                mlx_indices = order[:, :, 1 : key.k + 1].astype(mlx_index_dtype)
+                outputs = [mlx_indices]
+                if inverse is not None:
+                    mlx_ranking = inverse.astype(mlx_index_dtype)
+                    outputs.append(mlx_ranking)
                 mx.eval(*outputs)
                 mx.synchronize(self._device)
             indices_block = np.array(mlx_indices, dtype=index_dtype, copy=False)
@@ -917,16 +925,16 @@ class MlxResourceProvider(NumpyResourceProvider):
                     )
         started = perf_counter()
         mlx_copy = False
-        try:
-            mlx_points = self._mx.asarray(
-                stacked_points,
-                dtype=self._mlx_dtype,
-                copy=False,
-            )
-        except ValueError:
-            mlx_points = self._mx.array(stacked_points, dtype=self._mlx_dtype)
-            mlx_copy = True
         with self._mx.stream(self._device):
+            try:
+                mlx_points = self._mx.asarray(
+                    stacked_points,
+                    dtype=self._mlx_dtype,
+                    copy=False,
+                )
+            except ValueError:
+                mlx_points = self._mx.array(stacked_points, dtype=self._mlx_dtype)
+                mlx_copy = True
             self._mx.eval(mlx_points)
             self._mx.synchronize(self._device)
         workspace = _MlxBatchWorkspace(
@@ -978,16 +986,16 @@ class MlxResourceProvider(NumpyResourceProvider):
             )
         started = perf_counter()
         mlx_copy = False
-        try:
-            mlx_points = self._mx.asarray(
-                cast_points,
-                dtype=self._mlx_dtype,
-                copy=False,
-            )
-        except ValueError:
-            mlx_points = self._mx.array(cast_points, dtype=self._mlx_dtype)
-            mlx_copy = True
         with self._mx.stream(self._device):
+            try:
+                mlx_points = self._mx.asarray(
+                    cast_points,
+                    dtype=self._mlx_dtype,
+                    copy=False,
+                )
+            except ValueError:
+                mlx_points = self._mx.array(cast_points, dtype=self._mlx_dtype)
+                mlx_copy = True
             self._mx.eval(mlx_points)
             self._mx.synchronize(self._device)
         workspace = _MlxWorkspace(
@@ -1092,7 +1100,7 @@ class MlxResourceProvider(NumpyResourceProvider):
         mx = self._mx
         n_samples = orig.shape[0]
         largest_membership_k = max(plan.membership_ks, default=0)
-        bytes_per_row = max(1, n_samples * 24, largest_membership_k**2)
+        bytes_per_row = max(1, n_samples * 24 + largest_membership_k**2)
         if plan.work_budget_bytes < bytes_per_row:
             raise MemoryError(
                 "MLX selected-rank execution needs enough memory for one row"
@@ -1268,14 +1276,13 @@ class MlxResourceProvider(NumpyResourceProvider):
             )
             compile_seconds += cold_seconds
             execution_seconds += warm_seconds
-            _, orig_inverse = orig_output
+            orig_order, orig_inverse = orig_output
             with mx.stream(self._device):
                 mlx_orig_ranks = mx.take_along_axis(
                     orig_inverse,
                     mlx_emb_indices,
                     axis=1,
                 ).astype(mlx_index_dtype)
-
                 mlx_emb_memberships = []
                 mlx_orig_memberships = []
                 for requested_k in plan.membership_ks:
@@ -1303,7 +1310,7 @@ class MlxResourceProvider(NumpyResourceProvider):
                 mx.eval(*compact_outputs)
                 mx.synchronize(self._device)
             execution_seconds += perf_counter() - compact_started
-            del orig_output, orig_inverse
+            del orig_output, orig_order, orig_inverse
 
             output_started = perf_counter()
             emb_indices[start:stop] = np.array(
