@@ -28,7 +28,6 @@ dependencies = [
   "threadpoolctl>=3.1",
   "scipy>=1.9",
   "hdbscan>=0.8.33",
-  "matplotlib>=3.7",
   "numba>=0.57",
 ]
 
@@ -38,6 +37,9 @@ Repository = "https://github.com/hj-n/zadu"
 Issues = "https://github.com/hj-n/zadu/issues"
 
 [project.optional-dependencies]
+vis = [
+  "matplotlib>=3.7",
+]
 mlx = [
   "mlx>=0.32,<0.33; platform_system == 'Darwin' and platform_machine == 'arm64'",
 ]
@@ -47,6 +49,7 @@ torch = [
 dev = [
   "black==26.5.1",
   "build>=1.2",
+  "matplotlib>=3.7",
   "pytest>=8.0",
   "pytest-cov>=5.0",
   "ruff==0.16.4",

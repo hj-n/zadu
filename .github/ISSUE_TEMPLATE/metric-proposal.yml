@@ -1,0 +1,29 @@
+name: Propose a distortion metric
+description: Suggest a metric by sharing its scientific sources—no code required.
+title: "[Metric]: "
+body:
+  - type: input
+    id: metric-name
+    attributes:
+      label: Metric name
+      placeholder: Gap Index
+    validations:
+      required: true
+
+  - type: input
+    id: paper
+    attributes:
+      label: Paper or authoritative description
+      description: Link to the paper, preprint, or formal definition.
+      placeholder: https://arxiv.org/abs/...
+    validations:
+      required: true
+
+  - type: input
+    id: reference-implementation
+    attributes:
+      label: Reference implementation
+      description: Optional. Link to the original authors' code when available.
+      placeholder: https://github.com/...
+    validations:
+      required: false

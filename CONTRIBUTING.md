@@ -6,11 +6,13 @@ measures are welcome.
 ## Propose a metric without writing code
 
 You do not need to understand ZADU's internals or prepare a specification file.
-Open a [GitHub issue](https://github.com/hj-n/zadu/issues/new) and provide:
+Open the
+[metric proposal form](https://github.com/hj-n/zadu/issues/new?template=metric-proposal.yml)
+and provide:
 
-- the paper or another authoritative description;
-- the reference implementation, if one exists; and
-- any context you want the maintainers to know.
+- the metric name;
+- the paper or another authoritative description; and
+- the reference implementation, if one exists.
 
 For example:
 

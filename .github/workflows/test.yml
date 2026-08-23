@@ -125,8 +125,17 @@ jobs:
               metadata_name = next(name for name in names if name.endswith("/METADATA"))
               metadata = archive.read(metadata_name).decode()
               assert "Version: 0.5.1" in metadata
+              assert "Provides-Extra: vis" in metadata
               assert "Provides-Extra: mlx" in metadata
               assert "Provides-Extra: torch" in metadata
+              matplotlib_requirements = [
+                  line
+                  for line in metadata.splitlines()
+                  if line.startswith("Requires-Dist: matplotlib")
+              ]
+              assert matplotlib_requirements
+              assert all("extra ==" in line for line in matplotlib_requirements)
+              assert any('extra == "vis"' in line for line in matplotlib_requirements)
               entry_points_name = next(
                   name for name in names if name.endswith("/entry_points.txt")
               )

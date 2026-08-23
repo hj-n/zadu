@@ -17,6 +17,13 @@ You can install ZADU via `pip`:
 pip install zadu
 ```
 
+ZADUVis is optional. Install its plotting dependency only when you need the
+visualization helpers:
+
+```bash
+pip install "zadu[vis]"
+```
+
 ## Quick Start
 
 Run two metrics (`tnc`, `mrre`) on random data:
@@ -561,6 +568,12 @@ print("MRRE local distortions:", local_[1])
 ### Visualizing Local Distortions
 
 With the pointwise local distortions obtained from ZADU, users can visualize the distortions using various distortion visualizations. We provide ZADUVis, a python library that enables the rendering of two disotortion visualizations: [CheckViz](https://onlinelibrary.wiley.com/doi/full/10.1111/j.1467-8659.2010.01835.x) and the [Reliability Map](https://arxiv.org/abs/2107.07859).
+
+Install the optional visualization dependency first:
+
+```bash
+pip install "zadu[vis]"
+```
 
 
 ![img](https://user-images.githubusercontent.com/38465539/235427171-94dcc220-7cbb-4ee6-94b3-20cc96ffbfa8.png)

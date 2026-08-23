@@ -4,6 +4,9 @@
 
 ### Added
 
+- A three-field GitHub issue form for proposing a metric from its name, paper,
+  and optional reference implementation without preparing repository files.
+- A `vis` installation extra for the optional ZADUVis plotting dependency.
 - A no-code metric proposal path for contributors and repository guidance for
   coding agents implementing paper- or reference-backed metrics.
 - Repository-wide metric contract tests covering registry, enum, exports,
@@ -21,6 +24,8 @@
 
 ### Changed
 
+- Matplotlib is no longer installed by the base `zadu` package; users of
+  ZADUVis can install it with `pip install "zadu[vis]"`.
 - Mixed pair-and-neighbor specifications now plan condensed, streaming, or
   external pair resources independently of their kNN resources instead of
   forcing two dense distance matrices. Strategy selection accounts for all

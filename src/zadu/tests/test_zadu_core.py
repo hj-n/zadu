@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
@@ -14,6 +17,21 @@ from zadu.measures import (
     label_trustworthiness_and_continuity as ltnc,
 )
 from zadu.registry import METRICS
+
+
+def test_importing_base_package_does_not_import_matplotlib():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import zadu; assert 'matplotlib' not in sys.modules",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_spec_is_not_mutated_by_abbreviation_normalization():
