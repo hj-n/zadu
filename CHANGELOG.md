@@ -7,7 +7,8 @@
 - A no-code metric proposal path for contributors and repository guidance for
   coding agents implementing paper- or reference-backed metrics.
 - Repository-wide metric contract tests covering registry, enum, exports,
-  signatures, and direct-versus-scheduled score parity.
+  signatures, direct-versus-scheduled score parity, and execution-DAG resource
+  sharing.
 
 ## 0.5.1
 

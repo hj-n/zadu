@@ -22,9 +22,10 @@ Reference implementation: https://codeberg.org/jros/gap-index
 ```
 
 That is enough for a coding agent or maintainer to investigate the formula,
-license, attribution, validation rules, integration, tests, and documentation.
-Questions should be limited to scientific or licensing ambiguities that the
-provided sources cannot resolve.
+license, attribution, validation rules, integration, tests, documentation, and
+whether an existing accelerated execution resource can be reused. Contributors
+do not need to understand the execution planner. Questions should be limited to
+scientific or licensing ambiguities that the provided sources cannot resolve.
 
 Every metric contribution must include evidence of correctness: an independent
 slow oracle, results pinned to a reference implementation revision, or
