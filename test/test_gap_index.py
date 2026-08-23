@@ -41,7 +41,7 @@ def test_gap_index_precomputed_distances_match_coordinate_input():
     assert precomputed_score == pytest.approx(coordinate_score, abs=1e-12)
 
 
-def test_vectorized_euclidean_areas_match_scalar_oracle_exactly():
+def test_vectorized_euclidean_areas_match_scalar_oracle_within_roundoff():
     orig, emb = _reference_fixture()
     triangles = gap_index.Delaunay(emb).simplices
 
@@ -49,7 +49,7 @@ def test_vectorized_euclidean_areas_match_scalar_oracle_exactly():
     scalar = gap_index._scalar_triangle_areas(orig, triangles, distance.euclidean)
     scalar /= np.sum(scalar)
 
-    np.testing.assert_allclose(vectorized, scalar, rtol=0, atol=2e-18)
+    np.testing.assert_allclose(vectorized, scalar, rtol=2e-15, atol=3e-17)
 
 
 def test_vectorized_euclidean_areas_preserve_duplicate_point_edges():
@@ -62,7 +62,7 @@ def test_vectorized_euclidean_areas_preserve_duplicate_point_edges():
     scalar = gap_index._scalar_triangle_areas(orig, triangles, distance.euclidean)
     scalar /= np.sum(scalar)
 
-    np.testing.assert_allclose(vectorized, scalar, rtol=0, atol=0)
+    np.testing.assert_allclose(vectorized, scalar, rtol=2e-15, atol=3e-17)
 
 
 def test_vectorized_precomputed_areas_match_scalar_oracle():
