@@ -73,10 +73,27 @@ You do not need to learn ZADU's internals or prepare repository files. See
 <details>
 <summary><strong>Citation</strong></summary>
 
-Please cite the exact ZADU software version used in your work together with the
-original paper. Choose a release below and copy its BibTeX entry. Each software
-citation retains the original ZADU authors and cumulatively adds major
-contributors whose work is included in that or an earlier release.
+Please cite both the original paper and the exact ZADU software version used in
+your work.
+
+### Original paper
+
+```bibtex
+@INPROCEEDINGS{jeon23vis,
+  author={Jeon, Hyeon and Cho, Aeri and Jang, Jinhwa and Lee, Soohyun and Hyun, Jake and Ko, Hyung-Kwon and Jo, Jaemin and Seo, Jinwook},
+  booktitle={2023 IEEE Visualization and Visual Analytics (VIS)},
+  title={ZADU: A Python Library for Evaluating the Reliability of Dimensionality Reduction Embeddings},
+  year={2023},
+  pages={196--200},
+  doi={10.1109/VIS54172.2023.00048}
+}
+```
+
+### Software releases
+
+Choose a release below and copy its BibTeX entry. Each software citation
+retains the original ZADU authors and cumulatively adds major contributors
+whose work is included in that or an earlier release.
 
 <!-- zadu-citation-latest: 0.5.3 -->
 
@@ -143,6 +160,9 @@ contributors whose work is included in that or an earlier release.
 ```
 
 </details>
+
+<details>
+<summary><strong>Earlier releases (0.1.0-0.4.2)</strong></summary>
 
 <details>
 <summary><strong>ZADU 0.4.2</strong></summary>
@@ -271,20 +291,6 @@ contributors whose work is included in that or an earlier release.
 ```
 
 </details>
-
-<details>
-<summary><strong>Original ZADU paper</strong></summary>
-
-```bibtex
-@INPROCEEDINGS{jeon23vis,
-  author={Jeon, Hyeon and Cho, Aeri and Jang, Jinhwa and Lee, Soohyun and Hyun, Jake and Ko, Hyung-Kwon and Jo, Jaemin and Seo, Jinwook},
-  booktitle={2023 IEEE Visualization and Visual Analytics (VIS)},
-  title={ZADU: A Python Library for Evaluating the Reliability of Dimensionality Reduction Embeddings},
-  year={2023},
-  pages={196--200},
-  doi={10.1109/VIS54172.2023.00048}
-}
-```
 
 </details>
 

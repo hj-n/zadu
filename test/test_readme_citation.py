@@ -54,6 +54,17 @@ def _authors(version: str) -> set[str]:
     return {name.strip() for name in match.group("authors").split(" and ")}
 
 
+def _details_block(summary: str) -> str:
+    opening = f"<details>\n<summary><strong>{summary}</strong></summary>"
+    start = README.index(opening)
+    depth = 0
+    for tag in re.finditer(r"<details>|</details>", README[start:]):
+        depth += 1 if tag.group() == "<details>" else -1
+        if depth == 0:
+            return README[start : start + tag.end()]
+    raise AssertionError(f"The {summary} disclosure must be closed")
+
+
 def test_current_package_version_has_the_first_release_citation():
     version = _project_version()
     marker = LATEST_MARKER.search(README)
@@ -97,21 +108,17 @@ def test_software_authorship_is_cumulative():
 
 
 def test_citation_section_and_individual_entries_are_collapsed():
-    outer_open = "<details>\n<summary><strong>Citation</strong></summary>"
-    citation_start = README.index(outer_open)
-    depth = 0
-    citation_end = None
-    for tag in re.finditer(r"<details>|</details>", README[citation_start:]):
-        depth += 1 if tag.group() == "<details>" else -1
-        if depth == 0:
-            citation_end = citation_start + tag.end()
-            break
-
-    assert citation_end is not None, "The outer Citation disclosure must be closed"
-    section = README[citation_start:citation_end]
+    section = _details_block("Citation")
     assert len(RELEASE_SUMMARY.findall(section)) == len(RELEASE_SUMMARY.findall(README))
-    assert "<summary><strong>Original ZADU paper</strong></summary>" in section
+    assert "### Original paper" in section
+    assert "<summary><strong>Original ZADU paper</strong></summary>" not in section
     for version in RELEASE_SUMMARY.findall(section):
         assert (
             f"<details>\n<summary><strong>ZADU {version}</strong></summary>" in section
         )
+
+
+def test_pre_0_5_releases_are_grouped():
+    earlier = _details_block("Earlier releases (0.1.0-0.4.2)")
+    versions = set(RELEASE_SUMMARY.findall(earlier))
+    assert versions == {version for version in HISTORICAL_RELEASES if version < "0.5.0"}
