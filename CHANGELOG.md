@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- A fully collapsible README citation section with release-specific software
+  BibTeX entries from 0.1.0 onward and cumulative authorship credit for major
+  contributors.
+- A release contract that requires the newest README citation to match the
+  package version and prevents later entries from dropping credited authors.
+
 ## 0.5.3
 
 ### Changed
