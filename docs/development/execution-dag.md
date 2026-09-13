@@ -36,6 +36,14 @@ The execution plan also records consumers and lifetimes. Resources can be
 released after their final consumer, and immutable original-space resources
 can be reused across projections.
 
+Metric-local scratch is separate from shared resources. A registry `workspace`
+declaration selects a conservative fixed-plus-row estimate in
+`zadu.engine.workspace`. The runner finalizes it using the actual projection
+dimension and injects `working_memory_bytes` into the metric. Procrustes and
+Gap Index consume this contract without introducing unnecessary dense DAG
+resources. Scratch peaks participate in collection planning, while the direct
+functions retain an optional bounded default.
+
 ## Provider boundaries
 
 Providers implement exact construction for resources they support and declare
@@ -58,4 +66,5 @@ The repository-wide contract verifies that every registered measure:
 - shares declared DAG resources across duplicate or mixed specifications.
 
 See [Adding a measure](adding-a-measure.md) for the integration workflow and
-[Execution backends](../backends.md) for the current provider matrix.
+[Execution backends](../backends.md) for device support and
+[Backend extensions](backends.md) for the provider interface.

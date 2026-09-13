@@ -10,8 +10,9 @@ Install the default NumPy/SciPy execution path from PyPI:
 python -m pip install zadu
 ```
 
-The base package is sufficient for all 22 measures. Optional frameworks are
-not imported or installed unless you request them.
+The base package supports all 22 measures and installs NumPy, SciPy,
+scikit-learn, Numba, HDBSCAN, and threadpoolctl. Matplotlib, MLX, and PyTorch
+are optional.
 
 ## Optional visualization
 
@@ -37,10 +38,8 @@ Install PyTorch support with:
 python -m pip install "zadu[torch]"
 ```
 
-An installed framework is never selected implicitly. Configure a backend with
-`ExecutionConfig`, and benchmark the actual data and metric specification
-before assuming it will be faster. The [backend capability table](../backends.md)
-documents supported devices, dtypes, fallbacks, and validation status.
+Installing an accelerator does not select it. Set `backend`, `device`, and
+`dtype` in `ExecutionConfig`; see [Execution backends](../backends.md).
 
 ## Development installation
 

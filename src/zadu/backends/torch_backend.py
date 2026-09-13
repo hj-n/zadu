@@ -238,11 +238,9 @@ class TorchResourceProvider(NumpyResourceProvider):
             for start in range(0, n_samples, block_rows):
                 stop = min(start + block_rows, n_samples)
                 started = perf_counter()
-                distances = self._torch.cdist(
+                distances = self._pairwise(
                     workspace.tensor[start:stop],
                     workspace.tensor,
-                    p=2.0,
-                    compute_mode="use_mm_for_euclid_dist",
                 )
                 self._synchronize()
                 elapsed = perf_counter() - started
@@ -273,7 +271,7 @@ class TorchResourceProvider(NumpyResourceProvider):
             np.fill_diagonal(value, 0)
 
         details: dict[str, Any] = {
-            "algorithm": "torch_cdist_blockwise_euclidean",
+            "algorithm": "torch_direct_blockwise_euclidean",
             "device": self.device,
             "compute_dtype": self.dtype,
             "block_rows": block_rows,
@@ -336,11 +334,9 @@ class TorchResourceProvider(NumpyResourceProvider):
             for start in range(0, n_samples, block_rows):
                 stop = min(start + block_rows, n_samples)
                 started = perf_counter()
-                distances = self._torch.cdist(
+                distances = self._pairwise(
                     workspace.tensor[:, start:stop],
                     workspace.tensor,
-                    p=2.0,
-                    compute_mode="use_mm_for_euclid_dist",
                 )
                 self._synchronize()
                 elapsed = perf_counter() - started
@@ -382,7 +378,7 @@ class TorchResourceProvider(NumpyResourceProvider):
             "output_transfer_seconds": float(output_transfer_seconds),
         }
         details: dict[str, Any] = {
-            "algorithm": "torch_batched_blockwise_cdist",
+            "algorithm": "torch_batched_direct_euclidean",
             "device": self.device,
             "compute_dtype": self.dtype,
             "block_rows": block_rows,
@@ -473,11 +469,9 @@ class TorchResourceProvider(NumpyResourceProvider):
                 stop = min(start + block_rows, n_samples)
                 if workspace is not None:
                     execution_started = perf_counter()
-                    sortable = self._torch.cdist(
+                    sortable = self._pairwise(
                         workspace.tensor[start:stop],
                         workspace.tensor,
-                        p=2.0,
-                        compute_mode="use_mm_for_euclid_dist",
                     )
                 else:
                     assert distances_array is not None
@@ -626,11 +620,9 @@ class TorchResourceProvider(NumpyResourceProvider):
                 stop = min(start + block_rows, n_samples)
                 if workspace is not None:
                     execution_started = perf_counter()
-                    sortable = self._torch.cdist(
+                    sortable = self._pairwise(
                         workspace.tensor[:, start:stop],
                         workspace.tensor,
-                        p=2.0,
-                        compute_mode="use_mm_for_euclid_dist",
                     )
                 else:
                     input_started = perf_counter()
@@ -822,6 +814,8 @@ class TorchResourceProvider(NumpyResourceProvider):
 
         with np.errstate(over="ignore", invalid="ignore"):
             cast_points = np.ascontiguousarray(points, dtype=self._numpy_dtype)
+            if not cast_points.flags.writeable:
+                cast_points = cast_points.copy()
         if not np.all(np.isfinite(cast_points)):
             raise OverflowError(
                 f"Input values cannot be represented safely as PyTorch {self.dtype}"
@@ -840,6 +834,26 @@ class TorchResourceProvider(NumpyResourceProvider):
         )
         self._workspaces[space] = workspace
         return workspace, False
+
+    def _pairwise(self, left, right):
+        """Euclidean distances without subtracting large squared norms.
+
+        The MPS reduction holds only a constant number of pair blocks; it
+        never materializes a (rows, samples, features) tensor.
+        """
+        if self.device != "mps":
+            return self._torch.cdist(
+                left, right, p=2.0, compute_mode="donot_use_mm_for_euclid_dist"
+            )
+        squared = self._torch.zeros(
+            (*left.shape[:-2], left.shape[-2], right.shape[-2]),
+            dtype=left.dtype,
+            device=left.device,
+        )
+        for feature in range(left.shape[-1]):
+            delta = left[..., :, feature, None] - right[..., None, :, feature]
+            squared.addcmul_(delta, delta)
+        return squared.sqrt_()
 
     def _synchronize(self) -> None:
         if self.device == "mps":
@@ -1041,11 +1055,9 @@ class TorchResourceProvider(NumpyResourceProvider):
                 execution_started = perf_counter()
                 if emb_distance_matrix is None:
                     assert emb_workspace is not None
-                    emb_sortable = torch.cdist(
+                    emb_sortable = self._pairwise(
                         emb_workspace.tensor[start:stop],
                         emb_workspace.tensor,
-                        p=2.0,
-                        compute_mode="use_mm_for_euclid_dist",
                     )
                 else:
                     emb_sortable, elapsed = distance_block(
@@ -1074,11 +1086,9 @@ class TorchResourceProvider(NumpyResourceProvider):
                 execution_started = perf_counter()
                 if orig_distance_matrix is None:
                     assert orig_workspace is not None
-                    orig_sortable = torch.cdist(
+                    orig_sortable = self._pairwise(
                         orig_workspace.tensor[start:stop],
                         orig_workspace.tensor,
-                        p=2.0,
-                        compute_mode="use_mm_for_euclid_dist",
                     )
                 else:
                     orig_sortable, elapsed = distance_block(

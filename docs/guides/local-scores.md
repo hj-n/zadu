@@ -3,6 +3,8 @@
 Some measures expose per-sample distortions in addition to their global score.
 Set `return_local=True` when constructing the runner:
 
+The example uses the arrays from the [quickstart](../getting-started/quickstart.md).
+
 ```python
 from zadu import ZADU
 
@@ -24,7 +26,7 @@ output contributes `None` at its position in `local_scores`.
 
 ## Supported measures
 
-The registry currently exposes pointwise values for:
+The following measures provide pointwise scores:
 
 - Trustworthiness & Continuity (`tnc`)
 - Mean Relative Rank Error (`mrre`)
@@ -33,9 +35,11 @@ The registry currently exposes pointwise values for:
 - Class-Aware Trustworthiness & Continuity (`ca_tnc`)
 - Steadiness & Cohesiveness (`snc`)
 
-Local arrays describe the contribution associated with each row, not an
-independent dataset-level metric. Preserve row order when joining them to
-identifiers or plotting them.
+Each local array has shape `(n,)` in sample row order. The direction matches
+the corresponding global output: larger values mean better preservation for
+the six supported measures. Preserve row order when joining values to sample
+identifiers or plotting them. Inspect low-scoring points even when the global
+average is high.
 
 Continue to [Visualization](visualization.md) to render paired local
 distortions.

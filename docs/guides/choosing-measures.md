@@ -1,58 +1,60 @@
 # Choose measures
 
-There is no universally best projection-quality score. Start from the
-scientific structure you need to preserve, then use complementary measures
-rather than selecting only the most favorable result.
+Choose a measure for the structure you want to preserve. Two projections can
+have similar neighborhood scores and very different distance or class scores.
 
-## Match the question to a measure family
+## Start with the question
 
-| Question | Useful starting points | What they emphasize |
+| Question | Measures | How to read them |
 | --- | --- | --- |
-| Are local neighbors preserved? | T&C, MRRE, LCMC | Missing and false neighbors or neighborhood overlap |
-| Are labels or classes visually coherent? | Neighborhood Hit, DSC, class-aware T&C, label T&C, CADI | Separation, mixing, and class-relative distortions |
-| Are pairwise distances preserved? | Stress, scale-normalized stress, Pearson | Magnitude or linear association of distances |
-| Is the ordering of distances preserved? | Spearman, non-metric stress | Monotonic rather than metric agreement |
-| Are density patterns preserved? | DTM, KL divergence | Changes in local density estimates |
-| Is local topology preserved? | Topographic Product, Procrustes | Neighborhood ordering or locally aligned geometry |
-| Do apparent empty regions represent real separation? | Gap Index | Empty triangular regions in a 2D projection |
-| Are cluster structures stable without labels? | Steadiness & Cohesiveness | False and missing groups discovered through random walks |
+| Which original neighbors are lost, and which new neighbors appear? | `tnc`, `mrre` | Paired scores separate false and missing neighbors; higher is better in ZADU |
+| How much do the two neighbor sets overlap? | `lcmc` | Overlap corrected for expected random overlap; the upper bound depends on `k` and `n` |
+| Do numerical distances match? | `stress` | Lower is better; sensitive to overall scale |
+| Do distances match after a global rescaling? | `sn_stress` | Lower is better; fits one scale factor before measuring residuals |
+| Are distances linearly or monotonically related? | `pr`, `srho`, `nm_stress` | Correlations are higher-is-better; non-metric stress is lower-is-better |
+| Are samples with the same label close together? | `nh`, `dsc`, `ivm`, `c_evm` | Evaluate the projection against labels; do not by themselves establish preservation of original geometry |
+| How does class structure change between spaces? | `ca_tnc`, `l_tnc`, `cadi` | Compare class-related neighborhoods, separation, or angles |
+| Are groups split or merged without class labels? | `snc` | Steadiness and Cohesiveness use sampled walks; set a seed for comparisons |
+| Does the distribution of local density change? | `dtm`, `kl_div` | Compare density estimates; bandwidth `sigma` affects the result |
+| Does local geometry change? | `topo`, `proc`, `nd` | Compare neighbor ordering, local alignment, or dissimilarity |
+| Do empty scatterplot regions change relative area? | `gi` | Compares triangles from the 2D projection; lower is better |
 
-The [measure reference](../measures/index.md) lists exact IDs, parameters,
-ranges, optimum directions, return keys, and original literature.
+The [measure reference](../measures/index.md) lists parameters, return keys,
+ranges, and papers. ZADU's MRRE outputs are normalized preservation scores:
+**1 is best**, despite “error” in the metric's name.
 
-## A practical baseline
+## Compare neighborhoods and distances
 
-For an unlabeled two-dimensional projection, a useful first pass combines one
-local, one global, and one structural measure:
+For a first comparison, pair T&C with a distance measure. Using `original` and
+`projection` from the [quickstart](../getting-started/quickstart.md):
 
 ```python
+from zadu import ZADU
+
 specs = [
-    {"id": "tnc", "params": {"k": 20}},
-    {"id": "stress", "params": {}},
-    {"id": "gi", "params": {"metric": "euclidean"}},
+    {"id": "tnc", "params": {"k": 10}},
+    {"id": "sn_stress"},
 ]
+scores = ZADU(specs, original).measure(projection)
 ```
 
-This is not a universal prescription. Change `k`, add scale-aware or
-class-aware measures, and validate that the selected definition matches the
-claim you intend to make.
+Use `stress` instead of `sn_stress` if absolute distance scale matters. Add
+`gi` when empty regions in a two-dimensional scatterplot are part of your
+question. Add class-based measures when class structure is relevant.
 
-## Interpret scores carefully
+## Interpret a comparison
 
-- Some measures are maximized at 1; others are minimized at 0.
-- `k` defines the neighborhood scale. Report it with the score and, when
-  possible, examine more than one scientifically meaningful scale.
-- Label-based visual-quality measures assume that the labels describe
-  meaningful structure in the original space. A visually separated projection
-  is not automatically faithful if those labels overlap before projection.
-- Scores from different measures do not share a common unit. Do not average
-  them without a justified model.
-- A faster backend or `float32` changes execution characteristics, not the
-  published definition, but floating-point tolerances can differ by dtype.
+Keep sample selection, preprocessing, and measure parameters fixed when
+comparing projections. Changing `k` changes the neighborhood scale being
+evaluated. Try several values if conclusions depend on the size of a
+neighborhood, and report each value with its result.
 
-## Reproducibility checklist
+A label score can be high even when the projection separates classes that
+overlap in the original space. Use a measure that compares both spaces when
+making a claim about preservation. Scores from different measures have
+different meanings and units; report them separately.
 
-Record the ZADU version, measure IDs, all non-default parameters, preprocessing,
-sample selection, backend/device/dtype, and whether local or global scores were
-used. For randomized measures such as S&C or sampled CADI, also set and report
-the seed.
+For reproducibility, record the ZADU version, measure parameters, preprocessing,
+sample selection, and backend/device/dtype. Set `random_state` for S&C and
+`random_seed` for CADI. A single execution worker does not make an unseeded
+randomized measure deterministic.

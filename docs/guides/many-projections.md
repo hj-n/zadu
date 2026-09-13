@@ -1,72 +1,85 @@
 # Evaluate many projections
 
-Use one `ZADU` instance when comparing multiple projections of the same original
-data. Immutable original-space resources are constructed once and reused.
+Use one runner to compare projections of the same samples. It reuses the
+original-data calculations and returns results in input order.
 
-## Materialized collections
+## Compare a list of projections
 
 ```python
+import numpy as np
+from sklearn.datasets import load_iris
+from sklearn.decomposition import PCA
 from zadu import ExecutionConfig, ZADU
 
-runner = ZADU(
-    specs,
-    original,
-    execution=ExecutionConfig(
-        embedding_workers=2,
-        memory_budget="4GiB",
-    ),
+original, labels = load_iris(return_X_y=True)
+pca_projection = PCA(n_components=2).fit_transform(original)
+noisy_projection = pca_projection + np.random.default_rng(0).normal(
+    scale=0.2, size=pca_projection.shape
 )
+specs = [{"id": "tnc", "params": {"k": 10}}]
+runner = ZADU(specs, original, execution=ExecutionConfig(embedding_workers=2))
 
-results = runner.measure_many(
-    [pca_projection, tsne_projection, umap_projection],
-    labels=labels,
-)
+results = runner.measure_many([pca_projection, noisy_projection])
+for name, scores in zip(["PCA", "PCA + noise"], results):
+    print(name, scores[0])
 ```
 
-`measure_many()` preserves input order and returns one ordinary `measure()`
-result per projection. `labels` is one optional vector shared by the collection.
+For label-based measures, pass `labels=labels`. The same label vector applies
+to every projection. With `return_local=True`, each entry in `results` is a
+`(global_scores, local_scores)` tuple.
 
-The public names `embedding_workers`, `EmbeddingExecutionError`, and
-`EmbeddingResult` are retained for backward compatibility; the documentation
-otherwise calls dimensionality-reduction outputs projections.
+`measure_many()` loads the input iterable into a list and retains all results
+and per-projection diagnostics. Use the iterator below when that storage is too
+large.
 
-`embedding_workers=1` is the deterministic default. Larger values opt into
-bounded threads on thread-safe CPU providers or native tensor batching on
-supported MLX and PyTorch workloads. The memory plan may reduce the effective
-width or select sequential execution.
+## Process projections as they arrive
 
-Inspect `runner.last_run_info` for:
-
-- requested and effective workers;
-- why a requested strategy was limited;
-- original-resource reuse;
-- aggregate and per-projection timings;
-- provider-native batch width; and
-- the planned collection peak.
-
-If one input fails, ZADU raises `EmbeddingExecutionError` with its input index.
-A runner is mutable and should not be called concurrently from multiple user
-threads.
-
-## Bounded streams
-
-For generated or very long sequences, avoid retaining every input, result, and
-diagnostic record:
+Continuing with the runner above:
 
 ```python
+def generate_projections():
+    rng = np.random.default_rng(1)
+    for noise in (0.0, 0.1, 0.2):
+        yield pca_projection + rng.normal(scale=noise, size=pca_projection.shape)
+
 stream = runner.iter_measure_many(generate_projections())
 try:
     for item in stream:
-        print(item.index, item.result, item.run_info)
+        print(item.index, item.result)
 finally:
     stream.close()
+
+print(runner.last_run_info["embedding_count"])
 ```
 
-The iterator is lazy, yields in input order, and keeps at most the planned
-in-flight window. Exhaustion or explicit closure finalizes a bounded aggregate
-in `last_run_info`. Each `EmbeddingResult` carries the detailed diagnostics for
-its own projection.
+Each item contains its input `index`, `result`, and `run_info`. The iterator
+reads only its execution window ahead. Exhausting or closing it finalizes
+aggregate diagnostics and releases pending work; it retains the cache for the
+last yielded projection. If you keep all yielded items yourself, their storage
+still grows with the collection.
 
-MLX and PyTorch currently use their native repeated-projection tensor batching
-only for the materialized `measure_many()` interface. The streaming interface
-remains ordered and bounded but executes those providers sequentially.
+## Control concurrency
+
+`embedding_workers=1` evaluates projections sequentially. Larger values request
+concurrent CPU workers or MLX/PyTorch batching where supported. The memory plan
+can reduce that width. Set seeds separately for randomized measures.
+
+MLX and PyTorch batch the list-based interface but run the iterator sequentially.
+Streams containing Procrustes or Gap Index also run sequentially because their
+memory requirements depend on each projection's dimensions.
+
+Inspect `effective_workers`, `native_batch_size`, and `worker_limit_reason` in
+`last_run_info` to see the chosen strategy. ZADU preserves application BLAS and
+OpenMP settings; `embedding_workers` does not limit native-library threads.
+The diagnostic `native_threads_per_worker` is therefore `None`.
+
+Do not overlap calls on the same runner, including a new call while its stream
+is suspended. Use separate runners for independent evaluations.
+
+## Handle errors
+
+A failure while calculating a validated projection raises
+`EmbeddingExecutionError`. Its `embedding_index` identifies the input and
+`__cause__` contains the underlying exception. Input validation raises
+`ValueError` or `TypeError` directly; exceptions from your input iterator also
+propagate. These are distinct from execution failures.

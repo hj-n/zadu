@@ -1,3 +1,4 @@
 .md-typeset table code {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

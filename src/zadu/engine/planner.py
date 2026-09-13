@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -155,6 +155,7 @@ class ExecutionPlan:
     snc_plan: SNCExecutionPlan | None
     resource_working_bytes: dict[ResourceKey, int]
     release_after_prepare: dict[Space, tuple[ResourceKey, ...]]
+    metric_working_bytes: dict[int, int] = field(default_factory=dict)
 
     def resolve(self, request: ResourceRequest) -> ResourceKey:
         return self.request_to_key[request]

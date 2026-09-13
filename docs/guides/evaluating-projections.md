@@ -1,78 +1,72 @@
 # Evaluate projections
 
-The `ZADU` class is the recommended interface. It validates specifications,
-plans shared exact work, reuses original-space resources, and returns results
-in specification order.
+Create a `ZADU` runner with your measures and original data, then pass a
+projection to `measure()`. Reuse the runner for projections of the same samples.
+The examples below use the arrays from the [quickstart](../getting-started/quickstart.md).
 
-## Build a runner
+## Configure a runner
 
 ```python
 from zadu import ExecutionConfig, ZADU
 
 specs = [
-    {"id": "tnc", "params": {"k": 20}},
-    {"id": "snc", "params": {"k": 30, "random_state": 0}},
+    {"id": "tnc", "params": {"k": 10}},
+    {"id": "stress"},
 ]
-
-runner = ZADU(
-    specs,
-    original,
-    return_local=False,
-    execution=ExecutionConfig(memory_budget="4GiB"),
-)
+runner = ZADU(specs, original, execution=ExecutionConfig(memory_budget="512MiB"))
 scores = runner.measure(projection)
 ```
 
-The constructor accepts:
+`original` has shape `(n, d)` and `projection` has shape `(n, p)`, with the same
+samples in the same row order. The runner stores a read-only copy of `original`;
+later changes to your array do not alter that runner. Create a new runner to
+evaluate a different original dataset.
 
-| Argument | Meaning |
-| --- | --- |
-| `spec_list` | Ordered measure specifications |
-| `orig` | Original high-dimensional samples |
-| `return_local` | Return pointwise values where a measure supports them |
-| `verbose` | Retained compatibility flag |
-| `geodesic` | Treat original two-column coordinates as longitude/latitude in radians |
-| `max_memory_bytes` | Legacy byte-count memory limit |
-| `execution` | Preferred `ExecutionConfig` interface |
+The [API reference](../reference/zadu.md) lists all constructor arguments and
+return formats. Use `return_local=True` for [pointwise scores](local-scores.md).
 
-Do not set both `max_memory_bytes` and `execution.memory_budget` to conflicting
-values.
+## Inspect execution
 
-## Read results and diagnostics separately
-
-`measure()` returns only scientific results. Execution metadata lives in
-`last_run_info`:
+`scores` contains the measure results. `last_run_info` describes the most recent
+completed call:
 
 ```python
-scores = runner.measure(projection)
-
-print(scores)
-print(runner.last_run_info["backend"])
-print(runner.last_run_info["planned_peak_bytes"])
-print(runner.last_run_info["resources"])
+info = runner.last_run_info
+print(info["backend"])
+print(info["planned_peak_bytes"])
+for resource in info["resources"]:
+    print(resource["kind"], resource["provider"], resource["reused"])
 ```
 
-The diagnostic record includes the selected provider, resource fallbacks,
-memory estimates, build and metric timings, resource consumers, dtype, and
-reuse. Do not mix these fields into metric-score output or serialize them as if
-they were scientific results.
+Use `provider` to see where each calculation ran and `reused` to see whether a
+cached result was used. `planned_peak_bytes` estimates the memory covered by
+the [execution budget](execution.md); it excludes the original input copy and
+is not a process memory measurement.
 
-## Use geodesic original coordinates
+## Spherical coordinates
 
-For spherical positions, pass longitude and latitude in radians as the first
-two original columns:
+For original longitude/latitude coordinates in radians, `geodesic=True` uses
+angular distances on a unit sphere when building shared original-space distance
+and neighbor resources. Projection distances remain Euclidean.
 
 ```python
-runner = ZADU(specs, spherical_coordinates, geodesic=True)
-scores = runner.measure(projection)
+import numpy as np
+
+# Columns are longitude, latitude; convert degree input to radians.
+coordinates = np.deg2rad([[0, 0], [10, 0], [0, 10], [10, 10]])
+map_projection = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], dtype=float)
+runner = ZADU([{"id": "tnc", "params": {"k": 1}}], coordinates, geodesic=True)
+scores = runner.measure(map_projection)
 ```
 
-Geodesic distance applies only to the registered original space. Projection
-coordinates remain Euclidean. Unsupported accelerator resources fall back to
-the exact NumPy path and report the reason in diagnostics.
+This option does not transform the coordinates or turn coordinate-based
+calculations such as Procrustes alignment, CADI angles, or Gap Index areas into
+spherical versions of those measures. Restrict a spherical evaluation to
+measures whose use of the shared distances matches your intended definition.
+Accelerator providers use NumPy for geodesic resources.
 
-## Direct measure calls
+## Direct calls
 
-Standalone measure functions remain useful for one-off or research workflows,
-but they do not share resources across metrics. See
-[Direct measure functions](../reference/direct-measures.md).
+For a single calculation, you can also call a
+[measure function](../reference/direct-measures.md) directly. Direct calls do
+not reuse a runner's caches or apply its execution budget.

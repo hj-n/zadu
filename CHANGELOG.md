@@ -1,6 +1,42 @@
 # Changelog
 
-## Unreleased
+## 0.5.4 — 2026-09-14
+
+### Documentation
+
+- Correct T&C score ranges, describe MRRE's score direction, and distinguish
+  projection-only label scores from comparisons between spaces.
+- Add runnable introductory examples, expected output, return formats, measure
+  restrictions, and an illustrated local-score example with a legend.
+- Separate user workflows from provider internals and identify historical
+  benchmarks by measurement date and revision.
+- Clarify memory-budget scope, float32 neighbor changes, collection exceptions,
+  geodesic scope, and application-owned thread settings.
+
+### Fixed
+
+- Select Topographic Product neighbors from the same precomputed distance
+  matrices used for scoring, and reuse computed matrices in direct calls.
+- Preserve CADI's angular scale invariance for very large and very small finite
+  coordinates, including differences that exceed the floating-point range.
+- Preserve application BLAS/OpenMP settings across interleaved streams and
+  concurrent collections; diagnostics no longer claim a native thread limit.
+- Retire completed embedding caches before refilling threaded stream windows
+  or allocating subsequent CPU and provider-native batches.
+- Retain a private, read-only original-data snapshot so caller mutations cannot
+  mix stale original resources with current coordinates.
+- Compute accelerator Euclidean distances from coordinate differences instead
+  of subtracting squared norms. This preserves close distances under large
+  translations in pair, neighbor, selected-rank and native batch execution.
+- Plan Procrustes and Gap Index scratch memory using actual projection shapes,
+  limit their row blocks and collection width, and reject impossible budgets
+  before metric allocation. Streams containing these metrics plan sequentially.
+- Cast Gap Index edge coordinates before integer subtraction can overflow.
+- Avoid intermediate overflow/underflow in Pearson's normalization and refine
+  nearly zero scale-normalized stress with a second bounded residual pass.
+- Install pinned legacy FAISS/SNC dependencies and check baseline imports in
+  release-history benchmarks; preserve environment artifacts on failure.
+- Include notebooks in Black checks and align source-only version metadata.
 
 ### Added
 

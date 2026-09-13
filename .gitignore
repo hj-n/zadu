@@ -31,5 +31,6 @@ share/python-wheels/
 MANIFEST
 
 *.png
+!docs/assets/*.png
 *.pdf
 .idea/

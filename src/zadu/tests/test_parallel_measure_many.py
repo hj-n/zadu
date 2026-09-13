@@ -1,4 +1,3 @@
-import contextlib
 import importlib
 import json
 import threading
@@ -70,7 +69,7 @@ def test_parallel_measure_many_matches_sequential_local_results_and_order():
     assert runner.last_run_info["requested_workers"] == 2
     assert runner.last_run_info["effective_workers"] == 2
     assert runner.last_run_info["worker_limit_reason"] is None
-    assert runner.last_run_info["native_threads_per_worker"] == 1
+    assert runner.last_run_info["native_threads_per_worker"] is None
     assert runner.last_run_info["provider_batching"] is False
     assert runner.last_run_info["native_batch_size"] == 1
     assert [run["embedding_index"] for run in runner.last_run_info["runs"]] == [
@@ -191,16 +190,15 @@ def test_worker_sized_batches_bound_concurrent_execution(monkeypatch):
     assert maximum_active == 2
 
 
-def test_parallel_execution_limits_native_threads(monkeypatch):
+def test_parallel_execution_preserves_native_thread_configuration(monkeypatch):
     orig, embeddings, _ = _sample(seed=5, embedding_count=2)
     module = importlib.import_module("zadu.zadu")
-    recorded = []
 
-    def record_threadpool_limits(*, limits):
-        recorded.append(limits)
-        return contextlib.nullcontext()
+    def unexpected_limit(*args, **kwargs):
+        pytest.fail("Collection execution must not mutate native thread pools")
 
-    monkeypatch.setattr(module, "threadpool_limits", record_threadpool_limits)
+    monkeypatch.setattr(module, "threadpool_limits", unexpected_limit, raising=False)
+    monkeypatch.setattr("threadpoolctl.threadpool_limits", unexpected_limit)
     runner = ZADU(
         [{"id": "stress"}],
         orig,
@@ -209,7 +207,7 @@ def test_parallel_execution_limits_native_threads(monkeypatch):
 
     runner.measure_many(embeddings)
 
-    assert recorded == [1]
+    assert runner.last_run_info["native_threads_per_worker"] is None
     assert runner.last_run_info["requested_workers"] == 4
     assert runner.last_run_info["effective_workers"] == 2
     assert runner.last_run_info["worker_limit_reason"] == "embedding_count"

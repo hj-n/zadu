@@ -1,8 +1,8 @@
 # Adding a measure
 
-A contributor may provide only a paper link and, when available, a reference
-implementation. Maintainers or coding agents handle repository integration.
-Do not require contributors to learn ZADU's registry or write metadata files.
+For a proposal, submit a paper and any reference implementation through the
+[contribution guide](contributing.md). This page describes how to implement
+an accepted measure in the repository.
 
 ## Scientific intake
 
@@ -15,8 +15,7 @@ Do not require contributors to learn ZADU's registry or write metadata files.
    or analytical examples before optimizing.
 
 If the paper and reference implementation disagree, document the discrepancy
-and ask only for the scientific decision that cannot be resolved from those
-sources.
+and resolve the intended definition before changing the formula.
 
 ## Repository integration
 
@@ -60,5 +59,5 @@ black --check src test scalability_eval benchmarks
 python -m mkdocs build --strict
 ```
 
-The canonical coding-agent checklist remains in
+Coding agents must also follow
 [`AGENTS.md`](https://github.com/hj-n/zadu/blob/master/AGENTS.md).

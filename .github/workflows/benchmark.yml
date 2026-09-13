@@ -58,6 +58,7 @@ jobs:
             --samples 2000 --dimension 20 --embeddings 32 --workers 2 --repeat 3 \
             --json benchmark-results/stream-measure-many.json
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: cpu-benchmarks-${{ github.run_id }}
           path: benchmark-results
@@ -103,6 +104,7 @@ jobs:
             --device mps --dtype float32 --repeat 3 \
             --json benchmark-results/torch-mps-measure-many.json
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: apple-accelerator-benchmarks-${{ github.run_id }}
           path: benchmark-results
@@ -111,6 +113,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NUMBA_ENABLE_CUDASIM: "1"
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -121,11 +126,19 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - name: Install shared historical environment
-        run: python -m pip install -e ".[dev]" "snc==0.2.0"
+        run: |
+          python -m pip install -e ".[dev]" -r benchmarks/requirements-history.txt
+          mkdir -p benchmark-results
+          python -m pip freeze > benchmark-results/environment.txt
       - name: Check out stable baselines
         run: |
           git worktree add --detach "$RUNNER_TEMP/zadu-v0.1.1" v0.1.1
           git worktree add --detach "$RUNNER_TEMP/zadu-v0.5.0" v0.5.0
+      - name: Check historical imports before benchmarking
+        run: |
+          for baseline in "$RUNNER_TEMP/zadu-v0.1.1" "$RUNNER_TEMP/zadu-v0.5.0" "$GITHUB_WORKSPACE"; do
+            PYTHONPATH="$baseline/src" python -c "from zadu.zadu import ZADU; assert callable(ZADU)"
+          done
       - name: Compare release history
         run: |
           mkdir -p benchmark-results
@@ -136,6 +149,7 @@ jobs:
             --samples 500 1000 2000 --dimension 20 --k 20 --repeat 5 \
             --json benchmark-results/release-history.json
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: release-history-${{ github.run_id }}
           path: benchmark-results

@@ -164,6 +164,8 @@ def scale_normalized_stress_from_statistics(statistics: PairStatistics) -> float
             "are zero"
         )
     sum_orig_squared = statistics.sum_orig_squared
+    if statistics.scale_residual_squared is not None:
+        return math.sqrt(statistics.scale_residual_squared / sum_orig_squared)
     sum_emb_squared = statistics.sum_emb_squared
     sum_product = statistics.sum_product
     alpha = sum_product / sum_emb_squared
@@ -185,7 +187,8 @@ def pearson_from_statistics(statistics: PairStatistics) -> float:
         raise ValueError("Pearson correlation is undefined for constant distances")
     if statistics.count < 2:
         raise ValueError("`x` and `y` must have length at least 2.")
-    denominator = math.sqrt(statistics.m2_orig * statistics.m2_emb)
-    if denominator == 0:
+    norm_orig = math.sqrt(statistics.m2_orig)
+    norm_emb = math.sqrt(statistics.m2_emb)
+    if norm_orig == 0 or norm_emb == 0:
         raise ValueError("Pearson correlation is undefined for constant distances")
-    return float(np.clip(statistics.co_moment / denominator, -1.0, 1.0))
+    return float(np.clip((statistics.co_moment / norm_orig) / norm_emb, -1.0, 1.0))

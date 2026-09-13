@@ -182,21 +182,46 @@ def _sample_cadi_triplet(
 @njit
 def _get_cosine(X, x_idx, y_idx, z_idx):
     d = X.shape[1]
+    scale1 = 0.0
+    scale2 = 0.0
+    for j in range(d):
+        scale1 = max(scale1, abs(X[y_idx, j] - X[x_idx, j]))
+        scale2 = max(scale2, abs(X[z_idx, j] - X[x_idx, j]))
+
+    if scale1 == 0.0 or scale2 == 0.0:
+        return 0.0
+
+    # Normalize differences before squaring, preserving small separations at
+    # large offsets. Only overflowing differences need coordinate scaling first.
+    overflow1 = not np.isfinite(scale1)
+    overflow2 = not np.isfinite(scale2)
+    if overflow1:
+        scale1 = 0.0
+        for j in range(d):
+            scale1 = max(scale1, abs(X[y_idx, j]), abs(X[x_idx, j]))
+    if overflow2:
+        scale2 = 0.0
+        for j in range(d):
+            scale2 = max(scale2, abs(X[z_idx, j]), abs(X[x_idx, j]))
 
     dot = 0.0
     norm1 = 0.0
     norm2 = 0.0
-
     for j in range(d):
-        v1 = X[y_idx, j] - X[x_idx, j]
-        v2 = X[z_idx, j] - X[x_idx, j]
+        v1 = (
+            X[y_idx, j] / scale1 - X[x_idx, j] / scale1
+            if overflow1
+            else (X[y_idx, j] - X[x_idx, j]) / scale1
+        )
+        v2 = (
+            X[z_idx, j] / scale2 - X[x_idx, j] / scale2
+            if overflow2
+            else (X[z_idx, j] - X[x_idx, j]) / scale2
+        )
 
         dot += v1 * v2
         norm1 += v1 * v1
         norm2 += v2 * v2
 
-    if norm1 == 0.0 or norm2 == 0.0:
-        return 0.0
-
-    res = dot / np.sqrt(norm1 * norm2)
-    return res
+    res = (dot / np.sqrt(norm1)) / np.sqrt(norm2)
+    return min(1.0, max(-1.0, res))

@@ -50,8 +50,8 @@ def measure(
 
     # k nearest neighbors in original space and embedded space each
     if knn_info is None:
-        orig_knn_indices = knn.knn(orig, k)
-        emb_knn_indices = knn.knn(emb, k)
+        orig_knn_indices = knn.knn_from_distance_matrix(orig_distance_matrix, k)
+        emb_knn_indices = knn.knn_from_distance_matrix(emb_distance_matrix, k)
     else:
         orig_knn_indices, emb_knn_indices = knn_info
     orig_knn_indices = np.asarray(orig_knn_indices)[:, :k]

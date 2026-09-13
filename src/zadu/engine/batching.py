@@ -161,7 +161,9 @@ def build_batch_execution_plan(
             else "sequential_shared_original"
         ),
         limit_reason=limit_reason,
-        native_threads_per_worker=1 if effective_workers > 1 else None,
+        # Native pools belong to the caller. Changing process-wide BLAS limits
+        # is unsafe across independent runners and suspended generators.
+        native_threads_per_worker=None,
         provider_batching=False,
         native_batch_size=1,
         per_embedding_temporary_bytes=per_embedding_temporary_bytes,

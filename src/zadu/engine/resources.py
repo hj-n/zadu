@@ -185,6 +185,7 @@ class PairStatistics:
     block_count: int
     block_rows: int | None
     chunk_pairs: int | None
+    scale_residual_squared: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

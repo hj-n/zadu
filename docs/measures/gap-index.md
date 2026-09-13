@@ -1,8 +1,10 @@
 # Gap Index
 
 Gap Index quantifies how strongly empty triangular regions in a 2D projection
-are deformed relative to the corresponding regions in the original space. A
-score of 0 indicates no regional area distortion; the score is bounded by 1.
+are deformed relative to the corresponding regions in the original space.
+Triangle areas are normalized to sum to 1 separately in each space. A score of
+0 means those relative areas match; a uniform enlargement alone does not
+increase the score. The score ranges from 0 to 1.
 
 The metric was introduced by **Jaume Ros, Alessio Arleo, and Fernando
 Paulovich** in
@@ -10,6 +12,9 @@ Paulovich** in
 Scatterplots with the Gap Index*](https://arxiv.org/abs/2607.28324).
 
 ## Standard ZADU interface
+
+The examples use `original` and `projection` from the
+[quickstart](../getting-started/quickstart.md).
 
 ```python
 from zadu import ZADU
@@ -59,18 +64,21 @@ print(result.original_relative_areas)
 print(result.embedded_relative_areas)
 ```
 
-The standard scheduled API intentionally returns only the finite scalar score.
-The direct detailed result is useful for scientific analysis and custom
-visualization.
+`triangles` has shape `(m, 3)` and contains sample indices. Each of the other
+regional arrays has length `m`. Positive `deformations` indicate a larger
+relative triangle area in the projection; negative values indicate a smaller
+one. The global score combines their absolute magnitudes with area weights.
+
+`measure()` returns the scalar score dictionary. `compute()` returns these
+regional arrays as well; `return_local=True` on the runner does not expose them.
 
 ## Provenance
 
 ZADU adapted the authors' MIT-licensed
 [reference implementation](https://codeberg.org/jros/gap-index) at revision
-`0a11e4887864fe5d41526d8487eea33685b8f0b4`. The port adds ZADU's measure
-contract, validation, typed detailed results, bounded vectorization for
-Euclidean and precomputed areas, and regression tests pinned to an upstream
-golden result.
+`0a11e4887864fe5d41526d8487eea33685b8f0b4`. The port adds input validation,
+regional result objects, and block processing for Euclidean and precomputed
+areas. Tests compare against a pinned upstream result.
 
 The original algorithm and implementation remain credited to Ros, Arleo, and
 Paulovich. See the repository's

@@ -1,83 +1,80 @@
-# Memory and exact execution
+# Memory and execution
 
-ZADU plans distances, neighbors, ranks, densities, and pair reductions as typed
-resources. Compatible measures share resources, and the largest requested `k`
-serves smaller prefixes. The planner never substitutes an approximation for an
-exact published measure.
+Set a memory budget when distance or neighbor calculations would otherwise
+use too much memory. ZADU can process these calculations in blocks and reuse
+them across measures.
 
-## Configure execution
+## Set a budget
+
+Using the arrays from the [quickstart](../getting-started/quickstart.md):
 
 ```python
 from zadu import ExecutionConfig, ZADU
 
-execution = ExecutionConfig(
-    backend="auto",
-    device="auto",
-    dtype=None,
-    memory_budget="4GiB",
-    embedding_workers=1,
-    pair_order_strategy="auto",
-    temporary_budget=None,
-)
-
-runner = ZADU(specs, original, execution=execution)
+specs = [{"id": "tnc", "params": {"k": 10}}, {"id": "stress"}]
+runner = ZADU(specs, original, execution=ExecutionConfig(memory_budget="512MiB"))
 scores = runner.measure(projection)
+print(runner.last_run_info["planned_peak_bytes"])
 ```
 
-`backend="auto"` deliberately resolves to NumPy/SciPy. Optional accelerators
-must be selected explicitly. Read the [backend capability table](../backends.md)
-before choosing a device or dtype.
+`memory_budget` accepts a positive byte count or a size string such as
+`"512MiB"`. If a required planned allocation cannot fit, construction or
+evaluation raises `MemoryError`. Reducing the budget may reduce block size or
+collection concurrency; it does not enable approximate nearest neighbors.
 
-## Memory budgets
+The budget covers planned shared resources and the working buffers accounted
+for by the execution planner. It is **not a process RSS limit**. Inputs,
+including the runner's copy of the original array, retained results, Python
+objects, framework memory pools, and arbitrary callable allocations are outside
+that budget. Gap Index estimates Qhull workspace rather than controlling its
+native allocator.
 
-`memory_budget` accepts a positive byte count or a string such as `"512MiB"`
-or `"4GiB"`. The planner uses it to select compact, streaming, or blocked exact
-resources. If even one exact row or required retained resource cannot fit, ZADU
-raises `MemoryError` before the oversized managed allocation.
+Procrustes and Gap Index finalize their working-memory estimates after the
+projection shape is known. Their estimates appear in
+`last_run_info["metric_working_bytes"]`, keyed by specification index.
 
-Useful diagnostic fields include:
+## Use temporary disk storage for pair ordering
+
+Spearman and Non-Metric Stress order all `n * (n - 1) / 2` unique sample pairs.
+When that order does not fit in memory, allow ZADU to use temporary files:
 
 ```python
-info = runner.last_run_info
-print(info["estimated_cache_bytes"])
-print(info["planned_peak_bytes"])
-print(info["memory_budget_bytes"])
-print(info["pair_strategy"])
+from tempfile import TemporaryDirectory
+
+with TemporaryDirectory() as scratch:
+    execution = ExecutionConfig(
+        memory_budget="512MiB",
+        pair_order_strategy="external",
+        temporary_budget="2GiB",
+        temporary_directory=scratch,
+    )
+    runner = ZADU([{"id": "srho"}], original, execution=execution)
+    scores = runner.measure(projection)
 ```
 
-Framework allocators may retain their own pools outside the package-managed
-estimate. Use process or device profilers for capacity planning.
+`temporary_budget` bounds planned ZADU scratch files across concurrent
+projections. `pair_order_strategy="external"` requires that budget.
+With `"auto"`, disk ordering is an option only when a temporary budget is set.
+The default does not use this disk-backed strategy.
 
-## Exact external pair ordering
+Files are removed when evaluation completes or unwinds through an exception.
+A forced process termination can leave files behind. This strategy trades disk
+I/O for lower RAM use and runs through NumPy even with an accelerator selected.
 
-Spearman and Non-Metric Stress require a global order over all unique pairs.
-If the in-memory condensed order does not fit, explicitly permit bounded
-temporary storage:
+## Read the memory diagnostics
 
-```python
-execution = ExecutionConfig(
-    memory_budget="512MiB",
-    pair_order_strategy="external",
-    temporary_budget="20GiB",
-    temporary_directory="/application-owned/zadu-scratch",
-)
-```
+| Field | Meaning |
+| --- | --- |
+| `estimated_cache_bytes` | Estimated shared-resource cache size |
+| `planned_peak_bytes` | Peak planned memory for the call, including collection concurrency |
+| `memory_budget_bytes` | Configured RAM budget, or `None` |
+| `pair_strategy` | Selected strategy for pair-based measures, if used |
+| `metric_working_bytes` | Planned scratch for metrics with a workspace declaration |
 
-ZADU writes sorted runs, performs deterministic bounded-fan-in merges,
-computes tie-aware ranks or stress exactly, and removes its workspace on normal
-completion or failure. `pair_order_strategy="auto"` can select this route only
-when `temporary_budget` was explicitly supplied; ZADU never infers permission
-to use arbitrary disk.
+Blocking and disk ordering preserve the metric definition. Floating-point
+results may differ across dtypes or reduction orders. S&C and CADI retain their
+own randomized algorithms; “exact” execution does not mean those measures
+enumerate every possible walk or triplet.
 
-## What the DAG shares
-
-- T&C, class-aware T&C, and MRRE share bounded paired selected ranks.
-- Stress, scale-normalized stress, and Pearson share one exact unique-pair pass.
-- Spearman and Non-Metric Stress share an exact, tie-aware original pair order.
-- Multiple density bandwidths share fused bounded distance blocks.
-- Topographic Product requests stable neighbor prefixes and only selected
-  distances rather than persistent dense matrices.
-
-For provider-level details and measured crossover points, see
-[Execution backends](../backends.md). For the internal resource contract, see
-[Execution DAG](../development/execution-dag.md).
+See [Execution backends](../backends.md) to select a device, or
+[Execution DAG](../development/execution-dag.md) for resource-sharing details.

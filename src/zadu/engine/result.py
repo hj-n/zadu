@@ -50,6 +50,7 @@ def _plan_info(
         "estimated_cache_bytes": plan.estimated_cache_bytes,
         "planned_peak_bytes": plan.planned_peak_bytes,
         "memory_budget_bytes": plan.memory_budget_bytes,
+        "metric_working_bytes": dict(plan.metric_working_bytes),
         "pair_strategy": (
             plan.pair_plan.strategy.value if plan.pair_plan is not None else None
         ),

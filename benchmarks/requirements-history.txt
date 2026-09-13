@@ -1,0 +1,4 @@
+# Imports required by the v0.1.1 source tree, in addition to current .[dev].
+# Use one shared interpreter/environment so source is the comparison variable.
+snc==0.2.0
+faiss-cpu==1.15.0

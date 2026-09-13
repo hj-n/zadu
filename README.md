@@ -11,9 +11,8 @@
 
 ZADU evaluates how faithfully a dimensionality-reduction projection preserves
 its original data. It provides 22 local, cluster-level, global, and gap-based
-distortion measures through one consistent Python interface, with exact shared
-execution, bounded-memory strategies, repeated-projection evaluation, and
-optional MLX and PyTorch backends.
+distortion measures through a Python interface. Evaluate one projection,
+compare several projections of the same samples, or inspect pointwise scores.
 
 **[Documentation](https://hyeonword.com/zadu/)** ·
 **[Measure reference](https://hyeonword.com/zadu/measures/)** ·
@@ -54,9 +53,9 @@ scores = ZADU(specs, original).measure(projection)
 print(scores)
 ```
 
-ZADU's execution DAG shares compatible exact distances, neighbors, ranks,
-densities, and pair reductions across measures. Scientific scores remain
-separate from backend, timing, and memory diagnostics in `last_run_info`.
+Results follow the order of `specs`. T&C reports `trustworthiness` and
+`continuity`; MRRE reports `mrre_false` and `mrre_missing`. For all four outputs,
+1 is best. Keep sample rows aligned between `original` and `projection`.
 
 Read the [quickstart](https://hyeonword.com/zadu/getting-started/quickstart/),
 [choose measures](https://hyeonword.com/zadu/guides/choosing-measures/), or
@@ -67,8 +66,8 @@ browse the complete [measure reference](https://hyeonword.com/zadu/measures/).
 To propose a distortion measure, provide its name, paper, and an optional
 reference implementation through the
 [metric proposal form](https://github.com/hj-n/zadu/issues/new?template=metric-proposal.yml).
-You do not need to learn ZADU's internals or prepare repository files. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for development and correctness requirements.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and correctness
+requirements.
 
 <details>
 <summary><strong>Citation</strong></summary>
@@ -95,7 +94,23 @@ Choose a release below and copy its BibTeX entry. Each software citation
 retains the original ZADU authors and cumulatively adds major contributors
 whose work is included in that or an earlier release.
 
-<!-- zadu-citation-latest: 0.5.3 -->
+<!-- zadu-citation-latest: 0.5.4 -->
+
+<details>
+<summary><strong>ZADU 0.5.4</strong></summary>
+
+```bibtex
+@software{zadu_0_5_4,
+  author = {Jeon, Hyeon and Cho, Aeri and Jang, Jinhwa and Lee, Soohyun and Hyun, Jake and Ko, Hyung-Kwon and Jo, Jaemin and Seo, Jinwook and Kim, Minhyeong and Miller, Jacob L. and Heine, Lukas and Gunaratne, Kaviru and Ros, Jaume},
+  title = {{ZADU: A Python Toolkit for Evaluating the Reliability of Dimensionality Reduction Projections}},
+  version = {0.5.4},
+  year = {2026},
+  month = sep,
+  url = {https://github.com/hj-n/zadu/releases/tag/v0.5.4}
+}
+```
+
+</details>
 
 <details>
 <summary><strong>ZADU 0.5.3</strong></summary>

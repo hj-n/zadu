@@ -1,72 +1,40 @@
 # ZADU
 
-ZADU evaluates how faithfully a dimensionality-reduction projection preserves
-the structure of its original data. It provides **22 local, cluster-level,
-global, and gap-based measures** through one consistent Python interface.
+ZADU measures what changes when high-dimensional data is projected into fewer
+dimensions. Its 22 measures cover neighborhoods, distances, class structure,
+density, and empty regions in scatterplots.
+
+Provide the original data and a projection of the same samples. ZADU returns
+one result for each measure you select.
 
 ```python
-import numpy as np
+from sklearn.datasets import load_iris
+from sklearn.decomposition import PCA
 from zadu import ZADU
 
-rng = np.random.default_rng(0)
-original = rng.normal(size=(200, 16))
-projection = original[:, :2] + 0.05 * rng.normal(size=(200, 2))
-
-specs = [
-    {"id": "tnc", "params": {"k": 20}},
-    {"id": "mrre", "params": {"k": 20}},
-]
-
-scores = ZADU(specs, original).measure(projection)
-print(scores)
+original, labels = load_iris(return_X_y=True)
+projection = PCA(n_components=2).fit_transform(original)
+scores = ZADU([{"id": "tnc", "params": {"k": 10}}], original).measure(projection)
+print(scores[0])  # trustworthiness and continuity; higher is better
 ```
 
 [Install ZADU](getting-started/installation.md){ .md-button .md-button--primary }
-[Follow the quickstart](getting-started/quickstart.md){ .md-button }
+[Quickstart](getting-started/quickstart.md){ .md-button }
 
-## Where to begin
+## Find what you need
 
-- **New to projection evaluation?** Read [Choose measures](guides/choosing-measures.md)
-  and start with more than one structural perspective.
-- **Already know the metric?** Find its ID, parameters, score range, return
-  keys, and primary paper in the [measure reference](measures/index.md).
-- **Evaluating many projections?** Reuse original-space work with
-  [`measure_many()`](guides/many-projections.md).
-- **Working at larger scale?** Configure bounded exact execution and optional
-  accelerator backends in [Memory and exact execution](guides/execution.md).
-- **Adding a published metric?** A paper link and an optional reference
-  implementation are enough to [propose a measure](development/contributing.md).
-
-## What ZADU provides
-
-### Multiple structural perspectives
-
-Use neighborhood preservation, class-aware validation, distance preservation,
-topological, density, and gap-based measures without combining incompatible
-score meanings into one opaque number.
-
-### Exact shared execution
-
-When several measures need the same distances, neighbors, ranks, or pair
-reductions, ZADU's execution DAG builds the compatible resource once. Memory
-budgets select bounded exact strategies or fail before an oversized managed
-allocation; they do not silently approximate the published formula.
-
-### Optional acceleration
-
-NumPy/SciPy is the default dependency-light path. MLX and PyTorch are optional,
-lazily imported backends for supported exact resources. Backend choices,
-fallbacks, memory plans, and timings remain separate from scientific scores in
-`last_run_info`.
-
-### Pointwise diagnosis
-
-Measures that expose local contributions can return one score per data point.
-The optional ZADUVis package renders these values with CheckViz and Reliability
-Map visualizations.
+| Task | Documentation |
+| --- | --- |
+| Decide what to measure and interpret the result | [Choose measures](guides/choosing-measures.md) |
+| Look up parameters, return keys, and papers | [Measure reference](measures/index.md) |
+| Compare projections of the same dataset | [Evaluate many projections](guides/many-projections.md) |
+| Locate distortion in a scatterplot | [Pointwise scores](guides/local-scores.md) and [Visualization](guides/visualization.md) |
+| Control memory use | [Memory and execution](guides/execution.md) |
+| Run supported calculations with MLX or PyTorch | [Execution backends](backends.md) |
+| Add a measure or report a problem | [Contributing](development/contributing.md) |
 
 ## Citation
 
-If ZADU supports your work, cite the
-[ZADU paper](https://doi.org/10.1109/VIS54172.2023.00048). Each measure's
-original literature is linked from the [measure reference](measures/index.md).
+Cite the [ZADU paper](https://doi.org/10.1109/VIS54172.2023.00048) and the
+[software version you used](https://github.com/hj-n/zadu#citation).
+The [measure reference](measures/index.md) links each measure's original paper.

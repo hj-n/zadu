@@ -33,6 +33,7 @@ class MetricDefinition:
     resources: tuple[ResourceRequirement, ...] = ()
     supports_local: bool = False
     k_rule: str | None = None
+    workspace: str | None = None
 
     def load(self) -> ModuleType:
         return import_module(f"zadu.measures.{self.id}")
@@ -54,6 +55,7 @@ def _metric(
     resources: tuple[ResourceRequirement, ...] = (),
     local: bool = False,
     k_rule: str | None = None,
+    workspace: str | None = None,
 ) -> MetricDefinition:
     return MetricDefinition(
         id=id,
@@ -64,6 +66,7 @@ def _metric(
         resources=resources,
         supports_local=local,
         k_rule=k_rule,
+        workspace=workspace,
     )
 
 
@@ -182,6 +185,7 @@ METRICS = (
         params=("k",),
         resources=(KNN_INFO,),
         k_rule="neighbor",
+        workspace="procrustes",
     ),
     _metric("stress", "stress", resources=(PAIR_STATISTICS,)),
     _metric(
@@ -200,7 +204,7 @@ METRICS = (
         params=("n_triplets", "random_seed"),
         label=True,
     ),
-    _metric("gap_index", "gi", params=("metric",)),
+    _metric("gap_index", "gi", params=("metric",), workspace="gap"),
 )
 
 METRIC_BY_ID = {metric.id: metric for metric in METRICS}

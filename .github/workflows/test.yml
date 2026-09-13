@@ -20,7 +20,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - name: Install lint tools
-        run: python -m pip install black==26.5.1 ruff==0.16.4
+        run: python -m pip install "black[jupyter]==26.5.1" ruff==0.16.4
       - name: Ruff
         run: ruff check .
       - name: Black
@@ -76,7 +76,7 @@ jobs:
       - name: Run MLX provider parity and routing tests
         run: |
           python -c "import mlx.core as mx; assert mx.metal.is_available()"
-          python -m pytest src/zadu/tests/test_mlx_backend.py -q
+          python -m pytest src/zadu/tests/test_mlx_backend.py test/test_audit_regressions.py test/test_audit_round2.py -q
 
   torch:
     runs-on: macos-15
@@ -92,7 +92,7 @@ jobs:
       - name: Run PyTorch CPU and MPS provider parity tests
         run: |
           python -c "import torch; assert torch.backends.mps.is_available()"
-          python -m pytest src/zadu/tests/test_torch_backend.py -q
+          python -m pytest src/zadu/tests/test_torch_backend.py test/test_audit_regressions.py test/test_audit_round2.py -q
 
   build:
     needs: [lint, test, snc-compat, mlx, torch]

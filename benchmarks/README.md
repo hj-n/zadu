@@ -35,6 +35,9 @@ immediately before the 0.5.1 acceleration work under one interpreter/dependency
 environment:
 
 ```bash
+python -m pip install -e ".[dev]" -r benchmarks/requirements-history.txt
+export NUMBA_ENABLE_CUDASIM=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+
 git worktree add --detach /tmp/zadu-v0.1.1 v0.1.1
 git worktree add --detach /tmp/zadu-v0.5.0 v0.5.0
 

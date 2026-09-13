@@ -13,7 +13,6 @@ from time import perf_counter
 from typing import Any, ClassVar
 
 import numpy as np
-from threadpoolctl import threadpool_limits
 
 from .backends import NumpyResourceProvider, create_resource_provider
 from .engine.batching import BatchExecutionPlan, build_batch_execution_plan
@@ -23,6 +22,7 @@ from .engine.planner import build_execution_plan
 from .engine.resources import ResourceCache, ResourceKind, Space
 from .engine.result import build_many_run_info, build_run_info, build_stream_run_info
 from .engine.streaming import EmbeddingResult
+from .engine.workspace import gap_workspace, procrustes_workspace
 from .measures.utils.validation import (
     as_finite_2d,
     validate_labels,
@@ -58,7 +58,10 @@ class ZADU:
         self.execution = self._resolve_execution(execution, max_memory_bytes)
         self.max_memory_bytes = self.execution.memory_budget_bytes
 
-        self.orig = as_finite_2d(orig, "orig")
+        # Resources and metrics must observe the same original-space snapshot.
+        # A read-only view alone still aliases a caller-owned writable array.
+        self.orig = np.array(as_finite_2d(orig, "orig"), copy=True)
+        self.orig.flags.writeable = False
         self.emb = None
         self.label = None
         self.last_run_info: dict[str, Any] | None = None
@@ -123,6 +126,7 @@ class ZADU:
                 f"{self.max_memory_bytes})"
             )
 
+        self._resource_execution_plan = self._execution_plan
         self._resource_cache = ResourceCache(
             self._execution_plan,
             self._provider,
@@ -135,6 +139,8 @@ class ZADU:
 
         emb_array = self._validate_embedding(emb, "emb")
         label_array = self._validate_measure_label(label)
+        self._configure_metric_workspaces(emb_array.shape[1], emb_array.dtype.itemsize)
+        self._discard_previous_embedding()
         self.last_run_info = None
         result, run_info = self._measure_validated(emb_array, label_array)
         self.last_run_info = run_info
@@ -166,6 +172,12 @@ class ZADU:
             for index, embedding in enumerate(raw_embeddings)
         ]
         label_array = self._validate_measure_label(labels)
+        if embedding_arrays:
+            self._configure_metric_workspaces(
+                max(embedding.shape[1] for embedding in embedding_arrays),
+                max(embedding.dtype.itemsize for embedding in embedding_arrays),
+            )
+            self._discard_previous_embedding()
         provider_batching, provider_batching_reason = self._provider_batching_mode(
             embedding_arrays
         )
@@ -279,6 +291,13 @@ class ZADU:
         fallback_reason = self._parallel_fallback_reason()
         if self._provider.supports_embedding_batching and requested_workers > 1:
             fallback_reason = "streaming_provider_sequential"
+        has_workspace = any(definition.workspace for definition in self._definitions)
+        if has_workspace:
+            # Projection dimensions are unknown until the next lazy input.
+            # Plan its scratch before starting it, without speculative workers.
+            fallback_reason = "streaming_metric_workspace"
+        largest_dimension = 0
+        largest_itemsize = 8
         batch_plan = build_batch_execution_plan(
             self._execution_plan,
             embedding_count=requested_workers,
@@ -304,16 +323,24 @@ class ZADU:
 
         def read_next():
             nonlocal consumed_count
+            nonlocal largest_dimension, largest_itemsize
             index = consumed_count
             try:
                 raw_embedding = next(embedding_iterator)
             except StopIteration:
                 return None
             consumed_count += 1
-            return index, self._validate_embedding(
+            embedding = self._validate_embedding(
                 raw_embedding,
                 f"embeddings[{index}]",
             )
+            if consumed_count == 1:
+                self._discard_previous_embedding()
+            if has_workspace:
+                largest_dimension = max(largest_dimension, embedding.shape[1])
+                largest_itemsize = max(largest_itemsize, embedding.dtype.itemsize)
+                self._configure_metric_workspaces(largest_dimension, largest_itemsize)
+            return index, embedding
 
         def observe(index, result, run_info):
             nonlocal completed_count
@@ -361,18 +388,19 @@ class ZADU:
                 base_cache = self._resource_cache
                 base_cache.freeze_original()
                 pending = deque()
-                with (
-                    threadpool_limits(limits=1),
-                    ThreadPoolExecutor(
-                        max_workers=batch_plan.effective_workers,
-                        thread_name_prefix="zadu-embedding",
-                    ) as executor,
-                ):
+                with ThreadPoolExecutor(
+                    max_workers=batch_plan.effective_workers,
+                    thread_name_prefix="zadu-embedding",
+                ) as executor:
 
-                    def submit_one():
+                    def submit_one(retired_cache=None):
                         item = read_next()
                         if item is None:
                             return False
+                        # Keep the last yielded cache for early close/exhaustion,
+                        # but retire it before refilling the execution window.
+                        if retired_cache is not None:
+                            retired_cache.begin_run()
                         index, embedding = item
                         future = executor.submit(
                             self._execute_isolated_embedding,
@@ -397,7 +425,7 @@ class ZADU:
                             final_cache = cache
                             final_embedding = embedding
                             yield observe(index, result, run_info)
-                            submit_one()
+                            submit_one(final_cache)
                             max_in_flight = max(max_in_flight, len(pending))
                     finally:
                         for _, _, future in pending:
@@ -486,6 +514,13 @@ class ZADU:
                 results.append(result)
                 run_infos.append(run_info)
                 final_cache = cache
+            if batch_start + len(batch) < len(embedding_arrays):
+                # All native batch resources have been scored. Drop their
+                # arrays, including the runner's initial cache, before building
+                # the next batch (assignment alone retains the old RHS inputs).
+                for cache in caches:
+                    cache.begin_run()
+                del caches
         return results, run_infos, final_cache
 
     def _execute_embedding_batches(
@@ -504,13 +539,10 @@ class ZADU:
         base_cache = self._resource_cache
         base_cache.freeze_original()
         worker_count = batch_plan.effective_workers
-        with (
-            threadpool_limits(limits=1),
-            ThreadPoolExecutor(
-                max_workers=worker_count,
-                thread_name_prefix="zadu-embedding",
-            ) as executor,
-        ):
+        with ThreadPoolExecutor(
+            max_workers=worker_count,
+            thread_name_prefix="zadu-embedding",
+        ) as executor:
             for batch_start in range(0, len(embedding_arrays), worker_count):
                 batch = embedding_arrays[batch_start : batch_start + worker_count]
                 futures = [
@@ -535,6 +567,10 @@ class ZADU:
                     run_infos.append(run_info)
                     if embedding_index == len(embedding_arrays) - 1:
                         final_cache = cache
+                    else:
+                        # Futures retain their results until they are dropped;
+                        # release completed projection resources explicitly.
+                        cache.begin_run()
                 del futures
         return results, run_infos, final_cache
 
@@ -562,6 +598,61 @@ class ZADU:
                 f"(orig={self.orig.shape[0]}, emb={emb_array.shape[0]})"
             )
         return emb_array
+
+    def _discard_previous_embedding(self) -> None:
+        """Release old compatibility views before the next allocation phase."""
+        self.emb_distance_matrix = None
+        self.emb_knn_ranking = None
+        self.emb_knn_indices = None
+        self.emb = None
+        self._resource_cache.begin_run()
+
+    def _configure_metric_workspaces(self, dimension: int, itemsize: int) -> None:
+        """Finalize scratch estimates once projection shapes are known."""
+        base = self._resource_execution_plan
+        available = (
+            None
+            if self.max_memory_bytes is None
+            else self.max_memory_bytes - base.estimated_cache_bytes
+        )
+        estimates = {}
+        for index, (spec, definition) in enumerate(
+            zip(self.spec_list, self._definitions, strict=True)
+        ):
+            width = max(8, itemsize, self.orig.dtype.itemsize)
+            if definition.workspace == "procrustes":
+                workspace = procrustes_workspace(
+                    len(self.orig),
+                    self.orig.shape[1],
+                    dimension,
+                    spec["params"].get("k", self.DEFAULT_K),
+                    width,
+                )
+            elif definition.workspace == "gap":
+                workspace = gap_workspace(
+                    len(self.orig),
+                    self.orig.shape[1],
+                    dimension,
+                    width,
+                    precomputed=spec["params"].get("metric") == "precomputed",
+                )
+            else:
+                continue
+            try:
+                estimates[index] = workspace.plan(available)
+            except MemoryError as exc:
+                raise MemoryError(f"{definition.id}: {exc}") from exc
+        peak = max(
+            base.planned_peak_bytes,
+            base.estimated_cache_bytes + max(estimates.values(), default=0),
+        )
+        self._execution_plan = replace(
+            base,
+            metric_working_bytes=estimates,
+            planned_peak_bytes=peak,
+            per_embedding_peak_bytes=peak - base.original_cache_bytes,
+        )
+        self._resource_cache.plan = self._execution_plan
 
     def _validate_measure_label(self, label):
         if not any(definition.needs_label for definition in self._definitions):
@@ -638,6 +729,10 @@ class ZADU:
             exec_params.update(
                 cache.arguments_for(self._execution_plan.metric_plans[index])
             )
+            if index in self._execution_plan.metric_working_bytes:
+                exec_params["working_memory_bytes"] = (
+                    self._execution_plan.metric_working_bytes[index]
+                )
             snc_plan = self._execution_plan.snc_plan
             if snc_plan is not None and index in snc_plan.effective_workers:
                 workers = snc_effective_workers[index]

@@ -25,6 +25,8 @@ import numpy as np
 import numpy.typing as npt
 from scipy.spatial import Delaunay, QhullError, distance
 
+from zadu.engine.workspace import gap_workspace
+
 DistanceMetric = str | Callable[[npt.NDArray, npt.NDArray], float]
 _DEFORMATION_EPSILON = 1e-6
 _TRIANGLE_TOLERANCE = 1e-12
@@ -139,28 +141,33 @@ def _triangle_areas_from_sides(
     return np.sqrt(np.maximum(radicands, 0.0))
 
 
-def _area_block_rows(points: npt.NDArray) -> int:
+def _area_block_rows(points: npt.NDArray, work_bytes: int | None = None) -> int:
+    work_bytes = _AREA_WORK_BYTES if work_bytes is None else work_bytes
     dtype = np.asarray(points).dtype
     itemsize = max(dtype.itemsize, np.dtype(np.float64).itemsize)
-    bytes_per_row = max(1, 3 * points.shape[1] * itemsize + 6 * 8)
-    return max(1, _AREA_WORK_BYTES // bytes_per_row)
+    bytes_per_row = max(1, itemsize * (6 * points.shape[1] + 64))
+    return max(1, work_bytes // bytes_per_row)
 
 
 def _euclidean_triangle_areas(
     points: npt.NDArray,
     triangles: npt.NDArray,
+    work_bytes: int | None = None,
 ) -> npt.NDArray[np.float64]:
     """Compute exact Euclidean triangle areas in bounded vectorized blocks."""
 
     areas = np.empty(len(triangles), dtype=float)
-    block_rows = _area_block_rows(points)
+    block_rows = _area_block_rows(points, work_bytes)
     edge_columns = ((0, 1), (0, 2), (1, 2))
     for start in range(0, len(triangles), block_rows):
         stop = min(start + block_rows, len(triangles))
         block = triangles[start:stop]
         sides = np.empty((len(block), 3), dtype=float)
         for side_index, (left, right) in enumerate(edge_columns):
-            differences = points[block[:, left]] - points[block[:, right]]
+            # Cast before subtracting: integer subtraction can wrap around.
+            differences = np.asarray(points[block[:, left]], dtype=float) - np.asarray(
+                points[block[:, right]], dtype=float
+            )
             sides[:, side_index] = np.linalg.norm(differences, axis=1)
         areas[start:stop] = _triangle_areas_from_sides(sides)
     return areas
@@ -169,11 +176,13 @@ def _euclidean_triangle_areas(
 def _precomputed_triangle_areas(
     distances: npt.NDArray,
     triangles: npt.NDArray,
+    work_bytes: int | None = None,
 ) -> npt.NDArray[np.float64]:
     """Gather precomputed triangle edges without Python per-triangle calls."""
 
     areas = np.empty(len(triangles), dtype=float)
-    block_rows = max(1, _AREA_WORK_BYTES // 64)
+    work_bytes = _AREA_WORK_BYTES if work_bytes is None else work_bytes
+    block_rows = max(1, work_bytes // 512)
     for start in range(0, len(triangles), block_rows):
         stop = min(start + block_rows, len(triangles))
         block = triangles[start:stop]
@@ -213,11 +222,12 @@ def _compute_areas(
     points: npt.NDArray,
     triangles: npt.NDArray,
     metric: DistanceMetric,
+    work_bytes: int | None = None,
 ) -> npt.NDArray[np.float64]:
     if metric == "precomputed":
-        areas = _precomputed_triangle_areas(points, triangles)
+        areas = _precomputed_triangle_areas(points, triangles, work_bytes)
     elif metric == "euclidean":
-        areas = _euclidean_triangle_areas(points, triangles)
+        areas = _euclidean_triangle_areas(points, triangles, work_bytes)
     else:
         areas = _scalar_triangle_areas(points, triangles, metric)
 
@@ -231,6 +241,8 @@ def compute(
     orig: npt.NDArray,
     emb: npt.NDArray,
     metric: DistanceMetric = "euclidean",
+    *,
+    working_memory_bytes: int | None = None,
 ) -> GapIndexResult:
     """Compute the Gap Index score and per-triangle regional distortions.
 
@@ -242,6 +254,14 @@ def compute(
 
     orig_array, emb_array = _validate_inputs(orig, emb, metric)
 
+    workspace = gap_workspace(
+        len(orig_array),
+        orig_array.shape[1],
+        emb_array.shape[1],
+        max(orig_array.dtype.itemsize, emb_array.dtype.itemsize),
+        precomputed=metric == "precomputed",
+    )
+    work_bytes = workspace.block_bytes(working_memory_bytes)
     try:
         triangles = Delaunay(emb_array).simplices
     except QhullError as exc:
@@ -249,8 +269,8 @@ def compute(
             "Gap Index requires at least three non-collinear embedded points"
         ) from exc
 
-    original_areas = _compute_areas(orig_array, triangles, metric)
-    embedded_areas = _compute_areas(emb_array, triangles, "euclidean")
+    original_areas = _compute_areas(orig_array, triangles, metric, work_bytes)
+    embedded_areas = _compute_areas(emb_array, triangles, "euclidean", work_bytes)
     max_areas = np.maximum(original_areas, embedded_areas)
     deformations = (embedded_areas - original_areas) / np.maximum(
         max_areas, _DEFORMATION_EPSILON
@@ -270,17 +290,27 @@ def gap_index(
     orig: npt.NDArray,
     emb: npt.NDArray,
     metric: DistanceMetric = "euclidean",
+    *,
+    working_memory_bytes: int | None = None,
 ) -> float:
     """Return the scalar Gap Index using the original API naming."""
 
-    return compute(orig, emb, metric=metric).score
+    return compute(
+        orig, emb, metric=metric, working_memory_bytes=working_memory_bytes
+    ).score
 
 
 def measure(
     orig: npt.NDArray,
     emb: npt.NDArray,
     metric: DistanceMetric = "euclidean",
+    *,
+    working_memory_bytes: int | None = None,
 ) -> dict[str, float]:
     """Return the Gap Index through ZADU's standard measure contract."""
 
-    return {"gap_index": gap_index(orig, emb, metric=metric)}
+    return {
+        "gap_index": gap_index(
+            orig, emb, metric=metric, working_memory_bytes=working_memory_bytes
+        )
+    }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterator
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -325,44 +326,72 @@ class NumpyResourceProvider:
             needs_scale="scale_normalized_stress" in plan.metric_ids,
             needs_pearson="pearson_r" in plan.metric_ids,
         )
-        if plan.strategy is PairStrategy.DENSE:
-            if orig_distance_matrix is None or emb_distance_matrix is None:
-                raise RuntimeError(
-                    "Dense pair statistics require two distance matrices"
-                )
-            assert plan.block_rows is not None
-            blocks = self._matrix_pair_blocks(
-                orig_distance_matrix,
-                emb_distance_matrix,
-                plan.block_rows,
-            )
-        elif plan.strategy is PairStrategy.CONDENSED:
-            if orig_condensed is None or emb_condensed is None:
-                raise RuntimeError(
-                    "Condensed pair statistics require two condensed arrays"
-                )
-            assert plan.chunk_pairs is not None
-            blocks = self._condensed_pair_blocks(
-                orig_condensed,
-                emb_condensed,
-                plan.chunk_pairs,
-            )
-        else:
-            assert plan.block_rows is not None
-            blocks = self._stream_pair_blocks(
-                orig,
-                emb,
-                plan.block_rows,
-                geodesic=geodesic,
-            )
 
-        for orig_distances, emb_distances in blocks:
+        def pair_blocks():
+            if plan.strategy is PairStrategy.DENSE:
+                if orig_distance_matrix is None or emb_distance_matrix is None:
+                    raise RuntimeError(
+                        "Dense pair statistics require two distance matrices"
+                    )
+                assert plan.block_rows is not None
+                blocks = self._matrix_pair_blocks(
+                    orig_distance_matrix,
+                    emb_distance_matrix,
+                    plan.block_rows,
+                )
+            elif plan.strategy is PairStrategy.CONDENSED:
+                if orig_condensed is None or emb_condensed is None:
+                    raise RuntimeError(
+                        "Condensed pair statistics require two condensed arrays"
+                    )
+                assert plan.chunk_pairs is not None
+                blocks = self._condensed_pair_blocks(
+                    orig_condensed,
+                    emb_condensed,
+                    plan.chunk_pairs,
+                )
+            else:
+                assert plan.block_rows is not None
+                blocks = self._stream_pair_blocks(
+                    orig,
+                    emb,
+                    plan.block_rows,
+                    geodesic=geodesic,
+                )
+
+            return blocks
+
+        for orig_distances, emb_distances in pair_blocks():
             accumulator.update(orig_distances, emb_distances)
         statistics = accumulator.finalize(
             strategy=plan.strategy,
             block_rows=plan.block_rows,
             chunk_pairs=plan.chunk_pairs,
         )
+        refined_scale = False
+        if accumulator.needs_scale and statistics.sum_emb_squared > 0:
+            alpha = statistics.sum_product / statistics.sum_emb_squared
+            residual = (
+                statistics.sum_orig_squared
+                - 2 * alpha * statistics.sum_product
+                + alpha**2 * statistics.sum_emb_squared
+            )
+            # Near a perfect fit, sufficient-statistic subtraction loses the
+            # residual. Revisit the same bounded pair source instead.
+            threshold = np.sqrt(np.finfo(float).eps) * statistics.sum_orig_squared
+            if residual <= threshold:
+
+                def squared_residuals():
+                    for original, embedded in pair_blocks():
+                        delta = np.multiply(embedded, alpha, dtype=np.float64)
+                        np.subtract(original, delta, out=delta)
+                        yield float(np.vdot(delta, delta))
+
+                statistics = replace(
+                    statistics,
+                    scale_residual_squared=math.fsum(squared_residuals()),
+                )
+                refined_scale = True
         if statistics.count != plan.pair_count:
             raise RuntimeError(
                 "Pair provider produced an unexpected number of distances "
@@ -379,6 +408,7 @@ class NumpyResourceProvider:
                 "chunk_pairs": plan.chunk_pairs,
                 "working_bytes": plan.working_bytes,
                 "fused_metrics": list(plan.metric_ids),
+                "reduction_passes": 2 if refined_scale else 1,
             },
         )
 

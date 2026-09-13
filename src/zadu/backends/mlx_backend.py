@@ -97,10 +97,11 @@ class MlxResourceProvider(NumpyResourceProvider):
         self._batch_workspaces: dict[Space, _MlxBatchWorkspace] = {}
 
         def pairwise(left, right):
-            left_squared = mx.sum(left * left, axis=1, keepdims=True)
-            right_squared = mx.sum(right * right, axis=1, keepdims=True)
-            squared = left_squared + right_squared.T - 2.0 * (left @ right.T)
-            return mx.sqrt(mx.maximum(squared, 0.0))
+            squared = mx.zeros((left.shape[0], right.shape[0]), dtype=left.dtype)
+            for feature in range(left.shape[1]):
+                delta = left[:, feature, None] - right[None, :, feature]
+                squared = squared + delta * delta
+            return mx.sqrt(squared)
 
         def stable_order(distances, self_indices):
             columns = mx.arange(distances.shape[1], dtype=self_indices.dtype)
@@ -137,14 +138,13 @@ class MlxResourceProvider(NumpyResourceProvider):
             return order, ranking_from_order(order)
 
         def batched_pairwise(left, right):
-            left_squared = mx.sum(left * left, axis=2, keepdims=True)
-            right_squared = mx.sum(right * right, axis=2, keepdims=True)
-            squared = (
-                left_squared
-                + mx.swapaxes(right_squared, 1, 2)
-                - 2.0 * (left @ mx.swapaxes(right, 1, 2))
+            squared = mx.zeros(
+                (left.shape[0], left.shape[1], right.shape[1]), dtype=left.dtype
             )
-            return mx.sqrt(mx.maximum(squared, 0.0))
+            for feature in range(left.shape[2]):
+                delta = left[:, :, feature, None] - right[:, None, :, feature]
+                squared = squared + delta * delta
+            return mx.sqrt(squared)
 
         def batched_stable_order(distances, self_indices):
             columns = mx.arange(distances.shape[2], dtype=self_indices.dtype)
@@ -180,42 +180,42 @@ class MlxResourceProvider(NumpyResourceProvider):
             order = batched_stable_order(batched_pairwise(left, right), self_indices)
             return order, batched_ranking_from_order(order)
 
-        self._compiled_pairwise = mx.compile(pairwise, shapeless=True)
+        self._compiled_pairwise = mx.compile(pairwise, shapeless=False)
         self._compiled_order_from_distances = mx.compile(
             order_from_distances,
-            shapeless=True,
+            shapeless=False,
         )
         self._compiled_ranking_from_distances = mx.compile(
             ranking_from_distances,
-            shapeless=True,
+            shapeless=False,
         )
         self._compiled_order_from_points = mx.compile(
             order_from_points,
-            shapeless=True,
+            shapeless=False,
         )
         self._compiled_ranking_from_points = mx.compile(
             ranking_from_points,
-            shapeless=True,
+            shapeless=False,
         )
         self._compiled_batched_pairwise = mx.compile(
             batched_pairwise,
-            shapeless=True,
+            shapeless=False,
         )
         self._compiled_batched_order_from_distances = mx.compile(
             batched_order_from_distances,
-            shapeless=True,
+            shapeless=False,
         )
         self._compiled_batched_ranking_from_distances = mx.compile(
             batched_ranking_from_distances,
-            shapeless=True,
+            shapeless=False,
         )
         self._compiled_batched_order_from_points = mx.compile(
             batched_order_from_points,
-            shapeless=True,
+            shapeless=False,
         )
         self._compiled_batched_ranking_from_points = mx.compile(
             batched_ranking_from_points,
-            shapeless=True,
+            shapeless=False,
         )
 
     def fork(self) -> MlxResourceProvider:
@@ -393,7 +393,7 @@ class MlxResourceProvider(NumpyResourceProvider):
         except PackageNotFoundError:  # pragma: no cover - nonstandard install
             mlx_version = "unknown"
         details: dict[str, Any] = {
-            "algorithm": "compiled_blockwise_squared_euclidean",
+            "algorithm": "compiled_blockwise_direct_euclidean",
             "device": self.device,
             "compute_dtype": self.dtype,
             "block_rows": block_rows,
@@ -691,7 +691,7 @@ class MlxResourceProvider(NumpyResourceProvider):
             "output_transfer_seconds": float(output_transfer_seconds),
         }
         base_details: dict[str, Any] = {
-            "algorithm": "compiled_batched_blockwise_squared_euclidean",
+            "algorithm": "compiled_batched_blockwise_direct_euclidean",
             "device": self.device,
             "compute_dtype": self.dtype,
             "block_rows": block_rows,

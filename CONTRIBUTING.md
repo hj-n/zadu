@@ -5,7 +5,6 @@ measures are welcome.
 
 ## Propose a metric without writing code
 
-You do not need to understand ZADU's internals or prepare a specification file.
 Open the
 [metric proposal form](https://github.com/hj-n/zadu/issues/new?template=metric-proposal.yml)
 and provide:
@@ -23,11 +22,8 @@ Paper: https://arxiv.org/abs/2607.28324
 Reference implementation: https://codeberg.org/jros/gap-index
 ```
 
-That is enough for a coding agent or maintainer to investigate the formula,
-license, attribution, validation rules, integration, tests, documentation, and
-whether an existing accelerated execution resource can be reused. Contributors
-do not need to understand the execution planner. Questions should be limited to
-scientific or licensing ambiguities that the provided sources cannot resolve.
+Maintainers review the definition, license, and integration requirements.
+Include any known difference between the paper and its implementation.
 
 Every metric contribution must include evidence of correctness: an independent
 slow oracle, results pinned to a reference implementation revision, or
@@ -46,6 +42,7 @@ python -m pip install -e ".[dev,docs]"
 Before opening a pull request, run:
 
 ```bash
+python -m pytest test/test_metric_contract.py -q
 python -m pytest
 ruff check .
 black --check src test scalability_eval benchmarks

@@ -1,9 +1,9 @@
 # Direct measure functions
 
-Each module under `zadu.measures` exposes a public `measure()` function. Direct
-calls are useful for one-off research code and detailed APIs such as Gap Index
-regional output. The scheduled `ZADU` interface is preferred when multiple
-metrics can share exact resources.
+Each module under `zadu.measures` exposes a `measure()` function. Signatures
+differ: some require both spaces, while others require only a projection and
+labels. This example uses the arrays from the
+[quickstart](../getting-started/quickstart.md):
 
 ```python
 from zadu.measures import mean_relative_rank_error, neighborhood_hit, pearson_r
@@ -13,10 +13,20 @@ pearson = pearson_r.measure(original, projection)
 hit = neighborhood_hit.measure(projection, labels, k=20)
 ```
 
-Direct functions validate public inputs and return the same scalar score
-dictionaries as scheduled execution. Arguments representing injected
-resources—such as `pair_statistics`, `rank_comparisons`, or `knn_info`—are
-internal acceleration hooks. Application code should not construct them.
+For the same parameters and distance definitions, direct calls compute the
+same scores as the runner. Functions with `return_local=True` return a
+`(global_dict, local_dict)` tuple. Other functions return a score dictionary;
+Gap Index also offers a [regional API](../measures/gap-index.md).
+
+Some functions accept precomputed distances or neighbors. They must describe
+the same samples, row order, distance definition, and neighbor convention as
+the calculation. Prefer the runner when combining measures so these resources
+are shared consistently. Typed reduction arguments such as `pair_statistics`
+and `rank_comparisons` are engine interfaces and normally remain unset.
+
+A direct call does not use a runner's memory budget. It can allocate dense
+distance or rank matrices even if the equivalent scheduled calculation uses
+blocks. See [Memory and execution](../guides/execution.md).
 
 ## Module mapping
 

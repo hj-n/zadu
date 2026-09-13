@@ -1,14 +1,15 @@
 # Visualization
 
-ZADUVis is an optional layer for rendering pointwise distortion scores with
-CheckViz and Reliability Map. It is kept out of the base installation because
-scientific evaluation does not require Matplotlib.
+ZADUVis renders pointwise scores with CheckViz and Reliability Map. Install
+the visualization extra to use Matplotlib:
 
 ```bash
 python -m pip install "zadu[vis]"
 ```
 
 ## Compute and render local scores
+
+This example uses the arrays from the [quickstart](../getting-started/quickstart.md).
 
 ```python
 import matplotlib.pyplot as plt
@@ -40,7 +41,17 @@ zaduvis.reliability_map(
 plt.show()
 ```
 
-![ZADUVis example](https://github.com/hj-n/zadu/assets/37105201/7c6dc8d7-59c5-48fd-92a5-186e1e44597a)
+![CheckViz and Reliability Map for the Iris PCA projection](../assets/local-scores.png)
+
+Both plots use the same local T&C values. Light regions indicate higher scores;
+color distinguishes false-neighbor and missing-neighbor contributions. CheckViz
+colors finite Voronoi cells, so boundary cells can remain unfilled. Reliability
+Map colors edges using the average scores of their endpoints.
+
+The `k=10` passed to `reliability_map()` sets the displayed neighbor graph. It
+does not change the `k=25` used to calculate T&C above. Supply local preservation
+scores directly; do not invert them into error values. The projection must have
+two columns; CheckViz requires geometry suitable for a Voronoi diagram.
 
 CheckViz originates from
 [Lespinats and Aupetit (2011)](https://doi.org/10.1111/j.1467-8659.2010.01835.x).
